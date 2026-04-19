@@ -29,22 +29,16 @@
       font-family: 'Segoe UI', system-ui, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-      font-size: 14px;
+      display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden; font-size: 14px;
     }
 
     /* ── HEADER ── */
     #app-header {
-      height: 48px;
-      flex-shrink: 0;
+      height: 48px; flex-shrink: 0;
       background: var(--bg-secondary);
       border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between;
       padding: 0 1rem;
     }
     .header-left { display: flex; align-items: center; gap: .75rem; }
@@ -74,21 +68,19 @@
     }
     #meta-form { display: flex; flex-wrap: wrap; gap: .4rem .9rem; align-items: center; }
     #meta-form label { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--text-secondary); white-space: nowrap; }
-    #meta-form input, #meta-form select {
+    #meta-form input {
       background: var(--bg-elevated); border: 1px solid var(--border);
       color: var(--text-primary); border-radius: 4px;
       padding: .18rem .4rem; font-size: .82rem; font-family: inherit;
     }
-    #meta-form input:focus, #meta-form select:focus { outline: 1px solid var(--accent-blue); border-color: var(--accent-blue); }
+    #meta-form input:focus { outline: 1px solid var(--accent-blue); border-color: var(--accent-blue); }
 
     /* ── WARNING BANNER ── */
     #warning-banner {
       flex-shrink: 0;
       background: rgba(210,153,34,.12);
       border-bottom: 1px solid var(--accent-yellow);
-      padding: .35rem 1rem;
-      font-size: .78rem;
-      color: var(--accent-yellow);
+      padding: .35rem 1rem; font-size: .78rem; color: var(--accent-yellow);
     }
     #warning-banner.hidden { display: none; }
     .banner-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
@@ -106,10 +98,8 @@
     #table-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
     .panel-header {
-      flex-shrink: 0;
-      background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border);
-      padding: .35rem .75rem;
+      flex-shrink: 0; background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border); padding: .35rem .75rem;
       display: flex; align-items: center; justify-content: space-between;
       font-size: .72rem; font-weight: 700; color: var(--text-secondary);
       letter-spacing: .5px; text-transform: uppercase;
@@ -144,8 +134,7 @@
 
     .node-desc {
       flex: 1; font-size: .82rem; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis;
-      min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; min-width: 0;
     }
     .node-desc.removed-text { text-decoration: line-through; color: var(--text-muted); }
     .node-refdes { font-size: .72rem; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
@@ -168,7 +157,6 @@
       font-size: .65rem; padding: 1px 5px; border-radius: 10px;
       font-weight: 700; flex-shrink: 0; white-space: nowrap;
     }
-    .bg-root         { background: #21262d; color: #8b949e; }
     .bg-generation   { background: #3a2f00; color: #d29922; }
     .bg-conversion   { background: #2d1f4a; color: #c490f1; }
     .bg-distribution { background: #0c2d6b; color: #79b8ff; }
@@ -214,7 +202,7 @@
 
     #modal {
       background: var(--bg-elevated); border: 1px solid var(--border);
-      border-radius: 10px; width: 580px; max-width: 96vw;
+      border-radius: 10px; width: 680px; max-width: 96vw;
       max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
     }
     .modal-header {
@@ -225,7 +213,7 @@
     #modal-close { background: none; color: var(--text-secondary); font-size: 1.15rem; padding: .1rem .38rem; border-radius: 4px; }
     #modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-    .modal-body { flex: 1; overflow-y: auto; padding: .85rem 1rem; display: flex; flex-direction: column; gap: .65rem; }
+    .modal-body { flex: 1; overflow-y: auto; padding: .85rem 1rem; display: flex; flex-direction: column; gap: .6rem; }
 
     .form-row { display: flex; gap: .6rem; }
     .form-group { display: flex; flex-direction: column; gap: .22rem; flex: 1; }
@@ -240,27 +228,41 @@
     .section-label {
       font-size: .7rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .5px; color: var(--text-muted);
-      border-bottom: 1px solid var(--border); padding-bottom: .2rem;
-      margin-top: .1rem;
+      border-bottom: 1px solid var(--border); padding-bottom: .2rem; margin-top: .1rem;
     }
 
-    #modal-warn-box {
+    .warn-box {
       border-radius: 6px; padding: .5rem .7rem; font-size: .8rem;
       border: 1px solid var(--accent-red); background: rgba(248,81,73,.12); color: var(--accent-red);
     }
-    #modal-warn-box.advisory { border-color: var(--accent-yellow); background: rgba(210,153,34,.12); color: var(--accent-yellow); }
-    #modal-warn-box.hidden { display: none; }
+    .warn-box.advisory { border-color: var(--accent-yellow); background: rgba(210,153,34,.12); color: var(--accent-yellow); }
+    .warn-box.hidden { display: none; }
 
     .field-hint  { font-size: .7rem; color: var(--text-muted); }
     .field-warn  { font-size: .7rem; color: var(--accent-yellow); }
     .field-error { font-size: .7rem; color: var(--accent-red); }
 
-    .sibling-wrap { margin-top: .1rem; }
     .sibling-wrap h3 { font-size: .76rem; font-weight: 600; color: var(--text-secondary); margin-bottom: .3rem; }
     .sibling-table { width: 100%; border-collapse: collapse; font-size: .73rem; }
     .sibling-table th { text-align: left; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); padding: .18rem .35rem; }
     .sibling-table td { padding: .18rem .35rem; border-bottom: 1px solid #21262d; color: var(--text-secondary); }
     .sibling-table tbody tr:hover { background: var(--bg-hover); cursor: pointer; }
+
+    /* ── ADD DETAIL TABLE ── */
+    .add-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .add-table th {
+      padding: .28rem .35rem; text-align: left; font-weight: 700;
+      color: var(--text-secondary); border-bottom: 1px solid var(--border);
+      font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+    }
+    .add-table td { padding: .22rem .3rem; border-bottom: 1px solid #21262d; vertical-align: middle; }
+    .add-table input {
+      width: 100%; background: var(--bg-primary); border: 1px solid var(--border);
+      color: var(--text-primary); border-radius: 4px;
+      padding: .22rem .38rem; font-size: .78rem; font-family: inherit;
+    }
+    .add-table input:focus { outline: 1px solid var(--accent-blue); border-color: var(--accent-blue); }
+    .add-table .row-num { color: var(--text-muted); font-size: .72rem; width: 24px; text-align: center; }
 
     .modal-footer {
       padding: .65rem 1rem; border-top: 1px solid var(--border);
@@ -268,7 +270,7 @@
     }
     .modal-footer .spacer { flex: 1; }
 
-    /* ── PRINT REGION ── */
+    /* ── PRINT ── */
     #print-region { display: none; }
 
     @media print {
@@ -315,22 +317,14 @@
     </div>
   </header>
 
-  <!-- META BAR -->
+  <!-- META BAR — Flight Phase is now a free-text input (req 1) -->
   <section id="meta-bar">
     <form id="meta-form" autocomplete="off">
       <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
       <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
       <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
       <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
-      <label>Flight Phase
-        <select name="flightPhase">
-          <option>Takeoff</option>
-          <option selected>Cruise</option>
-          <option>Approach and Landing</option>
-          <option>Ground</option>
-          <option>Emergency</option>
-        </select>
-      </label>
+      <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
     </form>
   </section>
 
@@ -368,94 +362,138 @@
 
   </main>
 
-  <!-- MODAL -->
+  <!-- MODAL — contains two sub-forms: edit-form and add-form -->
   <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div id="modal">
       <div class="modal-header">
-        <h2 id="modal-title">Add Node</h2>
+        <h2 id="modal-title">Edit Item(s)</h2>
         <button id="modal-close" aria-label="Close">✕</button>
       </div>
+
       <div class="modal-body">
 
-        <div id="modal-warn-box" class="hidden"></div>
+        <!-- ══ EDIT FORM ══ -->
+        <div id="edit-form" class="hidden">
 
-        <div class="section-label">Identity</div>
-        <div class="form-row">
-          <div class="form-group" style="flex:1.6">
-            <label>Node Type</label>
-            <select id="f-type"></select>
+          <!-- Parent at top (req 5); hidden for Total Aircraft Load (req 8) -->
+          <div id="ef-parent-group" class="form-group">
+            <label>Parent Item</label>
+            <select id="ef-parent"></select>
           </div>
-          <div class="form-group">
-            <label>Status</label>
-            <select id="f-status">
-              <option value="existing">Existing</option>
-              <option value="new">New</option>
-              <option value="removed">Removed</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group" style="flex:2">
-            <label>Description</label>
-            <input id="f-desc" type="text" placeholder="e.g. Main AC Bus">
-          </div>
-          <div class="form-group">
-            <label>Ref Des <span style="color:var(--text-muted)">(optional)</span></label>
-            <input id="f-refdes" type="text" placeholder="e.g. G1">
-          </div>
-        </div>
-        <div id="f-parent-group" class="form-group">
-          <label>Parent Item</label>
-          <select id="f-parent"></select>
-        </div>
 
-        <!-- Capacity fields (non-Load) -->
-        <div id="sec-capacity" class="hidden">
-          <div class="section-label">Load Values</div>
+          <div id="ef-warn-box" class="warn-box hidden"></div>
+
+          <div class="section-label">Identity</div>
           <div class="form-row">
-            <div class="form-group">
-              <label>Capacity (W)</label>
-              <input id="f-capacity" type="number" min="0" step="any" placeholder="optional">
+            <div class="form-group" style="flex:1.6">
+              <label>Item Type</label>  <!-- req 7 -->
+              <select id="ef-type"></select>
             </div>
             <div class="form-group">
-              <label>Existing Load (W)</label>
-              <input id="f-existing" type="number" min="0" step="any" value="0">
+              <label>Status</label>
+              <select id="ef-status">
+                <option value="existing">Existing</option>
+                <option value="new">New</option>
+                <option value="removed">Removed</option>
+              </select>
             </div>
           </div>
-          <div class="form-group">
-            <label>Net Change Override (W)</label>
-            <input id="f-override" type="number" step="any" placeholder="Leave blank to auto-calculate">
-            <span class="field-hint">Overrides the sum calculated from child items.</span>
+
+          <!-- Hidden for Total Aircraft Load (req 8) -->
+          <div id="ef-desc-row" class="form-row">
+            <div class="form-group" style="flex:2">
+              <label>Description</label>
+              <input id="ef-desc" type="text" placeholder="e.g. Main AC Bus">
+            </div>
+            <div class="form-group">
+              <label>Ref Des <span style="color:var(--text-muted)">(optional)</span></label>
+              <input id="ef-refdes" type="text" placeholder="e.g. G1">
+            </div>
           </div>
-        </div>
 
-        <!-- Load value field -->
-        <div id="sec-load" class="hidden">
-          <div class="section-label">Load Value</div>
-          <div class="form-group">
-            <label>Load Value (W)</label>
-            <input id="f-loadval" type="number" step="any" placeholder="e.g. 45">
-            <span id="f-loadval-msg" class="field-warn hidden">Load values should be positive (enter a positive number).</span>
+          <!-- Capacity fields (non-Load) -->
+          <div id="ef-sec-cap" class="hidden">
+            <div class="section-label">Load Values</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Capacity (W)</label>
+                <input id="ef-capacity" type="number" min="0" step="any" placeholder="optional">
+              </div>
+              <div class="form-group">
+                <label>Existing Load (W)</label>
+                <input id="ef-existing" type="number" min="0" step="any" value="0">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Net Change Override (W)</label>
+              <input id="ef-override" type="number" step="any" placeholder="Leave blank to auto-calculate">
+              <span class="field-hint">Overrides the sum calculated from child items.</span>
+            </div>
           </div>
-        </div>
 
-        <!-- Conversion efficiency -->
-        <div id="sec-conv" class="hidden">
-          <div class="section-label">Conversion Parameters</div>
-          <div class="form-group">
-            <label>Efficiency (0.01 – 1.0)</label>
-            <input id="f-eff" type="number" min="0.01" max="1" step="0.01" value="0.85">
-            <span id="f-eff-msg" class="field-error hidden">Must be between 0.01 and 1.0.</span>
+          <!-- Load value (Load type only) -->
+          <div id="ef-sec-load" class="hidden">
+            <div class="section-label">Load Value</div>
+            <div class="form-group">
+              <label>Load Value (W)</label>
+              <input id="ef-loadval" type="number" step="any" placeholder="e.g. 45">
+              <span id="ef-loadval-msg" class="field-warn hidden">Load values should be positive.</span>
+            </div>
           </div>
-        </div>
 
-        <!-- Sibling reference -->
-        <div id="sec-siblings" class="sibling-wrap hidden">
-          <h3>Siblings (other children of same parent)</h3>
-          <div id="sibling-body"></div>
-        </div>
+          <!-- Conversion efficiency -->
+          <div id="ef-sec-conv" class="hidden">
+            <div class="section-label">Conversion Parameters</div>
+            <div class="form-group">
+              <label>Efficiency (0.01 – 1.0)</label>
+              <input id="ef-eff" type="number" min="0.01" max="1" step="0.01" value="0.85">
+              <span id="ef-eff-msg" class="field-error hidden">Must be between 0.01 and 1.0.</span>
+            </div>
+          </div>
 
-      </div>
+          <!-- Siblings reference -->
+          <div id="ef-siblings" class="sibling-wrap hidden">
+            <h3>Siblings (other children of same parent)</h3>
+            <div id="ef-sibling-body"></div>
+          </div>
+
+        </div><!-- /edit-form -->
+
+        <!-- ══ ADD FORM (master-detail, req 10) ══ -->
+        <div id="add-form" class="hidden">
+
+          <!-- Parent at top (req 5) -->
+          <div class="form-group">
+            <label>Parent Item</label>
+            <select id="af-parent"></select>
+          </div>
+
+          <div id="af-warn-box" class="warn-box hidden"></div>
+
+          <div class="section-label">Item Settings</div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1.6">
+              <label>Item Type</label>  <!-- req 7 -->
+              <select id="af-type"></select>
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select id="af-status">
+                <option value="existing">Existing</option>
+                <option value="new">New</option>
+                <option value="removed">Removed</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="section-label" style="margin-top:.25rem">Items to Add</div>
+          <div id="af-table-wrap" style="overflow-x:auto;margin-top:.25rem"></div>
+          <button id="af-add-row" class="btn-default" style="margin-top:.4rem;padding:.22rem .6rem;font-size:.78rem">+ Add Another Row</button>
+
+        </div><!-- /add-form -->
+
+      </div><!-- /modal-body -->
+
       <div class="modal-footer">
         <button id="btn-del"    class="btn-danger hidden">Delete</button>
         <div class="spacer"></div>
@@ -465,7 +503,6 @@
     </div>
   </div>
 
-  <!-- PRINT -->
   <div id="print-region"></div>
 
 <script>
@@ -489,9 +526,9 @@ function typeGroup(t) {
   for (const [g, ts] of Object.entries(NT)) if (ts.includes(t)) return g;
   return null;
 }
-const isConv  = t => CONV_SET.has(t);
-const isLoad  = t => LOAD_SET.has(t);
-const hasCap  = t => !isLoad(t);
+const isConv = t => CONV_SET.has(t);
+const isLoad = t => LOAD_SET.has(t);
+const hasCap = t => !isLoad(t);
 
 // ── UTILITIES ────────────────────────────────────────────────────────────────
 
@@ -532,14 +569,15 @@ function postOrder(rootId, nodes) {
   return out;
 }
 
-function bfs(rootId, nodes) {
-  const out = [], q = [rootId];
-  while (q.length) {
-    const id = q.shift();
-    if (!nodes[id]) continue;
+// Pre-order DFS: parent before children — matches tree panel visual order (req 3)
+function preOrder(rootId, nodes) {
+  const out = [];
+  function visit(id) {
+    if (!nodes[id]) return;
     out.push(id);
-    children(id, nodes).forEach(c => q.push(c.id));
+    children(id, nodes).forEach(c => visit(c.id));
   }
+  if (rootId) visit(rootId);
   return out;
 }
 
@@ -591,8 +629,12 @@ function calcNC(node, nodes) {
     if (node.status === 'removed') return -(+(node.loadValue)||0);
     return 0;
   }
+  // Manual override takes precedence
   const ov = node.netChangeOverride;
   if (ov !== null && ov !== undefined && ov !== '') return +ov;
+  // Removed non-load items: subtract existing load (req 9)
+  if (node.status === 'removed') return -(+(node.existingLoad)||0);
+  // Auto-calculate from children
   let sum = 0;
   children(node.id, nodes).forEach(c => {
     const nc = calcNC(c, nodes);
@@ -705,8 +747,9 @@ function addNode(parentId, data) {
   const node = makeNode(data.type, parentId, data);
   node.id = uid();
   state.nodes[node.id] = node;
-  recalc(); renderAll(); persist();
 }
+
+function batchCommit() { recalc(); renderAll(); persist(); }
 
 function updateNode(id, data) {
   if (!state.nodes[id]) return;
@@ -729,6 +772,12 @@ function groupClass(type) {
   return `type-badge bg-${g}`;
 }
 
+// Returns badge HTML — suppressed for Root type (req 2)
+function badgeHtml(type) {
+  if (type === 'Root') return '';
+  return `<span class="${groupClass(type)}">${esc(type)}</span>`;
+}
+
 function ncHtml(nc) {
   if (nc === null || nc === undefined) return '';
   const n = +nc;
@@ -739,7 +788,7 @@ function ncHtml(nc) {
 }
 
 function buildTreeLi(node, nodes) {
-  const kids = children(node.id, nodes);
+  const kids    = children(node.id, nodes);
   const hasKids = kids.length > 0;
   const li = document.createElement('li');
   li.dataset.nid = node.id;
@@ -751,9 +800,10 @@ function buildTreeLi(node, nodes) {
 
   const row = document.createElement('div');
   row.className = 'tree-node-row';
+  // Badge suppressed for Root (req 2)
   row.innerHTML = `
     <button class="${toggleCls}" data-id="${node.id}">▼</button>
-    <span class="${groupClass(node.type)}">${esc(node.type)}</span>
+    ${badgeHtml(node.type)}
     <span class="${descCls}" title="${esc(node.description)}">${esc(node.description)||'<em style="opacity:.5">unnamed</em>'}</span>
     ${refHtml}
     <span class="status-badge s-${node.status}">${node.status}</span>
@@ -814,11 +864,12 @@ function renderTable() {
   const el = document.getElementById('table-container');
   if (!state || !state.rootId) { el.innerHTML = '<div class="empty-state">No data.</div>'; return; }
 
-  const ids = bfs(state.rootId, state.nodes);
-  const dm  = { [state.rootId]: 0 };
+  // Use preOrder (DFS) so table matches tree panel order (req 3)
+  const ids = preOrder(state.rootId, state.nodes);
+  const dm  = {};
   ids.forEach(id => {
     const p = state.nodes[id]?.parentId;
-    if (p != null) dm[id] = (dm[p]||0) + 1;
+    dm[id] = p === null ? 0 : (dm[p]||0) + 1;
   });
 
   const rows = ids.map(id => {
@@ -839,9 +890,10 @@ function renderTable() {
     const remTd = n._remainingCapacity!==null ? valTd(n._remainingCapacity, false) : `<td class="v-na">—</td>`;
     const flag  = ov ? '🔴' : (wn ? '⚠️' : '');
 
+    // Badge suppressed for Root (req 2)
     return `<tr class="${rCls}">
       <td><div class="td-comp" style="padding-left:${d*18}px">
-        <span class="${groupClass(n.type)}">${esc(n.type)}</span>
+        ${badgeHtml(n.type)}
         <span${dCls}>${esc(n.description)||'<em>unnamed</em>'}</span>
       </div></td>
       <td><span class="status-badge s-${n.status}">${n.status}</span></td>
@@ -889,45 +941,90 @@ function renderAll() {
   renderMeta(); renderTree(); renderTable(); renderWarnings(); updateSaveEl();
 }
 
-// ── MODAL ─────────────────────────────────────────────────────────────────────
+// ── MODAL — SHARED HELPERS ────────────────────────────────────────────────────
 
-let mMode=null, mParent=null, mNode=null, mBlocked=false;
+let mMode   = null;  // 'add' | 'edit'
+let mNode   = null;
+let mBlocked = false;
 
-function fillTypeSelect(sel) {
+// Fill type dropdown — excludes Root (non-addable/non-selectable for children)
+function fillTypeSelect(sel, includeRoot) {
   sel.innerHTML = '';
+  if (includeRoot) {
+    const og = document.createElement('optgroup'); og.label = 'Aircraft';
+    const o  = document.createElement('option');  o.value = 'Root'; o.textContent = 'Total Aircraft Load';
+    og.appendChild(o); sel.appendChild(og);
+    return;
+  }
   [['Generation',NT.GENERATION],['Conversion',NT.CONVERSION],
    ['Distribution',NT.DISTRIBUTION],['Protection',NT.PROTECTION],['Load',NT.LOAD]
   ].forEach(([lbl,types]) => {
-    const og = document.createElement('optgroup');
-    og.label = lbl;
+    const og = document.createElement('optgroup'); og.label = lbl;
     types.forEach(t => { const o=document.createElement('option'); o.value=o.textContent=t; og.appendChild(o); });
     sel.appendChild(og);
   });
 }
 
-function fillParentSelect(selId, excludeId) {
+// Fill parent dropdown — excludes Load/removed nodes and all descendants of excludeId (reqs 6, 3)
+function fillParentSelect(selId, excludeId, selectedId) {
   const sel = document.getElementById(selId); sel.innerHTML = '';
-  bfs(state.rootId, state.nodes).forEach(id => {
-    if (id === excludeId) return;
+  const excluded = new Set(excludeId ? subtree(excludeId, state.nodes) : []);
+  preOrder(state.rootId, state.nodes).forEach(id => {
+    if (excluded.has(id)) return;
     const n = state.nodes[id]; if (!n) return;
     if (isLoad(n.type) || n.status==='removed') return;
     const o = document.createElement('option');
     o.value = id;
     const d = nodeDepth(id, state.nodes);
-    o.textContent = '\u00a0'.repeat(d*2) + (n.description||'unnamed') + (n.refDes?` [${n.refDes}]`:'') + ` (${n.type})`;
+    // Root shown without type label to avoid "(Root)" confusion
+    const typeLbl = n.type === 'Root' ? '' : ` (${n.type})`;
+    o.textContent = '\u00a0'.repeat(d*2) + (n.description||'unnamed') + (n.refDes?` [${n.refDes}]`:'') + typeLbl;
+    if (id === selectedId) o.selected = true;
     sel.appendChild(o);
   });
 }
 
-function showSections(type) {
-  document.getElementById('sec-capacity').classList.toggle('hidden', isLoad(type));
-  document.getElementById('sec-load'    ).classList.toggle('hidden', !isLoad(type));
-  document.getElementById('sec-conv'    ).classList.toggle('hidden', !isConv(type));
+function addWarnCheck(parentId) {
+  const p = state.nodes[parentId]; if (!p) return null;
+  if (isLoad(p.type))       return { block:true,  msg:'Cannot add children to a Load-type item.' };
+  if (p.status==='removed') return { block:true,  msg:'Cannot add children to a removed item.' };
+  const ov = p.netChangeOverride;
+  if (ov!==null && ov!==undefined && ov!=='')
+    return { block:false, msg:'This parent has a manual Net Change Override. Adding children will not affect the calculated total unless the override is cleared.' };
+  return null;
 }
 
-function renderSiblings(parentId, excludeId) {
-  const sec  = document.getElementById('sec-siblings');
-  const body = document.getElementById('sibling-body');
+function setWarnBox(boxId, warn) {
+  const wb = document.getElementById(boxId);
+  if (!warn) { wb.classList.add('hidden'); return; }
+  wb.classList.remove('hidden','advisory');
+  if (!warn.block) wb.classList.add('advisory');
+  wb.textContent = warn.msg;
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  document.getElementById('edit-form').classList.add('hidden');
+  document.getElementById('add-form' ).classList.add('hidden');
+  document.getElementById('ef-type').disabled = false;
+  mMode=null; mNode=null; mBlocked=false;
+  afRows=[]; afRowCtr=0; afRowData={};
+}
+
+// ── EDIT MODAL ────────────────────────────────────────────────────────────────
+
+function efShowSections(type) {
+  const isRoot = type === 'Root';
+  document.getElementById('ef-sec-cap' ).classList.toggle('hidden', isLoad(type) || isRoot);
+  document.getElementById('ef-sec-load').classList.toggle('hidden', !isLoad(type));
+  document.getElementById('ef-sec-conv').classList.toggle('hidden', !isConv(type));
+  // Root has capacity fields shown via special handling — show for Root too
+  if (isRoot) document.getElementById('ef-sec-cap').classList.remove('hidden');
+}
+
+function efRenderSiblings(parentId, excludeId) {
+  const sec  = document.getElementById('ef-siblings');
+  const body = document.getElementById('ef-sibling-body');
   if (!parentId) { sec.classList.add('hidden'); return; }
   const sibs = children(parentId, state.nodes).filter(n => n.id !== excludeId);
   if (!sibs.length) { sec.classList.add('hidden'); return; }
@@ -935,7 +1032,7 @@ function renderSiblings(parentId, excludeId) {
   body.innerHTML = `<table class="sibling-table">
     <thead><tr><th>Type</th><th>Description</th><th>Ref Des</th><th>Status</th></tr></thead>
     <tbody>${sibs.map(n=>`<tr data-id="${n.id}">
-      <td><span class="${groupClass(n.type)}">${esc(n.type)}</span></td>
+      <td>${badgeHtml(n.type)||esc(n.type)}</td>
       <td>${esc(n.description||'')}</td><td>${esc(n.refDes||'')}</td>
       <td><span class="status-badge s-${n.status}">${n.status}</span></td>
     </tr>`).join('')}</tbody>
@@ -944,155 +1041,221 @@ function renderSiblings(parentId, excludeId) {
     r.addEventListener('click', () => { closeModal(); openEdit(r.dataset.id); }));
 }
 
-function addWarnCheck(parentId) {
-  const p = state.nodes[parentId]; if (!p) return null;
-  if (isLoad(p.type))      return { block:true,  msg:'Cannot add children to a Load-type node.' };
-  if (p.status==='removed') return { block:true,  msg:'Cannot add children to a removed node.' };
-  const ov = p.netChangeOverride;
-  if (ov!==null && ov!==undefined && ov!=='')
-    return { block:false, msg:'This parent has a manual Net Change Override. Adding children will not affect the calculated total unless the override is cleared.' };
-  return null;
-}
-
-function openAdd(parentId) {
-  mMode='add'; mParent=parentId; mNode=null; mBlocked=false;
-  document.getElementById('modal-title').textContent = 'Add Node';
-  document.getElementById('btn-del').classList.add('hidden');
-  document.getElementById('f-parent-group').classList.remove('hidden');
-
-  const ftype = document.getElementById('f-type');
-  fillTypeSelect(ftype); ftype.value = 'Generator'; ftype.disabled = false;
-
-  document.getElementById('f-desc'    ).value = '';
-  document.getElementById('f-refdes'  ).value = '';
-  document.getElementById('f-status'  ).value = 'existing';
-  document.getElementById('f-capacity').value = '';
-  document.getElementById('f-existing').value = '0';
-  document.getElementById('f-override').value = '';
-  document.getElementById('f-loadval' ).value = '';
-  document.getElementById('f-eff'     ).value = '0.85';
-  document.getElementById('f-loadval-msg').classList.add('hidden');
-  document.getElementById('f-eff-msg'    ).classList.add('hidden');
-
-  fillParentSelect('f-parent', null);
-  document.getElementById('f-parent').value = parentId;
-
-  const warn = addWarnCheck(parentId);
-  const wb   = document.getElementById('modal-warn-box');
-  if (warn) {
-    wb.classList.remove('hidden','advisory');
-    if (!warn.block) wb.classList.add('advisory');
-    wb.textContent = warn.msg;
-    mBlocked = warn.block;
-  } else {
-    wb.classList.add('hidden');
-  }
-  document.getElementById('btn-save').disabled = mBlocked;
-
-  showSections('Generator');
-  renderSiblings(parentId, null);
-  document.getElementById('modal-overlay').classList.remove('hidden');
-  document.getElementById('f-desc').focus();
-}
-
 function openEdit(nodeId) {
   const n = state.nodes[nodeId]; if (!n) return;
-  mMode='edit'; mNode=nodeId; mParent=n.parentId; mBlocked=false;
+  mMode='edit'; mNode=nodeId; mBlocked=false;
 
-  document.getElementById('modal-title').textContent = 'Edit Node';
   const isRoot = nodeId === state.rootId;
-  document.getElementById('btn-del').classList.toggle('hidden', isRoot);
-  document.getElementById('f-parent-group').classList.toggle('hidden', isRoot);
+  document.getElementById('modal-title').textContent = 'Edit Item(s)';  // req 4
+  document.getElementById('edit-form').classList.remove('hidden');
+  document.getElementById('add-form' ).classList.add('hidden');
+  document.getElementById('btn-del'  ).classList.toggle('hidden', isRoot);
 
-  const ftype = document.getElementById('f-type');
-  fillTypeSelect(ftype);
-  if (isRoot) {
-    // For root, add Root as an option and disable
-    const og = document.createElement('optgroup');
-    og.label = 'Root'; const o = document.createElement('option');
-    o.value = o.textContent = 'Root'; og.appendChild(o);
-    ftype.insertBefore(og, ftype.firstChild);
-    ftype.value = 'Root'; ftype.disabled = true;
-  } else {
-    ftype.value = n.type; ftype.disabled = false;
-  }
+  // Parent field: hidden for root (req 5, req 8)
+  document.getElementById('ef-parent-group').classList.toggle('hidden', isRoot);
+  if (!isRoot) fillParentSelect('ef-parent', nodeId, n.parentId);
 
-  document.getElementById('f-desc'    ).value = n.description||'';
-  document.getElementById('f-refdes'  ).value = n.refDes||'';
-  document.getElementById('f-status'  ).value = n.status;
-  document.getElementById('f-capacity').value = n.capacity!==null && n.capacity!==undefined ? n.capacity : '';
-  document.getElementById('f-existing').value = n.existingLoad!==undefined ? n.existingLoad : 0;
-  document.getElementById('f-override').value = (n.netChangeOverride!==null && n.netChangeOverride!==undefined) ? n.netChangeOverride : '';
-  document.getElementById('f-loadval' ).value = n.loadValue!==undefined ? n.loadValue : '';
-  document.getElementById('f-eff'     ).value = n.efficiency!==undefined ? n.efficiency : 0.85;
-  document.getElementById('f-loadval-msg').classList.add('hidden');
-  document.getElementById('f-eff-msg'    ).classList.add('hidden');
+  // Item Type field: show "Total Aircraft Load" for root, disable (req 8)
+  const ftype = document.getElementById('ef-type');
+  fillTypeSelect(ftype, isRoot);
+  ftype.value    = isRoot ? 'Root' : n.type;
+  ftype.disabled = isRoot;
 
+  // Description row: hidden for Total Aircraft Load (req 8)
+  document.getElementById('ef-desc-row').classList.toggle('hidden', isRoot);
   if (!isRoot) {
-    fillParentSelect('f-parent', nodeId);
-    document.getElementById('f-parent').value = n.parentId;
+    document.getElementById('ef-desc'  ).value = n.description||'';
+    document.getElementById('ef-refdes').value = n.refDes||'';
   }
 
-  document.getElementById('modal-warn-box').classList.add('hidden');
+  document.getElementById('ef-status'  ).value = n.status;
+  document.getElementById('ef-capacity').value = n.capacity!==null && n.capacity!==undefined ? n.capacity : '';
+  document.getElementById('ef-existing').value = n.existingLoad!==undefined ? n.existingLoad : 0;
+  document.getElementById('ef-override').value = (n.netChangeOverride!==null && n.netChangeOverride!==undefined) ? n.netChangeOverride : '';
+  document.getElementById('ef-loadval' ).value = n.loadValue!==undefined ? n.loadValue : '';
+  document.getElementById('ef-eff'     ).value = n.efficiency!==undefined ? n.efficiency : 0.85;
+  document.getElementById('ef-loadval-msg').classList.add('hidden');
+  document.getElementById('ef-eff-msg'    ).classList.add('hidden');
+  setWarnBox('ef-warn-box', null);
+
   document.getElementById('btn-save').disabled = false;
-
-  showSections(isRoot ? 'Root' : n.type);
-  renderSiblings(n.parentId, nodeId);
+  efShowSections(isRoot ? 'Root' : n.type);
+  efRenderSiblings(n.parentId, nodeId);
   document.getElementById('modal-overlay').classList.remove('hidden');
-  document.getElementById('f-desc').focus();
+  if (!isRoot) document.getElementById('ef-desc').focus();
 }
 
-function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-  document.getElementById('f-type').disabled = false;
-  mMode=null; mParent=null; mNode=null; mBlocked=false;
-}
+function doEditSave() {
+  const type  = document.getElementById('ef-type').value;
+  const isRoot = mNode === state.rootId;
 
-function doSave() {
-  if (mBlocked) return;
-  const type = document.getElementById('f-type').value;
-
-  // Validate efficiency
   if (isConv(type)) {
-    const eff = +document.getElementById('f-eff').value;
+    const eff = +document.getElementById('ef-eff').value;
     if (isNaN(eff) || eff<=0 || eff>1) {
-      document.getElementById('f-eff-msg').classList.remove('hidden');
-      document.getElementById('f-eff').focus();
+      document.getElementById('ef-eff-msg').classList.remove('hidden');
+      document.getElementById('ef-eff').focus();
       return;
     }
-    document.getElementById('f-eff-msg').classList.add('hidden');
+    document.getElementById('ef-eff-msg').classList.add('hidden');
   }
 
-  const ovRaw = document.getElementById('f-override').value.trim();
-  const capRaw = document.getElementById('f-capacity').value.trim();
+  const ovRaw  = document.getElementById('ef-override').value.trim();
+  const capRaw = document.getElementById('ef-capacity').value.trim();
 
   const data = {
     type,
-    description: document.getElementById('f-desc'  ).value.trim(),
-    refDes:      document.getElementById('f-refdes' ).value.trim(),
-    status:      document.getElementById('f-status' ).value,
+    status: document.getElementById('ef-status').value,
   };
-
+  if (!isRoot) {
+    data.description = document.getElementById('ef-desc'  ).value.trim();
+    data.refDes      = document.getElementById('ef-refdes').value.trim();
+    data.parentId    = document.getElementById('ef-parent').value;
+  }
   if (hasCap(type)) {
-    data.capacity         = capRaw==='' ? null : +capRaw;
-    data.existingLoad     = +(document.getElementById('f-existing').value)||0;
+    data.capacity          = capRaw==='' ? null : +capRaw;
+    data.existingLoad      = +(document.getElementById('ef-existing').value)||0;
     data.netChangeOverride = ovRaw==='' ? null : +ovRaw;
   }
-  if (isConv(type)) data.efficiency = +document.getElementById('f-eff').value;
-  if (isLoad(type)) data.loadValue  = +(document.getElementById('f-loadval').value)||0;
+  if (isConv(type)) data.efficiency = +document.getElementById('ef-eff').value;
+  if (isLoad(type)) data.loadValue  = +(document.getElementById('ef-loadval').value)||0;
 
-  if (mMode === 'add') {
-    const pid = document.getElementById('f-parent').value;
-    data.parentId = pid;
-    addNode(pid, data);
-  } else if (mMode === 'edit') {
-    const isRoot = mNode === state.rootId;
-    if (!isRoot) {
-      data.parentId = document.getElementById('f-parent').value;
-    }
-    updateNode(mNode, data);
-  }
+  updateNode(mNode, data);
   closeModal();
+}
+
+// ── ADD MODAL (master-detail, req 10) ─────────────────────────────────────────
+
+let afRows    = [];   // ordered array of row-index integers
+let afRowCtr  = 0;    // auto-increment
+let afRowData = {};   // rowIndex -> {key: value} — preserved across type changes
+
+function afCols(type) {
+  const cols = [
+    { key:'description', label:'Description',    itype:'text',   ph:'e.g. Main Bus', w:'160px' },
+    { key:'refDes',      label:'Ref Des',         itype:'text',   ph:'optional',      w:'75px'  },
+  ];
+  if (isLoad(type)) {
+    cols.push({ key:'loadValue', label:'Load Value (W)', itype:'number', ph:'e.g. 45', w:'100px' });
+  } else {
+    cols.push({ key:'capacity',          label:'Capacity (W)',     itype:'number', ph:'optional', w:'95px' });
+    cols.push({ key:'existingLoad',      label:'Exist. Load (W)',  itype:'number', ph:'0',        w:'100px', def:'0' });
+    cols.push({ key:'netChangeOverride', label:'Net Chg Override', itype:'number', ph:'auto',     w:'115px' });
+  }
+  if (isConv(type)) {
+    cols.push({ key:'efficiency', label:'Efficiency', itype:'number', ph:'0.85', w:'80px', def:'0.85' });
+  }
+  return cols;
+}
+
+function afCapture() {
+  const wrap = document.getElementById('af-table-wrap');
+  if (!wrap) return;
+  wrap.querySelectorAll('input[data-row][data-key]').forEach(inp => {
+    const ri = inp.dataset.row;
+    if (!afRowData[ri]) afRowData[ri] = {};
+    afRowData[ri][inp.dataset.key] = inp.value;
+  });
+}
+
+function afRenderTable() {
+  const type = document.getElementById('af-type')?.value;
+  if (!type) return;
+  afCapture();
+  const cols = afCols(type);
+  const wrap = document.getElementById('af-table-wrap');
+
+  if (afRows.length === 0) {
+    wrap.innerHTML = '<p style="color:var(--text-muted);font-size:.78rem;padding:.4rem 0">No items yet — click "+ Add Another Row".</p>';
+    return;
+  }
+
+  const head = '<th class="row-num">#</th>' + cols.map(c=>`<th style="min-width:${c.w||'auto'}">${c.label}</th>`).join('') + '<th></th>';
+  const body = afRows.map((ri, idx) => {
+    const saved = afRowData[ri] || {};
+    const cells = cols.map(c => {
+      const val = saved[c.key] !== undefined ? saved[c.key] : (c.def ?? '');
+      return `<td><input data-row="${ri}" data-key="${c.key}" type="${c.itype||'text'}" value="${esc(String(val))}" placeholder="${esc(c.ph||'')}"></td>`;
+    }).join('');
+    return `<tr><td class="row-num">${idx+1}</td>${cells}<td><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="add-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+
+  wrap.querySelectorAll('.af-del').forEach(btn =>
+    btn.addEventListener('click', () => { afCapture(); afRows = afRows.filter(x=>x!==+btn.dataset.row); afRenderTable(); }));
+}
+
+function openAdd(parentId) {
+  mMode='add'; mNode=null; mBlocked=false;
+  afRows=[]; afRowCtr=0; afRowData={};
+
+  document.getElementById('modal-title').textContent = 'Add Item(s)';  // req 4
+  document.getElementById('add-form' ).classList.remove('hidden');
+  document.getElementById('edit-form').classList.add('hidden');
+  document.getElementById('btn-del'  ).classList.add('hidden');
+
+  fillParentSelect('af-parent', null, parentId);
+
+  const warn = addWarnCheck(parentId);
+  setWarnBox('af-warn-box', warn);
+  mBlocked = !!(warn?.block);
+  document.getElementById('btn-save').disabled = mBlocked;
+
+  const aftype = document.getElementById('af-type');
+  fillTypeSelect(aftype, false);
+  aftype.value = 'Generator';
+
+  document.getElementById('af-status').value = 'existing';
+
+  // Start with one empty row
+  afRows.push(afRowCtr++);
+  afRenderTable();
+
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function doAddSave() {
+  if (mBlocked) return;
+  const pid    = document.getElementById('af-parent').value;
+  const type   = document.getElementById('af-type').value;
+  const status = document.getElementById('af-status').value;
+
+  if (!pid) { alert('Please select a parent item.'); return; }
+  afCapture();
+  if (afRows.length === 0) { alert('Please add at least one item row.'); return; }
+
+  const cols = afCols(type);
+  afRows.forEach(ri => {
+    const saved = afRowData[ri] || {};
+    const get   = key => (saved[key] !== undefined ? String(saved[key]) : '').trim();
+    const data  = { type, status, parentId: pid };
+    data.description = get('description');
+    data.refDes      = get('refDes');
+    if (isLoad(type)) {
+      data.loadValue = +get('loadValue') || 0;
+    } else {
+      const cap = get('capacity');
+      data.capacity          = cap==='' ? null : +cap;
+      data.existingLoad      = +get('existingLoad') || 0;
+      const ov = get('netChangeOverride');
+      data.netChangeOverride = ov==='' ? null : +ov;
+    }
+    if (isConv(type)) {
+      const eff = +get('efficiency');
+      data.efficiency = (eff > 0 && eff <= 1) ? eff : 0.85;
+    }
+    addNode(pid, data);
+  });
+  batchCommit();
+  closeModal();
+}
+
+// ── SAVE DISPATCHER ───────────────────────────────────────────────────────────
+
+function doSave() {
+  if (mBlocked) return;
+  if (mMode === 'edit') doEditSave();
+  else if (mMode === 'add') doAddSave();
 }
 
 // ── PRINT ─────────────────────────────────────────────────────────────────────
@@ -1100,9 +1263,10 @@ function doSave() {
 function buildPrint() {
   if (!state) return;
   const m   = state.meta;
-  const ids = bfs(state.rootId, state.nodes);
-  const dm  = { [state.rootId]: 0 };
-  ids.forEach(id => { const p=state.nodes[id]?.parentId; if(p!=null) dm[id]=(dm[p]||0)+1; });
+  // Use preOrder so print matches tree order (req 3)
+  const ids = preOrder(state.rootId, state.nodes);
+  const dm  = {};
+  ids.forEach(id => { const p=state.nodes[id]?.parentId; dm[id] = p===null ? 0 : (dm[p]||0)+1; });
 
   const rows = ids.map(id => {
     const n = state.nodes[id]; if (!n) return '';
@@ -1111,7 +1275,8 @@ function buildPrint() {
     const ov = ws.some(w=>w.code==='W3');
     const wn = ws.length>0 && !ov;
     const rCls = ov?'p-over':(wn?'p-warn':'');
-    const indent = '\u00a0'.repeat(d*3);
+    const indent  = '\u00a0'.repeat(d*3);
+    const typeStr = n.type === 'Root' ? 'Total Aircraft Load' : n.type;
     const capS = hasCap(n.type)&&n.capacity!==null&&n.capacity!=='' ? fmtW(n.capacity) : '—';
     const exS  = hasCap(n.type) ? fmtW(n.existingLoad||0) : '—';
     const lvS  = isLoad(n.type) ? fmtW(n.loadValue) : '—';
@@ -1121,7 +1286,7 @@ function buildPrint() {
     const flg  = ws.map(w=>w.code).join(',');
     return `<tr class="${rCls}">
       <td>${indent}${esc(n.description||'unnamed')}</td>
-      <td>${esc(n.type)}</td><td>${esc(n.refDes||'')}</td><td>${esc(n.status)}</td>
+      <td>${esc(typeStr)}</td><td>${esc(n.refDes||'')}</td><td>${esc(n.status)}</td>
       <td class="r">${capS}</td><td class="r">${exS}</td><td class="r">${lvS}</td>
       <td class="r">${ncS}</td><td class="r">${nlS}</td><td class="r">${rS}</td>
       <td>${flg}</td></tr>`;
@@ -1171,8 +1336,7 @@ function initEvents() {
   });
 
   document.getElementById('btn-export').addEventListener('click', doExport);
-
-  document.getElementById('btn-print').addEventListener('click', () => { buildPrint(); window.print(); });
+  document.getElementById('btn-print' ).addEventListener('click', () => { buildPrint(); window.print(); });
 
   document.getElementById('btn-expand-all').addEventListener('click', () => {
     collapsed.clear();
@@ -1197,70 +1361,61 @@ function initEvents() {
     }, 350);
   });
 
+  // Modal shared controls
   document.getElementById('modal-close' ).addEventListener('click', closeModal);
   document.getElementById('btn-cancel'  ).addEventListener('click', closeModal);
-  document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target===document.getElementById('modal-overlay')) closeModal(); });
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target===document.getElementById('modal-overlay')) closeModal();
+  });
   document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
   document.getElementById('btn-save').addEventListener('click', doSave);
 
   document.getElementById('btn-del').addEventListener('click', () => {
     if (!mNode) return;
-    const n = state.nodes[mNode];
+    const n    = state.nodes[mNode];
     const kids = children(mNode, state.nodes);
-    const msg = kids.length
-      ? `"${n.description||'This node'}" has ${kids.length} child item(s). Deleting it will also delete all its branches. Continue?`
-      : `Delete "${n.description||'this node'}"?`;
+    const msg  = kids.length
+      ? `"${n.description||'This item'}" has ${kids.length} child item(s). Deleting it will also delete all its branches. Continue?`
+      : `Delete "${n.description||'this item'}"?`;
     if (!confirm(msg)) return;
     delNode(mNode); closeModal();
   });
 
-  document.getElementById('f-type').addEventListener('change', e => {
-    showSections(e.target.value);
-    // Update parent dropdown warning if in add mode
-    if (mMode === 'add') {
-      const pid = document.getElementById('f-parent').value;
-      const warn = addWarnCheck(pid);
-      const wb = document.getElementById('modal-warn-box');
-      if (warn) {
-        wb.classList.remove('hidden','advisory');
-        if (!warn.block) wb.classList.add('advisory');
-        wb.textContent = warn.msg;
-        mBlocked = warn.block;
-      } else {
-        wb.classList.add('hidden');
-        mBlocked = false;
-      }
-      document.getElementById('btn-save').disabled = mBlocked;
-    }
+  // Edit form: type change
+  document.getElementById('ef-type').addEventListener('change', e => {
+    efShowSections(e.target.value);
   });
 
-  document.getElementById('f-parent').addEventListener('change', e => {
-    if (mMode !== 'add') return;
-    const pid = e.target.value;
-    const warn = addWarnCheck(pid);
-    const wb = document.getElementById('modal-warn-box');
-    if (warn) {
-      wb.classList.remove('hidden','advisory');
-      if (!warn.block) wb.classList.add('advisory');
-      wb.textContent = warn.msg;
-      mBlocked = warn.block;
-    } else {
-      wb.classList.add('hidden');
-      mBlocked = false;
-    }
-    document.getElementById('btn-save').disabled = mBlocked;
-    renderSiblings(pid, null);
+  // Edit form: load value warning
+  document.getElementById('ef-loadval').addEventListener('input', e => {
+    document.getElementById('ef-loadval-msg').classList.toggle('hidden', +e.target.value >= 0);
   });
 
-  document.getElementById('f-loadval').addEventListener('input', e => {
-    document.getElementById('f-loadval-msg').classList.toggle('hidden', +e.target.value >= 0);
-  });
-
-  document.getElementById('f-eff').addEventListener('input', e => {
+  // Edit form: efficiency validation
+  document.getElementById('ef-eff').addEventListener('input', e => {
     const v = +e.target.value;
-    document.getElementById('f-eff-msg').classList.toggle('hidden', v>0 && v<=1);
+    document.getElementById('ef-eff-msg').classList.toggle('hidden', v>0 && v<=1);
   });
 
+  // Add form: parent change — re-check warning, refresh siblings concept
+  document.getElementById('af-parent').addEventListener('change', e => {
+    const warn = addWarnCheck(e.target.value);
+    setWarnBox('af-warn-box', warn);
+    mBlocked = !!(warn?.block);
+    document.getElementById('btn-save').disabled = mBlocked;
+  });
+
+  // Add form: type change — rebuild table with correct columns
+  document.getElementById('af-type').addEventListener('change', () => afRenderTable());
+
+  // Add form: "+ Add Another Row"
+  document.getElementById('af-add-row').addEventListener('click', () => {
+    afCapture();
+    afRows.push(afRowCtr++);
+    afRenderTable();
+  });
+
+  // Warning banner toggle
   document.getElementById('banner-header').addEventListener('click', () => {
     const b = document.getElementById('warning-banner');
     b.classList.toggle('collapsed');

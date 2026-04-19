@@ -1,0 +1,27 @@
+Watts Up — Revision 1 Change Instructions
+==========================================
+Captured: 2026-04-19
+
+Lets create an incremental revision of the Watts Up program to modify some of the features.
+
+1. Change the Flight Phase field to text entry that the User can over-write (but still enter Cruise as the default entry).
+
+2. Suppress the "Root" label next to "Total Aircraft Load" in the left-hand and right-hand panes.  That label was meant to help define the tree, but might confuse users who are not familiar with tree data structures.  See below for handling the Total Aircraft Load in the edit and add dialog boxes.
+
+3. In the right-hand pane, organize the entries in the same sequence as the left-hand pane so that branches are grouped under the parent.
+
+4. Change the name of the "Edit Node" dialog box to "Edit Item(s)"; Change the name of the "Add Node" dialog box to "Add Item(s)".
+
+5. In the "Edit Item" and "Add Item(s)" dialog boxes, move the "Parent Item" drop-down menu to the top of the dialog box (except that this is correctly suppressed for the Total Aircraft Load).
+
+6. In the "Parent Item" drop-down menu, do not show children or descendents of the current item.
+
+7. In the "Edit Item" and "Add Item(s) dialog boxes change the "Node Type" label to "Item Type" for the Item Type drop down menu.
+
+8. In the "Edit Item" and "Add Item(s) dialog boxes, if the selected item is the Total Aircraft Load, list that in the Item Type field (disallow any other selections in the drop-down menu), and hide the Description field in the dialog box.
+
+9. If an item is not a load item, has an existing load indicated, and is marked removed, enter the existing load as a negative number in the net change field for that item to subtract the existing load from the parent items.
+
+10. Change the "Add Item(s) dialog box to a master-detail form with context-specific table entry once Item Type and Status are selected to allow multiple entries of items that share the same Item Type and status; alternately, provide a separate multiple entry form.
+
+Also, please export these instructions as a .txt file.
