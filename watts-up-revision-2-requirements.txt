@@ -1,0 +1,23 @@
+I want to continue working on the Watts Up program with a new incremental revision.  I want to make the following changes:
+
+1. In the LH pane, leave the reference designators in the square brackets, but move the reference designators left and concatenate it to the end of the description, separated by a space.
+
+2. In the RH pane, remove the reference designators column and copy the formatting from the LH pane with the reference designators in square brackets and concatenated to the end of the description, separated by a space.
+
+3. In the RH pane, change the "Load Value" header to "Load".  Instead of listing the unit of power next to each value in the table, list it in parentheses next to the header labels - for example "Capacity (W)".  Eventually, we will want to track multiple units of power, so will need multiple columns under each header (for example VA, Watts, VAR, and pf for AC; Amps and Watts for DC).
+
+4. When adding a power conversion device add it as two instances of the device; 
+	-the first instance should represent the input of the device and the input power to the device; 
+	-make the second instance the child of the first instance to represent the output power from the device.
+	-For now, differentiate the input and output in the by appending "(IN)" and "(OUT)" to the Item Type label - for example "TRU (IN)" and "TRU (OUT)".
+	-Apply the efficiency factor to calculate the load transfer from the output power to the input power
+		(input power = output power/efficiency; output power = input power * efficiency).  
+	-Allow the user to enter input or output values for the capacity and existing load; calculate and autofill the other values.
+
+5. Hide the +Child button for terminal items (such as removed items or loads) to prevent user selection.
+
+6. When opening the Add Item(s) dialog box, clear the "Items to Add" table entries.
+
+7. When saving and closing the Add Item(s) dialog box, remember the selected item type and status; restore those Item Type and Status values the next time the Add Item(s) dialog box is opened.
+
+8. Recognize and calculate Excel style math formulas in the numeric (capacity, existing load, load) fields in the Edit Item(s) and Add Item(s) dialog boxes.  For example if the user enters "=28*2" for a numeric field, convert it to 56.

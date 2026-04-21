@@ -177,11 +177,10 @@
       border-bottom: 1px solid var(--border);
       font-size: .7rem; text-transform: uppercase; letter-spacing: .4px;
     }
-    .summary-table th:first-child, .summary-table th:nth-child(2),
-    .summary-table th:nth-child(3) { text-align: left; }
+    .summary-table th:first-child, .summary-table th:nth-child(2) { text-align: left; }
     .summary-table td { padding: .3rem .6rem; border-bottom: 1px solid var(--border); text-align: right; color: var(--text-secondary); }
     .summary-table td:first-child { text-align: left; }
-    .summary-table td:nth-child(2), .summary-table td:nth-child(3) { text-align: left; }
+    .summary-table td:nth-child(2) { text-align: left; }
     .summary-table tbody tr:hover { background: var(--bg-hover); }
     .row-warn-y { border-left: 3px solid var(--accent-yellow); }
     .row-warn-r { border-left: 3px solid var(--accent-red); }
@@ -411,22 +410,22 @@
             </div>
           </div>
 
-          <!-- Capacity fields (non-Load) -->
+          <!-- Capacity fields (non-Load, non-convRole) -->
           <div id="ef-sec-cap" class="hidden">
             <div class="section-label">Load Values</div>
             <div class="form-row">
               <div class="form-group">
                 <label>Capacity (W)</label>
-                <input id="ef-capacity" type="number" min="0" step="any" placeholder="optional">
+                <input id="ef-capacity" type="text" inputmode="decimal" placeholder="optional">
               </div>
               <div class="form-group">
                 <label>Existing Load (W)</label>
-                <input id="ef-existing" type="number" min="0" step="any" value="0">
+                <input id="ef-existing" type="text" inputmode="decimal" value="0">
               </div>
             </div>
             <div class="form-group">
               <label>Net Change Override (W)</label>
-              <input id="ef-override" type="number" step="any" placeholder="Leave blank to auto-calculate">
+              <input id="ef-override" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate">
               <span class="field-hint">Overrides the sum calculated from child items.</span>
             </div>
           </div>
@@ -435,20 +434,51 @@
           <div id="ef-sec-load" class="hidden">
             <div class="section-label">Load Value</div>
             <div class="form-group">
-              <label>Load Value (W)</label>
-              <input id="ef-loadval" type="number" step="any" placeholder="e.g. 45">
+              <label>Load (W)</label>
+              <input id="ef-loadval" type="text" inputmode="decimal" placeholder="e.g. 45">
               <span id="ef-loadval-msg" class="field-warn hidden">Load values should be positive.</span>
             </div>
           </div>
 
-          <!-- Conversion efficiency -->
+          <!-- Conversion efficiency (old-style nodes only) -->
           <div id="ef-sec-conv" class="hidden">
             <div class="section-label">Conversion Parameters</div>
             <div class="form-group">
               <label>Efficiency (0.01 – 1.0)</label>
-              <input id="ef-eff" type="number" min="0.01" max="1" step="0.01" value="0.85">
+              <input id="ef-eff" type="text" inputmode="decimal" value="0.85">
               <span id="ef-eff-msg" class="field-error hidden">Must be between 0.01 and 1.0.</span>
             </div>
+          </div>
+
+          <!-- Input/Output paired values (convRole IN or OUT nodes) -->
+          <div id="ef-sec-conv-pair" class="hidden">
+            <div class="section-label">Input / Output Values</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Input Capacity (W)</label>
+                <input id="ef-in-cap" type="text" inputmode="decimal" placeholder="optional">
+              </div>
+              <div class="form-group">
+                <label>Output Capacity (W)</label>
+                <input id="ef-out-cap" type="text" inputmode="decimal" placeholder="auto-calc">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Input Exist. Load (W)</label>
+                <input id="ef-in-load" type="text" inputmode="decimal" value="0">
+              </div>
+              <div class="form-group">
+                <label>Output Exist. Load (W)</label>
+                <input id="ef-out-load" type="text" inputmode="decimal" value="0">
+              </div>
+            </div>
+            <div class="form-group" id="ef-conv-pair-eff-group">
+              <label>Efficiency (0.01 – 1.0)</label>
+              <input id="ef-conv-pair-eff" type="text" inputmode="decimal" value="0.85">
+              <span id="ef-conv-pair-eff-msg" class="field-error hidden">Must be between 0.01 and 1.0.</span>
+            </div>
+            <span class="field-hint" id="ef-conv-pair-hint"></span>
           </div>
 
           <!-- Siblings reference -->
@@ -555,6 +585,27 @@ function fmtW(v) {
   return str + ' W';
 }
 
+function fmtN(v) {
+  if (v === null || v === undefined) return '—';
+  const n = +v; if (isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  return abs >= 10000 ? n.toLocaleString('en-US',{maximumFractionDigits:0})
+       : abs >= 100   ? n.toLocaleString('en-US',{maximumFractionDigits:1})
+       :                n.toFixed(2);
+}
+
+function evalFormula(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s.startsWith('=')) return raw;
+  const expr = s.slice(1).trim();
+  if (!/^[\d\s\+\-\*\/\.\(\)]+$/.test(expr)) return raw;
+  try {
+    const r = Function('"use strict"; return (' + expr + ')')();
+    if (typeof r === 'number' && isFinite(r)) return String(Math.round(r * 1e9) / 1e9);
+  } catch(e) {}
+  return raw;
+}
+
 function children(pid, nodes) {
   return Object.values(nodes).filter(n => n.parentId === pid);
 }
@@ -601,7 +652,7 @@ let state = null;
 function makeNode(type, parentId, overrides={}) {
   const node = {
     id: uid(), type, description: '', refDes: '',
-    status: 'existing', parentId,
+    status: 'existing', parentId, convRole: null,
     _netChange: 0, _newLoad: 0, _remainingCapacity: null, _warnings: []
   };
   if (hasCap(type)) { node.capacity = null; node.existingLoad = 0; node.netChangeOverride = null; }
@@ -629,17 +680,22 @@ function calcNC(node, nodes) {
     if (node.status === 'removed') return -(+(node.loadValue)||0);
     return 0;
   }
-  // Manual override takes precedence
   const ov = node.netChangeOverride;
   if (ov !== null && ov !== undefined && ov !== '') return +ov;
-  // Removed non-load items: subtract existing load (req 9)
   if (node.status === 'removed') return -(+(node.existingLoad)||0);
-  // Auto-calculate from children
   let sum = 0;
   children(node.id, nodes).forEach(c => {
     const nc = calcNC(c, nodes);
-    sum += (isConv(c.type) && c.efficiency > 0) ? nc / c.efficiency : nc;
+    // Old-style conversion node (no convRole): parent applies efficiency division
+    // New-style IN node handles efficiency internally; parent sees it as a plain node
+    if (isConv(c.type) && !c.convRole && c.efficiency > 0) {
+      sum += nc / c.efficiency;
+    } else {
+      sum += nc;
+    }
   });
+  // New-style IN node: divide children's sum by efficiency to convert output→input
+  if (node.convRole === 'in' && node.efficiency > 0) return sum / node.efficiency;
   return sum;
 }
 
@@ -747,6 +803,7 @@ function addNode(parentId, data) {
   const node = makeNode(data.type, parentId, data);
   node.id = uid();
   state.nodes[node.id] = node;
+  return node.id;
 }
 
 function batchCommit() { recalc(); renderAll(); persist(); }
@@ -772,10 +829,15 @@ function groupClass(type) {
   return `type-badge bg-${g}`;
 }
 
-// Returns badge HTML — suppressed for Root type (req 2)
-function badgeHtml(type) {
-  if (type === 'Root') return '';
-  return `<span class="${groupClass(type)}">${esc(type)}</span>`;
+function displayType(node) {
+  if (node.convRole === 'in')  return node.type + ' (IN)';
+  if (node.convRole === 'out') return node.type + ' (OUT)';
+  return node.type;
+}
+
+function badgeHtml(node) {
+  if (node.type === 'Root') return '';
+  return `<span class="${groupClass(node.type)}">${esc(displayType(node))}</span>`;
 }
 
 function ncHtml(nc) {
@@ -795,22 +857,23 @@ function buildTreeLi(node, nodes) {
 
   const toggleCls = hasKids ? 'toggle-btn' + (collapsed.has(node.id) ? ' is-collapsed' : '') : 'toggle-btn leaf';
   const descCls   = node.status === 'removed' ? 'node-desc removed-text' : 'node-desc';
-  const refHtml   = node.refDes ? `<span class="node-refdes">[${esc(node.refDes)}]</span>` : '';
+  const descLabel = (esc(node.description) + (node.refDes ? ' [' + esc(node.refDes) + ']' : '')).trim()
+                    || '<em style="opacity:.5">unnamed</em>';
   const ncDisplay = isLoad(node.type) ? '' : ncHtml(node._netChange);
+  const isTerminal = isLoad(node.type) || node.status === 'removed';
+  const addBtn = isTerminal ? '' : `<button class="btn-node btn-add" data-pid="${node.id}">+ Child</button>`;
 
   const row = document.createElement('div');
   row.className = 'tree-node-row';
-  // Badge suppressed for Root (req 2)
   row.innerHTML = `
     <button class="${toggleCls}" data-id="${node.id}">▼</button>
-    ${badgeHtml(node.type)}
-    <span class="${descCls}" title="${esc(node.description)}">${esc(node.description)||'<em style="opacity:.5">unnamed</em>'}</span>
-    ${refHtml}
+    ${badgeHtml(node)}
+    <span class="${descCls}" title="${descLabel}">${descLabel}</span>
     <span class="status-badge s-${node.status}">${node.status}</span>
     ${ncDisplay}
     <div class="node-actions">
       <button class="btn-node btn-edit" data-id="${node.id}">Edit</button>
-      <button class="btn-node btn-add"  data-pid="${node.id}">+ Child</button>
+      ${addBtn}
     </div>`;
   li.appendChild(row);
 
@@ -854,10 +917,10 @@ function renderTree() {
 function valTd(v, overload) {
   if (v === null || v === undefined) return `<td class="v-na">—</td>`;
   const n = +v;
-  if (overload) return `<td class="v-over">${fmtW(n)}</td>`;
-  if (Math.abs(n) < 0.001) return `<td class="v-zero">${fmtW(n)}</td>`;
-  if (n > 0) return `<td class="v-pos">+${fmtW(n)}</td>`;
-  return `<td class="v-neg">${fmtW(n)}</td>`;
+  if (overload) return `<td class="v-over">${fmtN(n)}</td>`;
+  if (Math.abs(n) < 0.001) return `<td class="v-zero">${fmtN(n)}</td>`;
+  if (n > 0) return `<td class="v-pos">+${fmtN(n)}</td>`;
+  return `<td class="v-neg">${fmtN(n)}</td>`;
 }
 
 function renderTable() {
@@ -880,24 +943,23 @@ function renderTable() {
     const wn  = ws.length > 0 && !ov;
     const rCls = ov ? 'row-warn-r' : (wn ? 'row-warn-y' : '');
     const dCls = n.status==='removed' ? ' style="text-decoration:line-through;opacity:.55"' : '';
+    const descLabel = (esc(n.description) + (n.refDes ? ' [' + esc(n.refDes) + ']' : '')).trim() || '<em>unnamed</em>';
     const capTd = hasCap(n.type)
-      ? `<td>${n.capacity!==null&&n.capacity!=='' ? fmtW(n.capacity) : '<span class="v-na">—</span>'}</td>`
+      ? `<td>${n.capacity!==null&&n.capacity!=='' ? fmtN(n.capacity) : '<span class="v-na">—</span>'}</td>`
       : `<td class="v-na">—</td>`;
-    const exTd  = hasCap(n.type) ? `<td>${fmtW(n.existingLoad||0)}</td>` : `<td class="v-na">—</td>`;
-    const lvTd  = isLoad(n.type) ? `<td>${fmtW(n.loadValue)}</td>` : `<td class="v-na">—</td>`;
+    const exTd  = hasCap(n.type) ? `<td>${fmtN(n.existingLoad||0)}</td>` : `<td class="v-na">—</td>`;
+    const lvTd  = isLoad(n.type) ? `<td>${fmtN(n.loadValue)}</td>` : `<td class="v-na">—</td>`;
     const ncTd  = isLoad(n.type) ? `<td class="v-na">—</td>` : valTd(n._netChange, false);
     const nlTd  = hasCap(n.type) ? valTd(n._newLoad, ov) : `<td class="v-na">—</td>`;
     const remTd = n._remainingCapacity!==null ? valTd(n._remainingCapacity, false) : `<td class="v-na">—</td>`;
     const flag  = ov ? '🔴' : (wn ? '⚠️' : '');
 
-    // Badge suppressed for Root (req 2)
     return `<tr class="${rCls}">
       <td><div class="td-comp" style="padding-left:${d*18}px">
-        ${badgeHtml(n.type)}
-        <span${dCls}>${esc(n.description)||'<em>unnamed</em>'}</span>
+        ${badgeHtml(n)}
+        <span${dCls}>${descLabel}</span>
       </div></td>
       <td><span class="status-badge s-${n.status}">${n.status}</span></td>
-      <td style="font-family:monospace;font-size:.75rem">${esc(n.refDes||'')}</td>
       ${capTd}${exTd}${lvTd}${ncTd}${nlTd}${remTd}
       <td>${flag}</td>
     </tr>`;
@@ -905,9 +967,9 @@ function renderTable() {
 
   el.innerHTML = `<table class="summary-table">
     <thead><tr>
-      <th>Component</th><th>Status</th><th>Ref Des</th>
-      <th>Capacity</th><th>Exist. Load</th><th>Load Value</th>
-      <th>Net Change</th><th>New Load</th><th>Remaining</th><th></th>
+      <th>Component</th><th>Status</th>
+      <th>Capacity (W)</th><th>Exist. Load (W)</th><th>Load (W)</th>
+      <th>Net Change (W)</th><th>New Load (W)</th><th>Remaining (W)</th><th></th>
     </tr></thead>
     <tbody>${rows.join('')}</tbody>
   </table>`;
@@ -976,8 +1038,7 @@ function fillParentSelect(selId, excludeId, selectedId) {
     const o = document.createElement('option');
     o.value = id;
     const d = nodeDepth(id, state.nodes);
-    // Root shown without type label to avoid "(Root)" confusion
-    const typeLbl = n.type === 'Root' ? '' : ` (${n.type})`;
+    const typeLbl = n.type === 'Root' ? '' : ` (${displayType(n)})`;
     o.textContent = '\u00a0'.repeat(d*2) + (n.description||'unnamed') + (n.refDes?` [${n.refDes}]`:'') + typeLbl;
     if (id === selectedId) o.selected = true;
     sel.appendChild(o);
@@ -1013,13 +1074,44 @@ function closeModal() {
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
 
-function efShowSections(type) {
-  const isRoot = type === 'Root';
-  document.getElementById('ef-sec-cap' ).classList.toggle('hidden', isLoad(type) || isRoot);
-  document.getElementById('ef-sec-load').classList.toggle('hidden', !isLoad(type));
-  document.getElementById('ef-sec-conv').classList.toggle('hidden', !isConv(type));
-  // Root has capacity fields shown via special handling — show for Root too
+function findPairedNode(node) {
+  if (node.convRole === 'in')
+    return children(node.id, state.nodes).find(c => c.convRole === 'out') || null;
+  if (node.convRole === 'out') {
+    const p = state.nodes[node.parentId];
+    return (p && p.convRole === 'in') ? p : null;
+  }
+  return null;
+}
+
+function efShowSections(type, convRole) {
+  const isRoot     = type === 'Root';
+  const isConvPair = !!convRole;
+  document.getElementById('ef-sec-cap'      ).classList.toggle('hidden', isLoad(type) || isConvPair);
   if (isRoot) document.getElementById('ef-sec-cap').classList.remove('hidden');
+  document.getElementById('ef-sec-load'     ).classList.toggle('hidden', !isLoad(type));
+  document.getElementById('ef-sec-conv'     ).classList.toggle('hidden', !isConv(type) || isConvPair);
+  document.getElementById('ef-sec-conv-pair').classList.toggle('hidden', !isConvPair);
+}
+
+function efAttachConvPairListeners() {
+  const inCap  = document.getElementById('ef-in-cap');
+  const outCap = document.getElementById('ef-out-cap');
+  const inLd   = document.getElementById('ef-in-load');
+  const outLd  = document.getElementById('ef-out-load');
+  const effEl  = document.getElementById('ef-conv-pair-eff');
+  const getEff = () => Math.max(0.001, Math.min(1, +effEl.value || 0.85));
+  inCap.oninput  = () => { const v=+inCap.value;  if(!isNaN(v)&&inCap.value!=='') outCap.value=String(Math.round(v*getEff()*1e6)/1e6); else outCap.value=''; };
+  outCap.oninput = () => { const v=+outCap.value; if(!isNaN(v)&&outCap.value!=='') inCap.value=String(Math.round(v/getEff()*1e6)/1e6); else inCap.value=''; };
+  inLd.oninput   = () => { const v=+inLd.value;   if(!isNaN(v)) outLd.value=String(Math.round(v*getEff()*1e6)/1e6); };
+  outLd.oninput  = () => { const v=+outLd.value;  if(!isNaN(v)) inLd.value=String(Math.round(v/getEff()*1e6)/1e6); };
+  effEl.oninput  = () => {
+    const v=+effEl.value;
+    if(v>0&&v<=1) {
+      if(inCap.value!=='')  outCap.value=String(Math.round(+inCap.value*v*1e6)/1e6);
+      if(inLd.value!=='')   outLd.value=String(Math.round(+inLd.value*v*1e6)/1e6);
+    }
+  };
 }
 
 function efRenderSiblings(parentId, excludeId) {
@@ -1030,12 +1122,15 @@ function efRenderSiblings(parentId, excludeId) {
   if (!sibs.length) { sec.classList.add('hidden'); return; }
   sec.classList.remove('hidden');
   body.innerHTML = `<table class="sibling-table">
-    <thead><tr><th>Type</th><th>Description</th><th>Ref Des</th><th>Status</th></tr></thead>
-    <tbody>${sibs.map(n=>`<tr data-id="${n.id}">
-      <td>${badgeHtml(n.type)||esc(n.type)}</td>
-      <td>${esc(n.description||'')}</td><td>${esc(n.refDes||'')}</td>
-      <td><span class="status-badge s-${n.status}">${n.status}</span></td>
-    </tr>`).join('')}</tbody>
+    <thead><tr><th>Type</th><th>Description</th><th>Status</th></tr></thead>
+    <tbody>${sibs.map(n=>{
+      const dl = (esc(n.description||'')) + (n.refDes ? ' ['+esc(n.refDes)+']' : '');
+      return `<tr data-id="${n.id}">
+        <td>${badgeHtml(n)||esc(displayType(n))}</td>
+        <td>${dl}</td>
+        <td><span class="status-badge s-${n.status}">${n.status}</span></td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
   body.querySelectorAll('tr[data-id]').forEach(r =>
     r.addEventListener('click', () => { closeModal(); openEdit(r.dataset.id); }));
@@ -1074,22 +1169,43 @@ function openEdit(nodeId) {
   document.getElementById('ef-override').value = (n.netChangeOverride!==null && n.netChangeOverride!==undefined) ? n.netChangeOverride : '';
   document.getElementById('ef-loadval' ).value = n.loadValue!==undefined ? n.loadValue : '';
   document.getElementById('ef-eff'     ).value = n.efficiency!==undefined ? n.efficiency : 0.85;
-  document.getElementById('ef-loadval-msg').classList.add('hidden');
-  document.getElementById('ef-eff-msg'    ).classList.add('hidden');
+  document.getElementById('ef-loadval-msg'    ).classList.add('hidden');
+  document.getElementById('ef-eff-msg'        ).classList.add('hidden');
+  document.getElementById('ef-conv-pair-eff-msg').classList.add('hidden');
   setWarnBox('ef-warn-box', null);
 
+  // Populate paired IN/OUT fields
+  if (n.convRole) {
+    const paired = findPairedNode(n);
+    const eff    = (n.convRole === 'in' ? n.efficiency : (paired?.efficiency ?? 0.85)) || 0.85;
+    const inNode  = n.convRole === 'in'  ? n      : paired;
+    const outNode = n.convRole === 'out' ? n      : paired;
+    document.getElementById('ef-in-cap' ).value = inNode?.capacity   !== null && inNode?.capacity  !== undefined ? inNode.capacity   : '';
+    document.getElementById('ef-out-cap').value = outNode?.capacity  !== null && outNode?.capacity !== undefined ? outNode.capacity  : '';
+    document.getElementById('ef-in-load').value = inNode?.existingLoad  !== undefined ? inNode.existingLoad   : 0;
+    document.getElementById('ef-out-load').value = outNode?.existingLoad !== undefined ? outNode.existingLoad  : 0;
+    const effEl = document.getElementById('ef-conv-pair-eff');
+    effEl.value    = eff;
+    effEl.disabled = n.convRole === 'out';
+    document.getElementById('ef-conv-pair-hint').textContent =
+      n.convRole === 'out' ? 'Efficiency is set on the IN node.' : '';
+    efAttachConvPairListeners();
+  }
+
   document.getElementById('btn-save').disabled = false;
-  efShowSections(isRoot ? 'Root' : n.type);
+  efShowSections(isRoot ? 'Root' : n.type, n.convRole);
   efRenderSiblings(n.parentId, nodeId);
   document.getElementById('modal-overlay').classList.remove('hidden');
   if (!isRoot) document.getElementById('ef-desc').focus();
 }
 
 function doEditSave() {
-  const type  = document.getElementById('ef-type').value;
+  const type   = document.getElementById('ef-type').value;
   const isRoot = mNode === state.rootId;
+  const n      = state.nodes[mNode];
 
-  if (isConv(type)) {
+  // Validate old-style conversion efficiency
+  if (isConv(type) && !n.convRole) {
     const eff = +document.getElementById('ef-eff').value;
     if (isNaN(eff) || eff<=0 || eff>1) {
       document.getElementById('ef-eff-msg').classList.remove('hidden');
@@ -1099,25 +1215,54 @@ function doEditSave() {
     document.getElementById('ef-eff-msg').classList.add('hidden');
   }
 
-  const ovRaw  = document.getElementById('ef-override').value.trim();
-  const capRaw = document.getElementById('ef-capacity').value.trim();
+  // Validate convRole paired efficiency (IN node only)
+  if (n.convRole === 'in') {
+    const eff = +document.getElementById('ef-conv-pair-eff').value;
+    if (isNaN(eff) || eff<=0 || eff>1) {
+      document.getElementById('ef-conv-pair-eff-msg').classList.remove('hidden');
+      document.getElementById('ef-conv-pair-eff').focus();
+      return;
+    }
+    document.getElementById('ef-conv-pair-eff-msg').classList.add('hidden');
+  }
 
-  const data = {
-    type,
-    status: document.getElementById('ef-status').value,
-  };
+  const pNum = id => { const v = evalFormula(document.getElementById(id).value.trim()); return v==='' ? null : +v; };
+
+  const data = { type, status: document.getElementById('ef-status').value };
   if (!isRoot) {
     data.description = document.getElementById('ef-desc'  ).value.trim();
     data.refDes      = document.getElementById('ef-refdes').value.trim();
     data.parentId    = document.getElementById('ef-parent').value;
   }
-  if (hasCap(type)) {
+
+  if (n.convRole) {
+    // Paired IN/OUT node editing
+    const paired  = findPairedNode(n);
+    const inCapV  = pNum('ef-in-cap');
+    const outCapV = pNum('ef-out-cap');
+    const inLdV   = pNum('ef-in-load')  ?? 0;
+    const outLdV  = pNum('ef-out-load') ?? 0;
+    if (n.convRole === 'in') {
+      data.capacity      = inCapV;
+      data.existingLoad  = inLdV;
+      data.efficiency    = +document.getElementById('ef-conv-pair-eff').value || 0.85;
+      data.netChangeOverride = null;
+      if (paired) { state.nodes[paired.id].capacity = outCapV; state.nodes[paired.id].existingLoad = outLdV; }
+    } else {
+      data.capacity     = outCapV;
+      data.existingLoad = outLdV;
+      data.netChangeOverride = null;
+      if (paired) { state.nodes[paired.id].capacity = inCapV; state.nodes[paired.id].existingLoad = inLdV; }
+    }
+  } else if (hasCap(type)) {
+    const capRaw = evalFormula(document.getElementById('ef-capacity').value.trim());
+    const ovRaw  = evalFormula(document.getElementById('ef-override').value.trim());
     data.capacity          = capRaw==='' ? null : +capRaw;
-    data.existingLoad      = +(document.getElementById('ef-existing').value)||0;
+    data.existingLoad      = +(evalFormula(document.getElementById('ef-existing').value))||0;
     data.netChangeOverride = ovRaw==='' ? null : +ovRaw;
   }
-  if (isConv(type)) data.efficiency = +document.getElementById('ef-eff').value;
-  if (isLoad(type)) data.loadValue  = +(document.getElementById('ef-loadval').value)||0;
+  if (isConv(type) && !n.convRole) data.efficiency = +document.getElementById('ef-eff').value;
+  if (isLoad(type)) data.loadValue = +(evalFormula(document.getElementById('ef-loadval').value))||0;
 
   updateNode(mNode, data);
   closeModal();
@@ -1125,24 +1270,30 @@ function doEditSave() {
 
 // ── ADD MODAL (master-detail, req 10) ─────────────────────────────────────────
 
-let afRows    = [];   // ordered array of row-index integers
-let afRowCtr  = 0;    // auto-increment
-let afRowData = {};   // rowIndex -> {key: value} — preserved across type changes
+let afRows     = [];   // ordered array of row-index integers
+let afRowCtr   = 0;    // auto-increment
+let afRowData  = {};   // rowIndex -> {key: value} — preserved across type changes
+let afLastType   = 'Generator';
+let afLastStatus = 'existing';
 
 function afCols(type) {
   const cols = [
-    { key:'description', label:'Description',    itype:'text',   ph:'e.g. Main Bus', w:'160px' },
-    { key:'refDes',      label:'Ref Des',         itype:'text',   ph:'optional',      w:'75px'  },
+    { key:'description', label:'Description', itype:'text', ph:'e.g. Main Bus', w:'150px' },
+    { key:'refDes',      label:'Ref Des',      itype:'text', ph:'optional',     w:'70px'  },
   ];
-  if (isLoad(type)) {
-    cols.push({ key:'loadValue', label:'Load Value (W)', itype:'number', ph:'e.g. 45', w:'100px' });
-  } else {
-    cols.push({ key:'capacity',          label:'Capacity (W)',     itype:'number', ph:'optional', w:'95px' });
-    cols.push({ key:'existingLoad',      label:'Exist. Load (W)',  itype:'number', ph:'0',        w:'100px', def:'0' });
-    cols.push({ key:'netChangeOverride', label:'Net Chg Override', itype:'number', ph:'auto',     w:'115px' });
-  }
   if (isConv(type)) {
-    cols.push({ key:'efficiency', label:'Efficiency', itype:'number', ph:'0.85', w:'80px', def:'0.85' });
+    // Paired IN/OUT: enter efficiency + either side of capacity/load; other side auto-calcs
+    cols.push({ key:'efficiency', label:'Efficiency',       itype:'text', ph:'0.85',    w:'75px',  def:'0.85' });
+    cols.push({ key:'inputCap',   label:'Input Cap (W)',    itype:'text', ph:'optional',w:'95px',  convPair:'in-cap'  });
+    cols.push({ key:'outputCap',  label:'Output Cap (W)',   itype:'text', ph:'auto',    w:'95px',  convPair:'out-cap' });
+    cols.push({ key:'inputLoad',  label:'Input Load (W)',   itype:'text', ph:'0',       w:'90px',  def:'0', convPair:'in-load'  });
+    cols.push({ key:'outputLoad', label:'Output Load (W)',  itype:'text', ph:'auto',    w:'90px',  convPair:'out-load' });
+  } else if (isLoad(type)) {
+    cols.push({ key:'loadValue', label:'Load (W)', itype:'text', ph:'e.g. 45', w:'100px' });
+  } else {
+    cols.push({ key:'capacity',          label:'Capacity (W)',    itype:'text', ph:'optional', w:'95px'  });
+    cols.push({ key:'existingLoad',      label:'Exist. Load (W)', itype:'text', ph:'0',        w:'100px', def:'0' });
+    cols.push({ key:'netChangeOverride', label:'Net Chg Override',itype:'text', ph:'auto',     w:'115px' });
   }
   return cols;
 }
@@ -1183,13 +1334,38 @@ function afRenderTable() {
 
   wrap.querySelectorAll('.af-del').forEach(btn =>
     btn.addEventListener('click', () => { afCapture(); afRows = afRows.filter(x=>x!==+btn.dataset.row); afRenderTable(); }));
+
+  // Attach live calculation listeners for conversion pair columns
+  if (isConv(type)) {
+    afRows.forEach(ri => {
+      const getEl  = key => wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
+      const effEl  = getEl('efficiency');
+      const inCap  = getEl('inputCap');
+      const outCap = getEl('outputCap');
+      const inLd   = getEl('inputLoad');
+      const outLd  = getEl('outputLoad');
+      if (!effEl) return;
+      const getEff = () => Math.max(0.001, Math.min(1, +effEl.value || 0.85));
+      inCap.oninput  = () => { const v=+inCap.value;  if(!isNaN(v)&&inCap.value!=='') outCap.value=String(Math.round(v*getEff()*1e6)/1e6); else outCap.value=''; };
+      outCap.oninput = () => { const v=+outCap.value; if(!isNaN(v)&&outCap.value!=='') inCap.value=String(Math.round(v/getEff()*1e6)/1e6); else inCap.value=''; };
+      inLd.oninput   = () => { const v=+inLd.value;   if(!isNaN(v)) outLd.value=String(Math.round(v*getEff()*1e6)/1e6); };
+      outLd.oninput  = () => { const v=+outLd.value;  if(!isNaN(v)) inLd.value=String(Math.round(v/getEff()*1e6)/1e6); };
+      effEl.oninput  = () => {
+        const v=+effEl.value;
+        if(v>0&&v<=1) {
+          if(inCap.value!=='')  outCap.value=String(Math.round(+inCap.value*v*1e6)/1e6);
+          if(inLd.value!=='')   outLd.value=String(Math.round(+inLd.value*v*1e6)/1e6);
+        }
+      };
+    });
+  }
 }
 
 function openAdd(parentId) {
   mMode='add'; mNode=null; mBlocked=false;
   afRows=[]; afRowCtr=0; afRowData={};
 
-  document.getElementById('modal-title').textContent = 'Add Item(s)';  // req 4
+  document.getElementById('modal-title').textContent = 'Add Item(s)';
   document.getElementById('add-form' ).classList.remove('hidden');
   document.getElementById('edit-form').classList.add('hidden');
   document.getElementById('btn-del'  ).classList.add('hidden');
@@ -1203,12 +1379,10 @@ function openAdd(parentId) {
 
   const aftype = document.getElementById('af-type');
   fillTypeSelect(aftype, false);
-  aftype.value = 'Generator';
+  aftype.value = afLastType || 'Generator';
+  document.getElementById('af-status').value = afLastStatus || 'existing';
 
-  document.getElementById('af-status').value = 'existing';
-
-  // Start with one empty row
-  afRows.push(afRowCtr++);
+  // Open with empty table — user adds rows explicitly (req 6)
   afRenderTable();
 
   document.getElementById('modal-overlay').classList.remove('hidden');
@@ -1224,28 +1398,54 @@ function doAddSave() {
   afCapture();
   if (afRows.length === 0) { alert('Please add at least one item row.'); return; }
 
-  const cols = afCols(type);
   afRows.forEach(ri => {
-    const saved = afRowData[ri] || {};
-    const get   = key => (saved[key] !== undefined ? String(saved[key]) : '').trim();
-    const data  = { type, status, parentId: pid };
-    data.description = get('description');
-    data.refDes      = get('refDes');
-    if (isLoad(type)) {
-      data.loadValue = +get('loadValue') || 0;
-    } else {
-      const cap = get('capacity');
-      data.capacity          = cap==='' ? null : +cap;
-      data.existingLoad      = +get('existingLoad') || 0;
-      const ov = get('netChangeOverride');
-      data.netChangeOverride = ov==='' ? null : +ov;
-    }
+    const saved  = afRowData[ri] || {};
+    const getRaw = key => (saved[key] !== undefined ? String(saved[key]) : '').trim();
+    const getN   = key => evalFormula(getRaw(key));
+    const desc   = getRaw('description');
+    const refDes = getRaw('refDes');
+
     if (isConv(type)) {
-      const eff = +get('efficiency');
-      data.efficiency = (eff > 0 && eff <= 1) ? eff : 0.85;
+      // Create IN node
+      const eff    = Math.max(0.001, Math.min(1, +getN('efficiency') || 0.85));
+      const inCapR = getN('inputCap');
+      const outCapR= getN('outputCap');
+      const inLdR  = getN('inputLoad');
+      const outLdR = getN('outputLoad');
+      const inData = {
+        type, status, convRole:'in', description: desc + ' (IN)', refDes,
+        capacity: inCapR==='' ? null : +inCapR,
+        existingLoad: +inLdR || 0,
+        efficiency: eff, netChangeOverride: null
+      };
+      const inId = addNode(pid, inData);
+      // Create OUT node as child of IN
+      const outData = {
+        type, status, convRole:'out', description: desc + ' (OUT)', refDes,
+        capacity: outCapR==='' ? null : +outCapR,
+        existingLoad: +outLdR || 0,
+        netChangeOverride: null
+      };
+      addNode(inId, outData);
+    } else if (isLoad(type)) {
+      const lv = getN('loadValue');
+      addNode(pid, { type, status, description: desc, refDes, loadValue: +lv || 0 });
+    } else {
+      const capR = getN('capacity');
+      const ovR  = getN('netChangeOverride');
+      addNode(pid, {
+        type, status, description: desc, refDes,
+        capacity: capR==='' ? null : +capR,
+        existingLoad: +getN('existingLoad') || 0,
+        netChangeOverride: ovR==='' ? null : +ovR
+      });
     }
-    addNode(pid, data);
   });
+
+  // Remember last type/status (req 7)
+  afLastType   = type;
+  afLastStatus = status;
+
   batchCommit();
   closeModal();
 }
@@ -1276,17 +1476,18 @@ function buildPrint() {
     const wn = ws.length>0 && !ov;
     const rCls = ov?'p-over':(wn?'p-warn':'');
     const indent  = '\u00a0'.repeat(d*3);
-    const typeStr = n.type === 'Root' ? 'Total Aircraft Load' : n.type;
-    const capS = hasCap(n.type)&&n.capacity!==null&&n.capacity!=='' ? fmtW(n.capacity) : '—';
-    const exS  = hasCap(n.type) ? fmtW(n.existingLoad||0) : '—';
-    const lvS  = isLoad(n.type) ? fmtW(n.loadValue) : '—';
-    const ncS  = !isLoad(n.type) ? (n._netChange>=0?'+':'')+fmtW(n._netChange) : '—';
-    const nlS  = hasCap(n.type) ? fmtW(n._newLoad) : '—';
-    const rS   = n._remainingCapacity!==null ? fmtW(n._remainingCapacity) : '—';
+    const typeStr = n.type === 'Root' ? 'Total Aircraft Load' : displayType(n);
+    const descLabel = (n.description||'unnamed') + (n.refDes ? ' ['+n.refDes+']' : '');
+    const capS = hasCap(n.type)&&n.capacity!==null&&n.capacity!=='' ? fmtN(n.capacity) : '—';
+    const exS  = hasCap(n.type) ? fmtN(n.existingLoad||0) : '—';
+    const lvS  = isLoad(n.type) ? fmtN(n.loadValue) : '—';
+    const ncS  = !isLoad(n.type) ? (n._netChange>=0?'+':'')+fmtN(n._netChange) : '—';
+    const nlS  = hasCap(n.type) ? fmtN(n._newLoad) : '—';
+    const rS   = n._remainingCapacity!==null ? fmtN(n._remainingCapacity) : '—';
     const flg  = ws.map(w=>w.code).join(',');
     return `<tr class="${rCls}">
-      <td>${indent}${esc(n.description||'unnamed')}</td>
-      <td>${esc(typeStr)}</td><td>${esc(n.refDes||'')}</td><td>${esc(n.status)}</td>
+      <td>${indent}${esc(descLabel)}</td>
+      <td>${esc(typeStr)}</td><td>${esc(n.status)}</td>
       <td class="r">${capS}</td><td class="r">${exS}</td><td class="r">${lvS}</td>
       <td class="r">${ncS}</td><td class="r">${nlS}</td><td class="r">${rS}</td>
       <td>${flg}</td></tr>`;
@@ -1310,9 +1511,9 @@ function buildPrint() {
     </div>
     <table class="print-table">
       <thead><tr>
-        <th>Component</th><th>Type</th><th>Ref Des</th><th>Status</th>
-        <th class="r">Capacity</th><th class="r">Exist. Load</th><th class="r">Load Value</th>
-        <th class="r">Net Change</th><th class="r">New Load</th><th class="r">Remaining</th>
+        <th>Component</th><th>Type</th><th>Status</th>
+        <th class="r">Capacity (W)</th><th class="r">Exist. Load (W)</th><th class="r">Load (W)</th>
+        <th class="r">Net Change (W)</th><th class="r">New Load (W)</th><th class="r">Remaining (W)</th>
         <th>Flags</th>
       </tr></thead>
       <tbody>${rows.join('')}</tbody>
@@ -1383,7 +1584,8 @@ function initEvents() {
 
   // Edit form: type change
   document.getElementById('ef-type').addEventListener('change', e => {
-    efShowSections(e.target.value);
+    const cr = mNode && state.nodes[mNode] ? state.nodes[mNode].convRole : null;
+    efShowSections(e.target.value, cr);
   });
 
   // Edit form: load value warning
@@ -1397,7 +1599,7 @@ function initEvents() {
     document.getElementById('ef-eff-msg').classList.toggle('hidden', v>0 && v<=1);
   });
 
-  // Add form: parent change — re-check warning, refresh siblings concept
+  // Add form: parent change — re-check warning
   document.getElementById('af-parent').addEventListener('change', e => {
     const warn = addWarnCheck(e.target.value);
     setWarnBox('af-warn-box', warn);
@@ -1405,14 +1607,31 @@ function initEvents() {
     document.getElementById('btn-save').disabled = mBlocked;
   });
 
-  // Add form: type change — rebuild table with correct columns
-  document.getElementById('af-type').addEventListener('change', () => afRenderTable());
+  // Add form: type change — rebuild table; remember selection (req 7)
+  document.getElementById('af-type').addEventListener('change', e => {
+    afLastType = e.target.value;
+    afRenderTable();
+  });
+
+  // Add form: status change — remember selection (req 7)
+  document.getElementById('af-status').addEventListener('change', e => {
+    afLastStatus = e.target.value;
+  });
 
   // Add form: "+ Add Another Row"
   document.getElementById('af-add-row').addEventListener('click', () => {
     afCapture();
     afRows.push(afRowCtr++);
     afRenderTable();
+  });
+
+  // Formula evaluation on blur for all numeric inputs in modal (req 8)
+  document.querySelector('.modal-body').addEventListener('focusout', e => {
+    const el = e.target;
+    if (el.tagName === 'INPUT' && (el.inputMode === 'decimal' || el.dataset.key)) {
+      const evaled = evalFormula(el.value);
+      if (evaled !== el.value) el.value = evaled;
+    }
   });
 
   // Warning banner toggle
