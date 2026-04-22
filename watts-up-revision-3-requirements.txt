@@ -1,0 +1,7 @@
+For tonight, let's make a few adjustments to the changes we made this morning.
+
+1. I like where we moved the Reference Designator with the description, but I would like to change the Reference Designator text appearance back to the more subdued text appearance that had been previously used.
+
+2. In the Add Item(s) dialog box, if the user is adding new items that are not a load items, remove the Existing Load field  and replace it with a Load field;  instructions to leave the load field blank if adding children.  If the user enters a load in the load field, make the item a terminal node and copy the entered load to the net change field for that item to add the entered load to the parent items.
+
+3. In the Edit Item(s) dialog box, if the item is a new item that is not a load item, remove the Existing Load field and replace it with a Load field with instructions to leave the load field blank if adding children. If the item has children, hide the load field to prevent user entry.
