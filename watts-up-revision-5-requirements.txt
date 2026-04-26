@@ -1,0 +1,36 @@
+Watts Up Revision 5
+
+Note: Backward compatibility with data from the previous version is desired, but not required.  
+
+1. There is an error in the implementation of the AC power entry forms.
+	a. The Add Item(s) and Edit Item(s) dialog boxes are inhibiting entry of existing load information.
+	b. The VAR and pf variables are locked at 0 and 1.
+	c. Desired behavior:
+		i. Allow entry of existing load information
+	       ii. Auto-calculate fields that are not populated once enough information has been entered
+	      iii. Leave VAR and pf fields blank; only apply VAR=0 and pf = 1 defaults if the user saves without manual entering VAR or pf values, or providing sufficient information to calculate the VAR or pf values.
+
+2. Change "Voltage" labels to "Volts" in the Add Item(s) and Edit Item(s) dialog boxes
+
+3. Change "Total Aircraft Load" default Volts to 115 and change default AC / DC selection to AC.
+
+4. In the Edit Item(s) dialog box, IF Parent Item = "No Parent (New Root)", 
+					THEN enable "Total Aircraft Load" as an Item Type option; 
+					ELSE inhibit "Total Aircraft Load" as an Item Type option.
+
+5. In the Edit Item(s) dialog box:
+	a. For AC items
+		i. Add a Net Change Override (VAR) field
+	       ii. If the user manually enters a value in the Net Change Override (W) field but leaves the Net Change Override (VAR) field blank, then apply the VAR=0 default on SAVE.
+
+	b. For DC items
+		i. Add a Net Change Override (A) field
+	       ii. Auto-calculate Amps (A) or Watts(W) if the other value is manually entered
+
+6. Apply the following formulas for the power conversion items:
+	a. Watts(IN) = (Volts(OUT) * Amps(OUT))/efficiency
+	b. For AC input items: VA(IN) = (Volts(OUT) * Amps(OUT))/(efficiency * pf)
+
+7. In the Load Analysis Summary change the "DC Systems" label to "DC Summary" and change "AC Systems" label to "AC Summary"
+
+8. If the first root node in the Power Distribution Tree is an AC item, order the "AC Summary" first in the Load Analysis Summary followed by the "DC Summary".

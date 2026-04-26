@@ -254,7 +254,7 @@
           </div>
           <div class="form-row">
             <div class="form-group" style="flex:0 0 100px">
-              <label>Voltage (V)</label>
+              <label>Volts</label>
               <input id="ef-voltage" type="text" inputmode="decimal" placeholder="e.g. 28">
             </div>
             <div class="form-group" style="flex:0 0 90px">
@@ -305,19 +305,20 @@
                 <div class="form-group"><label>Ex. Load (pf)</label><input id="ef-exld-ac-pf" type="text" inputmode="decimal"></div>
               </div>
             </div>
-            <div class="form-group" style="margin-top:.4rem">
-              <label>Net Change Override (W)</label>
-              <input id="ef-override" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate">
-              <span class="field-hint">Overrides the sum calculated from child items.</span>
+            <div class="section-label" style="margin-top:.4rem">Net Change Override</div>
+            <div id="ef-override-dc">
+              <div class="form-row">
+                <div class="form-group"><label>Override (A)</label><input id="ef-ov-a" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+                <div class="form-group"><label>Override (W)</label><input id="ef-ov-w" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+              </div>
             </div>
-          </div>
-
-          <div id="ef-sec-new-load" class="hidden">
-            <div class="form-group">
-              <label>Load (W)</label>
-              <input id="ef-new-load" type="text" inputmode="decimal" placeholder="blank if adding children">
-              <span class="field-hint">Leave blank if this item will have children.</span>
+            <div id="ef-override-ac" class="hidden">
+              <div class="form-row">
+                <div class="form-group"><label>Override (W)</label><input id="ef-ov-ac-w" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+                <div class="form-group"><label>Override (VAR)</label><input id="ef-ov-ac-var" type="text" inputmode="decimal" placeholder="VAR=0 if blank"></div>
+              </div>
             </div>
+            <span class="field-hint">Overrides the sum calculated from child items.</span>
           </div>
 
           <div id="ef-sec-load" class="hidden">
@@ -555,7 +556,7 @@ function makeNode(type,parentId,overrides={}) {
 
 function freshState() {
   const rid=uid();
-  const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'dc',voltage:28});
+  const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115});
   return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise'},
     nodes:{[rid]:root},rootIds:[rid],lastSaved:null};
 }
@@ -597,8 +598,15 @@ function calcNC(node,nodes) {
   }
   const ov=node.netChangeOverride;
   if (ov!==null&&ov!==undefined) {
-    const ovW=(typeof ov==='object'?ov.w:ov)||0;
-    return ac?deriveAcFromWVar(ovW,0,v):deriveDcFromA(v>0?ovW/v:0,v);
+    if (ac) {
+      const ovW=(typeof ov==='object'?ov.w:ov)||0;
+      const ovVAR=(typeof ov==='object'?ov.var:null)??0;
+      return deriveAcFromWVar(ovW,ovVAR,v);
+    } else {
+      const ovA=typeof ov==='object'&&ov.a!==null&&ov.a!==undefined?ov.a:null;
+      const ovW=typeof ov==='object'?ov.w:ov;
+      return deriveDcFromA(ovA!==null?ovA:(v>0&&ovW?ovW/v:0),v);
+    }
   }
   if (node.status==='removed') return negPow(node.existingLoad||mkPow(0,0,0,0,1));
   let sumW=0,sumVAR=0,sumA=0;
@@ -609,11 +617,14 @@ function calcNC(node,nodes) {
     } else { sumW+=nc.w||0; sumVAR+=nc.var||0; sumA+=nc.a||0; }
   });
   if (node.convRole==='in'&&node.efficiency>0) {
-    const outW=sumW; const inVA=outW/node.efficiency;
-    const pf=node.convPf||1.0; const inW=inVA*pf;
+    const outW=sumW;
+    const pf=node.convPf||1.0;
+    const inW=outW/node.efficiency;
+    const isAcIn=node.acDc==='ac';
+    const inVA=isAcIn&&pf>0?inW/pf:inW;
     const inVAR=Math.sqrt(Math.max(0,inVA*inVA-inW*inW));
     const inA=v>0?inVA/v:null;
-    return {w:inW,var:inVAR,va:inVA,a:inA,pf};
+    return {w:inW,var:inVAR,va:inVA,a:inA,pf:isAcIn?pf:null};
   }
   if (ac) return deriveAcFromWVar(sumW,sumVAR,v);
   return deriveDcFromA(sumA,v);
@@ -952,9 +963,11 @@ function renderTable() {
       <th class="sub-hdr">A</th><th class="sub-hdr">VA</th>
     </tr></thead>`;
 
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   let html='';
-  if (dcIds.length) html+=`<div class="table-section-heading">DC Systems</div><table class="summary-table">${dcThead}<tbody>${dcRows(dcIds)}</tbody></table>`;
-  if (acIds.length) html+=`<div class="table-section-heading">AC Systems</div><table class="summary-table">${acThead}<tbody>${acRows(acIds)}</tbody></table>`;
+  const dcSection=dcIds.length?`<div class="table-section-heading">DC Summary</div><table class="summary-table">${dcThead}<tbody>${dcRows(dcIds)}</tbody></table>`:'';
+  const acSection=acIds.length?`<div class="table-section-heading">AC Summary</div><table class="summary-table">${acThead}<tbody>${acRows(acIds)}</tbody></table>`:'';
+  html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No data.</div>';
   el.innerHTML=html;
 }
@@ -1044,11 +1057,21 @@ function closeModal() {
   document.getElementById('edit-form').classList.add('hidden');
   document.getElementById('add-form' ).classList.add('hidden');
   document.getElementById('ef-type').disabled=false;
+  document.getElementById('ef-parent').onchange=null;
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
+function efReshow() {
+  const n=mNode&&state.nodes[mNode]?state.nodes[mNode]:null;
+  const cr=n?n.convRole:null;
+  const tp=document.getElementById('ef-type').value;
+  const st=document.getElementById('ef-status').value;
+  const hc=n?children(n.id,state.nodes).length>0:false;
+  const ac=document.getElementById('ef-acdc').value;
+  efShowSections(tp,cr,st,hc,ac);
+}
 function findPairedNode(node) {
   if (node.convRole==='in')  return children(node.id,state.nodes).find(c=>c.convRole==='out')||null;
   if (node.convRole==='out') { const p=state.nodes[node.parentId]; return (p&&p.convRole==='in')?p:null; }
@@ -1063,13 +1086,14 @@ function efShowSections(type,convRole,status,hasChildren,acDc) {
   document.getElementById('ef-sec-load'     ).classList.toggle('hidden',!isLoad(type));
   document.getElementById('ef-sec-conv'     ).classList.toggle('hidden',!isConv(type)||isConvPair);
   document.getElementById('ef-sec-conv-pair').classList.toggle('hidden',!isConvPair);
-  document.getElementById('ef-sec-new-load' ).classList.toggle('hidden',!showNewLoad);
-  document.getElementById('ef-cap-dc' ).classList.toggle('hidden',!dc);
-  document.getElementById('ef-cap-ac' ).classList.toggle('hidden', dc);
-  document.getElementById('ef-exld-dc').classList.toggle('hidden',!dc||showNewLoad);
-  document.getElementById('ef-exld-ac').classList.toggle('hidden', dc||showNewLoad);
-  document.getElementById('ef-load-dc').classList.toggle('hidden',!dc);
-  document.getElementById('ef-load-ac').classList.toggle('hidden', dc);
+  document.getElementById('ef-cap-dc'       ).classList.toggle('hidden',!dc);
+  document.getElementById('ef-cap-ac'       ).classList.toggle('hidden', dc);
+  document.getElementById('ef-exld-dc'      ).classList.toggle('hidden',!dc);
+  document.getElementById('ef-exld-ac'      ).classList.toggle('hidden', dc);
+  document.getElementById('ef-override-dc'  ).classList.toggle('hidden',!dc);
+  document.getElementById('ef-override-ac'  ).classList.toggle('hidden', dc);
+  document.getElementById('ef-load-dc'      ).classList.toggle('hidden',!dc);
+  document.getElementById('ef-load-ac'      ).classList.toggle('hidden', dc);
 }
 
 function efAttachDcDerive(aId,wId) {
@@ -1087,25 +1111,35 @@ function efAttachAcCapDerive() {
   vaEl.addEventListener('blur',()=>{ const va=parseF(vaEl.value),v=getV(); if (va!==null&&v>0&&aEl.value==='') aEl.value=fmtPField(va/v); });
 }
 function efAttachAcLoadDerive(prefix) {
-  const ids=['a','va','w','var','pf'].map(k=>prefix+k);
   const getV=()=>parseF(document.getElementById('ef-voltage').value)||0;
-  ids.forEach(id=>{
-    const el=document.getElementById(id);if (!el) return;
+  const getVal=k=>parseF(document.getElementById(prefix+k)?.value);
+  const setIfEmpty=(k,val)=>{
+    if (val===null||val===undefined) return;
+    const el=document.getElementById(prefix+k);
+    if (el&&el.value==='') el.value=fmtPField(val);
+  };
+  ['a','va','w','var','pf'].forEach(k=>{
+    const el=document.getElementById(prefix+k);if (!el) return;
     el.addEventListener('blur',()=>{
       const v=getV();
-      const vals={
-        a:parseF(document.getElementById(prefix+'a')?.value),
-        va:parseF(document.getElementById(prefix+'va')?.value),
-        w:parseF(document.getElementById(prefix+'w')?.value),
-        var:parseF(document.getElementById(prefix+'var')?.value),
-        pf:parseF(document.getElementById(prefix+'pf')?.value)
-      };
-      const p=autoAc(vals.w,vals.var,vals.va,vals.a,vals.pf,v);
-      if (p.a!==null&&document.getElementById(prefix+'a')) document.getElementById(prefix+'a').value=fmtPField(p.a);
-      if (p.va!==null&&document.getElementById(prefix+'va')) document.getElementById(prefix+'va').value=fmtPField(p.va);
-      if (p.w!==null&&document.getElementById(prefix+'w')) document.getElementById(prefix+'w').value=fmtPField(p.w);
-      if (p.var!==null&&document.getElementById(prefix+'var')) document.getElementById(prefix+'var').value=fmtPField(p.var);
-      if (p.pf!==null&&document.getElementById(prefix+'pf')) document.getElementById(prefix+'pf').value=fmtPField(p.pf);
+      const w=getVal('w'),vr=getVal('var'),va=getVal('va'),a=getVal('a'),pf=getVal('pf');
+      const has=x=>x!==null;
+      if (has(w)&&has(vr)) {
+        const p=deriveAcFromWVar(w,vr,v);
+        setIfEmpty('va',p.va);setIfEmpty('a',p.a);setIfEmpty('pf',p.pf);
+      } else if (has(va)&&has(w)) {
+        const var2=Math.sqrt(Math.max(0,va*va-w*w));
+        const p=deriveAcFromWVar(w,var2,v);
+        setIfEmpty('var',p.var);setIfEmpty('a',p.a);setIfEmpty('pf',p.pf);
+      } else if (has(va)&&has(pf)) {
+        const w2=va*pf;
+        const p=deriveAcFromWVar(w2,Math.sqrt(Math.max(0,va*va-w2*w2)),v);
+        setIfEmpty('w',p.w);setIfEmpty('var',p.var);setIfEmpty('a',p.a);
+      } else if (has(va)&&v>0) {
+        setIfEmpty('a',va/v);
+      } else if (has(a)&&v>0) {
+        setIfEmpty('va',a*v);
+      }
     });
   });
 }
@@ -1114,16 +1148,18 @@ function efAttachConvPairListeners() {
   const inCap=document.getElementById('ef-in-cap'),outCap=document.getElementById('ef-out-cap');
   const inLd=document.getElementById('ef-in-load'),outLd=document.getElementById('ef-out-load');
   const effEl=document.getElementById('ef-conv-pair-eff');
+  const pfEl=document.getElementById('ef-convpf');
   const getEff=()=>Math.max(0.001,Math.min(1,+effEl.value||0.85));
-  inCap.oninput=()=>{ const v=+inCap.value; if(!isNaN(v)&&inCap.value!=='') outCap.value=String(Math.round(v*getEff()*1e6)/1e6); else outCap.value=''; };
-  outCap.oninput=()=>{ const v=+outCap.value; if(!isNaN(v)&&outCap.value!=='') inCap.value=String(Math.round(v/getEff()*1e6)/1e6); else inCap.value=''; };
-  inLd.oninput=()=>{ const v=+inLd.value; if(!isNaN(v)) outLd.value=String(Math.round(v*getEff()*1e6)/1e6); };
-  outLd.oninput=()=>{ const v=+outLd.value; if(!isNaN(v)) inLd.value=String(Math.round(v/getEff()*1e6)/1e6); };
+  const getPf=()=>document.getElementById('ef-convpf-group').classList.contains('hidden')?1.0:(parseF(pfEl?.value)||1.0);
+  inCap.oninput=()=>{ const v=+inCap.value; if(!isNaN(v)&&inCap.value!=='') outCap.value=String(Math.round(v*getEff()*getPf()*1e6)/1e6); else outCap.value=''; };
+  outCap.oninput=()=>{ const v=+outCap.value; if(!isNaN(v)&&outCap.value!=='') inCap.value=String(Math.round(v/(getEff()*getPf())*1e6)/1e6); else inCap.value=''; };
+  inLd.oninput=()=>{ const v=+inLd.value; if(!isNaN(v)) outLd.value=String(Math.round(v*getEff()*getPf()*1e6)/1e6); };
+  outLd.oninput=()=>{ const v=+outLd.value; if(!isNaN(v)) inLd.value=String(Math.round(v/(getEff()*getPf())*1e6)/1e6); };
   effEl.oninput=()=>{
     const v=+effEl.value;
     if (v>0&&v<=1) {
-      if (inCap.value!=='') outCap.value=String(Math.round(+inCap.value*v*1e6)/1e6);
-      if (inLd.value!=='')  outLd.value=String(Math.round(+inLd.value*v*1e6)/1e6);
+      if (inCap.value!=='') outCap.value=String(Math.round(+inCap.value*v*getPf()*1e6)/1e6);
+      if (inLd.value!=='')  outLd.value=String(Math.round(+inLd.value*v*getPf()*1e6)/1e6);
     }
   };
 }
@@ -1156,10 +1192,17 @@ function openEdit(nodeId) {
   document.getElementById('ef-parent-group').classList.remove('hidden');
   fillParentSelect('ef-parent',nodeId,n.parentId);
 
-  // Type: allow all types for roots too
+  // Type: include Root option only when no parent (req 4)
   const ftype=document.getElementById('ef-type');
-  fillTypeSelect(ftype,n.type==='Root');
+  fillTypeSelect(ftype,!n.parentId);
   ftype.value=n.type;ftype.disabled=false;
+  document.getElementById('ef-parent').onchange=()=>{
+    const cur=ftype.value;
+    fillTypeSelect(ftype,!document.getElementById('ef-parent').value);
+    if (ftype.querySelector(`option[value="${cur}"]`)) ftype.value=cur;
+    else ftype.value=ftype.options[0]?.value||'';
+    efReshow();
+  };
 
   // Description always visible
   document.getElementById('ef-desc-row').classList.remove('hidden');
@@ -1187,9 +1230,15 @@ function openEdit(nodeId) {
     document.getElementById('ef-exld-ac-var').value=fmtPField(ex.var);
     document.getElementById('ef-exld-ac-pf').value =fmtPField(ex.pf);
     const ov=n.netChangeOverride;
-    document.getElementById('ef-override').value=(ov!==null&&ov!==undefined)?(typeof ov==='object'?fmtPField(ov.w):ov):'';
-    const nlOv=(ov!==null&&ov!==undefined)?(typeof ov==='object'?fmtPField(ov.w):ov):'';
-    document.getElementById('ef-new-load').value=nlOv;
+    const ovW=ov!==null&&ov!==undefined?(typeof ov==='object'?ov.w:ov):null;
+    const ovVAR=ov!==null&&ov!==undefined&&typeof ov==='object'?ov.var:null;
+    const vv=n.voltage||0;
+    const ovA=ov!==null&&ov!==undefined&&typeof ov==='object'&&ov.a!==null&&ov.a!==undefined?ov.a
+             :(vv>0&&ovW!==null?ovW/vv:null);
+    document.getElementById('ef-ov-a').value    =fmtPField(ovA);
+    document.getElementById('ef-ov-w').value    =fmtPField(ovW);
+    document.getElementById('ef-ov-ac-w').value =fmtPField(ovW);
+    document.getElementById('ef-ov-ac-var').value=fmtPField(ovVAR);
   }
 
   // Load fields
@@ -1248,6 +1297,7 @@ function openEdit(nodeId) {
   efAttachDcDerive('ef-cap-a','ef-cap-w');
   efAttachDcDerive('ef-exld-a','ef-exld-w');
   efAttachDcDerive('ef-load-a','ef-load-w');
+  efAttachDcDerive('ef-ov-a','ef-ov-w');
   efAttachAcCapDerive();
   efAttachAcLoadDerive('ef-exld-ac-');
   efAttachAcLoadDerive('ef-load-ac-');
@@ -1322,19 +1372,20 @@ function doEditSave() {
       const capW=pF('ef-cap-w'),capA=pF('ef-cap-a');
       data.capacity=capW!==null?{w:capW,var:null,va:null,a:v>0?capW/v:capA,pf:null}:(capA!==null?deriveDcFromA(capA,v):null);
     }
-    if (!document.getElementById('ef-sec-new-load').classList.contains('hidden')) {
-      const nlv=pF('ef-new-load');
-      data.existingLoad=mkPow(0,0,0,0,1);
-      data.netChangeOverride=nlv!==null?{w:nlv}:null;
+    if (acDc==='ac') {
+      const ovW=pF('ef-ov-ac-w');const ovVAR=pF('ef-ov-ac-var');
+      data.netChangeOverride=ovW!==null?{w:ovW,var:ovVAR??0}:null;
+      data.existingLoad=autoAc(pF('ef-exld-ac-w'),pF('ef-exld-ac-var'),pF('ef-exld-ac-va'),pF('ef-exld-ac-a'),pF('ef-exld-ac-pf'),v);
     } else {
-      const ovW=pF('ef-override');
-      data.netChangeOverride=ovW!==null?{w:ovW}:null;
-      if (acDc==='ac') {
-        data.existingLoad=autoAc(pF('ef-exld-ac-w'),pF('ef-exld-ac-var'),pF('ef-exld-ac-va'),pF('ef-exld-ac-a'),pF('ef-exld-ac-pf'),v);
-      } else {
-        const exA=pF('ef-exld-a'),exW=pF('ef-exld-w');
-        data.existingLoad=autoDc(exA,exW,v);
-      }
+      const ovA=pF('ef-ov-a'),ovW=pF('ef-ov-w');
+      if (ovA!==null||ovW!==null) {
+        const vv=voltage||0;
+        const a=ovA!==null?ovA:(vv>0&&ovW!==null?ovW/vv:null);
+        const w=a!==null&&vv>0?a*vv:ovW;
+        data.netChangeOverride={w,a};
+      } else {data.netChangeOverride=null;}
+      const exA=pF('ef-exld-a'),exW=pF('ef-exld-w');
+      data.existingLoad=autoDc(exA,exW,v);
     }
   }
   if (isConv(type)&&!n.convRole) data.efficiency=+document.getElementById('ef-eff').value;
@@ -1356,7 +1407,7 @@ function afCols(type,acDc) {
   const cols=[
     {key:'description',label:'Description',itype:'text',ph:'e.g. Main Bus',w:'140px'},
     {key:'refDes',     label:'Ref Des',     itype:'text',ph:'optional',    w:'65px'},
-    {key:'voltage',    label:'Voltage (V)', itype:'text',ph:'e.g. 28',    w:'65px'},
+    {key:'voltage',    label:'Volts',       itype:'text',ph:'e.g. 28',    w:'55px'},
   ];
   if (isConv(type)) {
     const inAcDc=CONV_IN_ACDC[type]||'ac';const outAcDc=CONV_OUT_ACDC[type]||'dc';
@@ -1378,15 +1429,20 @@ function afCols(type,acDc) {
     }
   } else {
     if (acDc==='ac') {
-      cols.push({key:'cap_va', label:'Cap (VA)',  itype:'text',ph:'opt.',w:'75px'});
-      cols.push({key:'cap_a',  label:'Cap (A)',   itype:'text',ph:'opt.',w:'65px'});
-      cols.push({key:'load_va',label:'Load (VA)', itype:'text',ph:'blank if children',w:'90px'});
-      cols.push({key:'load_w', label:'Load (W)',  itype:'text',ph:'blank if children',w:'90px'});
-      cols.push({key:'load_var',label:'Load (VAR)',itype:'text',ph:'opt.',w:'75px'});
+      cols.push({key:'cap_va',    label:'Cap (VA)',    itype:'text',ph:'opt.',w:'75px'});
+      cols.push({key:'cap_a',     label:'Cap (A)',     itype:'text',ph:'opt.',w:'65px'});
+      cols.push({key:'ex_load_va',label:'Ex Ld (VA)',  itype:'text',ph:'opt.',w:'80px'});
+      cols.push({key:'ex_load_w', label:'Ex Ld (W)',   itype:'text',ph:'opt.',w:'75px'});
+      cols.push({key:'ex_load_var',label:'Ex Ld (VAR)',itype:'text',ph:'opt.',w:'75px'});
+      cols.push({key:'load_va',   label:'Load (VA)',   itype:'text',ph:'blank if children',w:'90px'});
+      cols.push({key:'load_w',    label:'Load (W)',    itype:'text',ph:'blank if children',w:'90px'});
+      cols.push({key:'load_var',  label:'Load (VAR)',  itype:'text',ph:'opt.',w:'75px'});
     } else {
-      cols.push({key:'cap_w',  label:'Cap (W)',  itype:'text',ph:'opt.',w:'75px'});
-      cols.push({key:'cap_a',  label:'Cap (A)',  itype:'text',ph:'opt.',w:'65px'});
-      cols.push({key:'load_w', label:'Load (W)', itype:'text',ph:'blank if children',w:'95px'});
+      cols.push({key:'cap_w',     label:'Cap (W)',     itype:'text',ph:'opt.',w:'75px'});
+      cols.push({key:'cap_a',     label:'Cap (A)',     itype:'text',ph:'opt.',w:'65px'});
+      cols.push({key:'ex_load_a', label:'Ex Ld (A)',   itype:'text',ph:'opt.',w:'70px'});
+      cols.push({key:'ex_load_w', label:'Ex Ld (W)',   itype:'text',ph:'opt.',w:'70px'});
+      cols.push({key:'load_w',    label:'Load (W)',    itype:'text',ph:'blank if children',w:'95px'});
     }
   }
   return cols;
@@ -1433,6 +1489,23 @@ function afRenderTable() {
       inLd.oninput=()=>{const v=+inLd.value;if(!isNaN(v))outLd.value=String(Math.round(v*getEff()*1e6)/1e6);};
       outLd.oninput=()=>{const v=+outLd.value;if(!isNaN(v))inLd.value=String(Math.round(v/getEff()*1e6)/1e6);};
       effEl.oninput=()=>{const v=+effEl.value;if(v>0&&v<=1){if(inCap.value!=='')outCap.value=String(Math.round(+inCap.value*v*1e6)/1e6);if(inLd.value!=='')outLd.value=String(Math.round(+inLd.value*v*1e6)/1e6);}};
+    });
+  } else if (!isLoad(type)&&acDc==='ac') {
+    afRows.forEach(ri=>{
+      const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
+      const getVolt=()=>{const vEl=g('voltage');return parseF(vEl?.value)||0;};
+      const setIfEmpty=(key,val)=>{if(val===null||val===undefined)return;const el=g(key);if(el&&el.value==='')el.value=fmtPField(val);};
+      ['ex_load_va','ex_load_w','ex_load_var'].forEach(k=>{
+        const el=g(k);if(!el)return;
+        el.addEventListener('blur',()=>{
+          const v=getVolt();
+          const va=parseF(g('ex_load_va')?.value),w=parseF(g('ex_load_w')?.value),vr=parseF(g('ex_load_var')?.value);
+          const has=x=>x!==null;
+          if(has(w)&&has(vr)){const p=deriveAcFromWVar(w,vr,v);setIfEmpty('ex_load_va',p.va);}
+          else if(has(va)&&has(w)){const var2=Math.sqrt(Math.max(0,va*va-w*w));setIfEmpty('ex_load_var',var2);}
+          else if(has(va)&&v>0){/* could derive A but no A column */}
+        });
+      });
     });
   }
 }
@@ -1500,10 +1573,13 @@ function doAddSave() {
       let cap=null;
       if (acDc==='ac') {const cva=getN('cap_va'),ca=getN('cap_a');cap=cva!==null?{w:null,var:null,va:cva,a:v>0?cva/v:ca,pf:null}:(ca!==null?{w:null,var:null,va:v>0?ca*v:null,a:ca,pf:null}:null);}
       else {const cw=getN('cap_w'),ca=getN('cap_a');cap=cw!==null?{w:cw,var:null,va:null,a:v>0?cw/v:ca,pf:null}:(ca!==null?deriveDcFromA(ca,v):null);}
+      let exLd;
+      if (acDc==='ac') exLd=autoAc(getN('ex_load_w'),getN('ex_load_var'),getN('ex_load_va'),null,null,v);
+      else exLd=autoDc(getN('ex_load_a'),getN('ex_load_w'),v);
       let ncOv=null;
       if (acDc==='ac') {const lva=getN('load_va'),lw=getN('load_w'),lvar=getN('load_var');if (lw!==null) ncOv={w:lw}; else if (lva!==null) ncOv={w:lva};}
       else {const lw=getN('load_w');if (lw!==null) ncOv={w:lw};}
-      const id=addNode(pid,{type,status,description:desc,refDes,voltage,acDc,capacity:cap,existingLoad:mkPow(0,0,0,0,1),netChangeOverride:ncOv});
+      const id=addNode(pid,{type,status,description:desc,refDes,voltage,acDc,capacity:cap,existingLoad:exLd,netChangeOverride:ncOv});
       if (!pid) state.rootIds.push(id);
     }
   });
@@ -1564,9 +1640,10 @@ function buildPrint() {
   }
 
   const hdrCols=`<th class="left">Component</th><th>Type</th><th>Status</th><th class="right">V</th><th class="right">Cap</th><th class="right">Ex.Ld</th><th class="right">Load</th><th class="right">Net Chg</th><th class="right">New Load</th><th class="right">Remaining</th><th>Flags</th>`;
-  let tables='';
-  if (dcIds.length) tables+=`<div class="print-section-heading">DC Systems (W)</div><table class="print-table"><thead><tr>${hdrCols}</tr></thead><tbody>${printRows(dcIds,'dc')}</tbody></table>`;
-  if (acIds.length) tables+=`<div class="print-section-heading">AC Systems (VA)</div><table class="print-table"><thead><tr>${hdrCols}</tr></thead><tbody>${printRows(acIds,'ac')}</tbody></table>`;
+  const acFirstPrint=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const dcPrint=dcIds.length?`<div class="print-section-heading">DC Summary (W)</div><table class="print-table"><thead><tr>${hdrCols}</tr></thead><tbody>${printRows(dcIds,'dc')}</tbody></table>`:'';
+  const acPrint=acIds.length?`<div class="print-section-heading">AC Summary (VA)</div><table class="print-table"><thead><tr>${hdrCols}</tr></thead><tbody>${printRows(acIds,'ac')}</tbody></table>`:'';
+  let tables=acFirstPrint?acPrint+dcPrint:dcPrint+acPrint;
   const ws=allWarnings();
   const warnSec=ws.length?`<div class="print-warnings"><h2>Warnings</h2><ul>${ws.map(w=>`<li>${w.message}</li>`).join('')}</ul></div>`:'';
   document.getElementById('print-region').innerHTML=`
@@ -1622,15 +1699,6 @@ function initEvents() {
   });
 
   // Edit form: type/status/acDc changes
-  const efReshow=()=>{
-    const n=mNode&&state.nodes[mNode]?state.nodes[mNode]:null;
-    const cr=n?n.convRole:null;
-    const tp=document.getElementById('ef-type').value;
-    const st=document.getElementById('ef-status').value;
-    const hc=n?children(n.id,state.nodes).length>0:false;
-    const ac=document.getElementById('ef-acdc').value;
-    efShowSections(tp,cr,st,hc,ac);
-  };
   document.getElementById('ef-type'  ).addEventListener('change',efReshow);
   document.getElementById('ef-status').addEventListener('change',efReshow);
   document.getElementById('ef-acdc'  ).addEventListener('change',efReshow);
