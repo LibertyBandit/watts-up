@@ -1,0 +1,69 @@
+Watts Up Revision 4
+
+Note: Backward compatibility with data from the previous version is desired, but not required.  
+
+1. The following request supersedes and replaces item 8 in the revision 1 requirements
+	a. Change the default Item Type and root node Description to "Aircraft Total".
+	b. Allow multiple root nodes to document independent systems (for example independent AC and DC systems)
+	c. In the Edit Item(s) dialog box for a root node item
+		i. show the Parent Item drop down menu for the root node with "--", "None", or otherwise indicating no parent
+	       ii. enable the Item Type drop down menu and allow selection of any of the other item types
+	d. In the Edit Item(s) dialog box for an item that has a parent, allow selection of no parent in the Parent Item drop-down to create another root node.
+	e. The prohibition against selecting one of the children or descendants of an item to be the items parent still applies
+
+Add more power units into the program.
+
+2. Include voltage or volts (V) and AC or DC for each item.
+	a. Except for conversion items all children must have the same voltage value and the same AC or DC selection as the parent item.
+	b. Use the following constraints for the conversion items:
+		i. TRU(IN) must be connected to a parent that is an AC item.
+	       ii. TRU(OUT) must be DC.
+	      iii. Transformer(IN) must be connected to a parent that is an AC item.
+	       iv. Transformer(OUT) must be AC.
+	        v. Inverter(IN) must be connected to a parent that is a DC item.
+	       vi. Inverter(OUT) must be AC.
+	      vii. DC-DC Converter(IN) must be connected to a parent that is an DC item.
+	     viii. DC-DC Converter(OUT) must be DC.
+
+3. For AC items:
+	a. Include the following power units for existing load, load, net change, and new load:
+		i. Amps (A)
+	       ii. Volt-Amps (VA)
+	      iii. Watts (W)
+	       iv. Volt-Amp-Reactive (VAR)
+	        v. Power Factor (pf)
+	b. Include the following power units for total capacity and remaining capacity:
+		i. Amps (A)
+	       ii. Volt-Amps (VA)
+	c. VA, Watts, and Power Factor should be positive (removing an item will result in a negative net change for VA and Watts)
+	d. VAR may be positive or negative
+	e. Power Factor will be 0 ≤ pf ≤ 1.
+	f. Double-check the following formulas, but I believe these are correct:
+		i. VA = V * A = W/pf = sqrt(W^2 + VAR^2)
+	       ii. W = V * A * pf = VA * pf = sqrt(VA^2 - VAR^2)
+	      iii. pf = W/VA = W/sqrt(W^2 + VAR^2) = sqrt(VA^2 - VAR^2)/VA
+	       iv. VAR = sqrt(VA^2 - W^2) = sqrt(VA^2 - (VA * pf)^2) = sqrt((W/pf)^2 - W^2)
+	g. If, when entering information for an item, the user only enters information for one of Amps, or VA, or Watts, and not VAR or pf, then set VAR=0 and pf=1
+	h. When installing new (or removing) loads, calculate the load changes and new loads by
+		i. first, adding (or subtracting) the Watts and VAR values (algebraic sum)
+	       ii. next, calculate the new VA values based on the resulting Watts and VAR values [VA = sqrt(W^2 + VAR^2)] (vector sum)
+	      iii. calculate the new Amp values  (A = VA/V) 
+	       iv. finally, calculate the new pf from the resulting Watts and VA values (pf = W/VA).
+
+4. For DC items:
+	a. Include the following power units for capacity, existing load, load, net change, new load, and remaining capacity:
+		i. Amps (A)
+	       ii. Watts (W)
+	b. Use the following formulas:
+		i. A = W/V
+	       ii. W = V * A
+	c.  When installing new (or removing loads) loads, calculate the new loads by
+		i. first, adding (or subtracting) the amp values
+	       ii. then, calculating the Watt values based on the resulting amp values (W = V * A)
+
+5. For TRUs, make the default power factor 0.95 when converting output DC loads to input AC loads. 
+
+6. In the left-hand display pane with the Power Distribution Tree
+	a. Use the VA value for the net change value for AC items.
+	b. Use the For DC items, continue to use the Watt value for the net change value.
+	
