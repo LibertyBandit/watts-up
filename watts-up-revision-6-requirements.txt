@@ -1,0 +1,58 @@
+Watts Up Revision 6
+
+Note: Backward compatibility with data from the previous version is desired, but not required.  
+
+1. Creating a secondary Aircraft Total root node is too cumbersome.  Incorporate a means or multiple means to create a new Aircraft Total root node.  Possible options:
+	a. A button to open the Add Item(s) dialog box with "No Parent (New Root)" selected
+	b. A button in the Edit Item(s) dialog box that duplicates the Item being edited (for example create copy of the "Total Aircraft Load" item)
+	c. A right-click context menu with an option to create a item copy.
+
+2. If an option or options are added to create a copy of an item, add "(copy)" to the label of the new item.
+
+3. The VAR and pf values in the Edit Item(s) are still too persistent with the AC items.  Suggest the following changes:
+	a. Move the Watts field down below the Amps field in line with the VAR and pf fields (order: Watts, VAR, pf)
+	b. IF user manually over-rides one of the fields THEN clear the contents from other fields (not first preference), 
+		
+		or (list items c. through e. below preferred instead of list item b. above)		
+
+	c. IF user manually over-rides Amps value THEN 
+		i. re-calculate VA (VA=Volts * Amps); 
+	       ii. re-calculate Watts (W = VA * pf)
+	      iii. re-calculate VAR (VAR = sqrt(VA^2 - W^2))
+	d. IF user manually over-rides VA value THEN 
+		i. re-calculate Amps (A=VA / V); 
+	       ii. re-calculate Watts (Watts = VA * pf)
+	      iii. re-calculate VAR (VAR = sqrt(VA^2 - W^2))
+	e. IF user manually over-rides Watts value THEN 
+		i. re-calculate VAR (VAR = sqrt(VA^2 - W^2)); 
+	       ii. re-calculate pf (pf = W / VA)
+	      iii. re-calculate VAR (VAR = sqrt(VA^2 - W^2)
+
+4. It would be helpful if the re-calculated fields were highlighted and/or a message displayed indicating which fields were re-calculated.
+	- User acknowledgement would also be desirable.
+
+5. IF power conversion item is AC THEN apply the power factor entered for all calculations involving that power conversion item.  
+	-For example IF TRU (IN) pf = 0.95 THEN set pf = 0.95 for TRU (IN) existing load, load, net change, and new load as applicable
+
+6. Add "Frequency Converter" as a power conversion Item Type 
+	a. When adding a new Frequency Converter add two instances (the following rules are the same as the other AC power conversion items)
+		i. the first instance should represent the input of the Frequency Converter and the input power to the Frequency Converter;
+	       ii. make the second instance the child of the first instance to represent the output power from the Frequency Converter.
+	      iii. differentiate the input and output by appending "(IN)" and "(OUT)" to the Item Type label - "Frequency Converter(IN)" and "Frequency Converter(OUT)"
+	       iv. allow the user to enter input or output values for the capacity and existing load; calculate and autofill the other values.
+
+	b. Apply the following constraints
+		i. Frequency Converter (IN) must be AC.
+	       ii. Frequency Converter (OUT) must be AC.
+
+7. In the Add Item(s) and Edit Item(s) dialog boxes set Volts and AC / DC equal to Parent Item Volts and AC or DC selection (inhibit Volts and AC / DC changes) except:
+	a. IF Parent Item = "No Parent (New Root)" THEN 
+		i. allow user to enter/edit Volts field;
+	       ii. allow user to select AC or DC except
+			-TRU (IN), Transformer (IN), and Frequency Converter (IN) must be AC (DC inhibited)
+			-Inverter (IN) and DC-DC Converter(IN) must be DC (AC inhibited)
+	b. IF item instance is output from power conversion device, such as TRU (OUT) THEN
+		i. allow user to enter/edit Volts field;
+	       ii. assign AC or DC based on device constraints 
+			-Transformer (Out), Inverter (Out), and Frequency Converter (OUT) must be AC (DC inhibited)
+			-TRU (OUT) and DC-DC Convert (OUT) (AC inhibited)

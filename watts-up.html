@@ -130,6 +130,9 @@
     .field-hint{font-size:.7rem;color:var(--text-muted)}
     .field-warn{font-size:.7rem;color:var(--accent-yellow)}
     .field-error{font-size:.7rem;color:var(--accent-red)}
+    .field-recalculated{background-color:#ffe066 !important;color:#000 !important}
+    .recalc-msg{font-size:.78rem;color:#b8860b;margin-top:.2rem;display:flex;gap:.4rem;align-items:center}
+    .recalc-ok{font-size:.75rem;padding:.1rem .4rem;cursor:pointer;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border);border-radius:4px}
     .sibling-wrap h3{font-size:.76rem;font-weight:600;color:var(--text-secondary);margin-bottom:.3rem}
     .sibling-table{width:100%;border-collapse:collapse;font-size:.73rem}
     .sibling-table th{text-align:left;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);padding:.18rem .35rem}
@@ -210,6 +213,7 @@
       <div class="panel-header">
         <span>Power Distribution Tree</span>
         <div class="panel-controls">
+          <button id="btn-add-root">+ Root</button>
           <button id="btn-expand-all">Expand All</button>
           <button id="btn-collapse-all">Collapse All</button>
         </div>
@@ -298,13 +302,14 @@
               <div class="form-row">
                 <div class="form-group"><label>Ex. Load (A)</label><input id="ef-exld-ac-a" type="text" inputmode="decimal"></div>
                 <div class="form-group"><label>Ex. Load (VA)</label><input id="ef-exld-ac-va" type="text" inputmode="decimal"></div>
-                <div class="form-group"><label>Ex. Load (W)</label><input id="ef-exld-ac-w" type="text" inputmode="decimal"></div>
               </div>
               <div class="form-row">
+                <div class="form-group"><label>Ex. Load (W)</label><input id="ef-exld-ac-w" type="text" inputmode="decimal"></div>
                 <div class="form-group"><label>Ex. Load (VAR)</label><input id="ef-exld-ac-var" type="text" inputmode="decimal"></div>
                 <div class="form-group"><label>Ex. Load (pf)</label><input id="ef-exld-ac-pf" type="text" inputmode="decimal"></div>
               </div>
             </div>
+            <div class="recalc-msg hidden" id="ef-exld-ac-recalc">Recalculated: <span class="recalc-fields"></span> <button class="recalc-ok">OK</button></div>
             <div class="section-label" style="margin-top:.4rem">Net Change Override</div>
             <div id="ef-override-dc">
               <div class="form-row">
@@ -333,13 +338,14 @@
               <div class="form-row">
                 <div class="form-group"><label>Load (A)</label><input id="ef-load-ac-a" type="text" inputmode="decimal"></div>
                 <div class="form-group"><label>Load (VA)</label><input id="ef-load-ac-va" type="text" inputmode="decimal"></div>
-                <div class="form-group"><label>Load (W)</label><input id="ef-load-ac-w" type="text" inputmode="decimal"></div>
               </div>
               <div class="form-row">
+                <div class="form-group"><label>Load (W)</label><input id="ef-load-ac-w" type="text" inputmode="decimal"></div>
                 <div class="form-group"><label>Load (VAR)</label><input id="ef-load-ac-var" type="text" inputmode="decimal"></div>
                 <div class="form-group"><label>Load (pf)</label><input id="ef-load-ac-pf" type="text" inputmode="decimal"></div>
               </div>
             </div>
+            <div class="recalc-msg hidden" id="ef-load-ac-recalc">Recalculated: <span class="recalc-fields"></span> <button class="recalc-ok">OK</button></div>
             <span id="ef-loadval-msg" class="field-warn hidden">Load values should be positive.</span>
           </div>
 
@@ -371,7 +377,7 @@
               <div class="form-group" id="ef-convpf-group">
                 <label>Conv. Power Factor</label>
                 <input id="ef-convpf" type="text" inputmode="decimal" value="0.95">
-                <span class="field-hint">AC input pf (TRU only).</span>
+                <span class="field-hint">AC input pf.</span>
               </div>
             </div>
             <span class="field-hint" id="ef-conv-pair-hint"></span>
@@ -416,10 +422,11 @@
 
       </div><!-- /modal-body -->
       <div class="modal-footer">
-        <button id="btn-del"    class="btn-danger hidden">Delete</button>
+        <button id="btn-del"       class="btn-danger hidden">Delete</button>
         <div class="spacer"></div>
-        <button id="btn-cancel" class="btn-default">Cancel</button>
-        <button id="btn-save"   class="btn-primary">Save</button>
+        <button id="btn-cancel"    class="btn-default">Cancel</button>
+        <button id="btn-duplicate" class="btn-default" style="display:none">Duplicate</button>
+        <button id="btn-save"      class="btn-primary">Save</button>
       </div>
     </div>
   </div>
@@ -432,7 +439,7 @@
 const NT = {
   ROOT:         ['Root'],
   GENERATION:   ['Generator','Alternator','Battery'],
-  CONVERSION:   ['TRU','Inverter','Transformer','DC-DC Converter'],
+  CONVERSION:   ['TRU','Inverter','Transformer','DC-DC Converter','Frequency Converter'],
   DISTRIBUTION: ['Feeder','Bus'],
   PROTECTION:   ['Circuit Breaker','Fuse'],
   LOAD:         ['Load']
@@ -440,8 +447,8 @@ const NT = {
 const ALL_TYPES  = Object.values(NT).flat();
 const CONV_SET   = new Set(NT.CONVERSION);
 const LOAD_SET   = new Set(NT.LOAD);
-const CONV_IN_ACDC  = { TRU:'ac', Inverter:'dc', Transformer:'ac', 'DC-DC Converter':'dc' };
-const CONV_OUT_ACDC = { TRU:'dc', Inverter:'ac', Transformer:'ac', 'DC-DC Converter':'dc' };
+const CONV_IN_ACDC  = { TRU:'ac', Inverter:'dc', Transformer:'ac', 'DC-DC Converter':'dc', 'Frequency Converter':'ac' };
+const CONV_OUT_ACDC = { TRU:'dc', Inverter:'ac', Transformer:'ac', 'DC-DC Converter':'dc', 'Frequency Converter':'ac' };
 
 function typeGroup(t) { for (const [g,ts] of Object.entries(NT)) if (ts.includes(t)) return g; return null; }
 const isConv = t => CONV_SET.has(t);
@@ -1034,7 +1041,7 @@ function addWarnCheck(parentId,childType) {
   if (isLoad(p.type))       return {block:true,msg:'Cannot add children to a Load-type item.'};
   if (p.status==='removed') return {block:true,msg:'Cannot add children to a removed item.'};
   if (childType) {
-    const acReqd=['TRU','Transformer'];const dcReqd=['Inverter','DC-DC Converter'];
+    const acReqd=['TRU','Transformer','Frequency Converter'];const dcReqd=['Inverter','DC-DC Converter'];
     if (acReqd.includes(childType)&&p.acDc!=='ac') return {block:true,msg:`${childType} requires an AC parent.`};
     if (dcReqd.includes(childType)&&p.acDc!=='dc') return {block:true,msg:`${childType} requires a DC parent.`};
   }
@@ -1058,17 +1065,74 @@ function closeModal() {
   document.getElementById('add-form' ).classList.add('hidden');
   document.getElementById('ef-type').disabled=false;
   document.getElementById('ef-parent').onchange=null;
+  document.getElementById('af-parent').onchange=null;
+  document.getElementById('ef-voltage').disabled=false;
+  document.getElementById('ef-acdc').disabled=false;
+  document.getElementById('af-acdc').disabled=false;
+  document.getElementById('btn-duplicate').style.display='none';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
+function duplicateNode() {
+  const n=state.nodes[mNode];if (!n) return;
+  const copy=JSON.parse(JSON.stringify(n));
+  copy.id=uid();
+  copy.description=(copy.description||'')+' (copy)';
+  state.nodes[copy.id]=copy;
+  if (state.rootIds.includes(mNode)) state.rootIds.push(copy.id);
+  if (n.convRole==='in') {
+    const paired=findPairedNode(n);
+    if (paired) {
+      const outCopy=JSON.parse(JSON.stringify(paired));
+      outCopy.id=uid();
+      outCopy.parentId=copy.id;
+      outCopy.description=(paired.description||'')+' (copy)';
+      state.nodes[outCopy.id]=outCopy;
+    }
+  }
+  batchCommit();closeModal();
+}
+
+function applyVoltageAcdcLock(node,parentId) {
+  const type=document.getElementById('ef-type').value;
+  const convRole=node?node.convRole:null;
+  const parentNode=parentId?state.nodes[parentId]:null;
+  const vEl=document.getElementById('ef-voltage');
+  const acEl=document.getElementById('ef-acdc');
+  if (convRole==='out') {
+    vEl.disabled=false;
+    acEl.value=CONV_OUT_ACDC[type]||'dc';
+    acEl.disabled=true;
+  } else if (convRole==='in') {
+    acEl.value=CONV_IN_ACDC[type]||'ac';
+    acEl.disabled=true;
+    if (parentNode){vEl.value=parentNode.voltage??'';vEl.disabled=true;}
+    else vEl.disabled=false;
+  } else if (parentNode) {
+    vEl.value=parentNode.voltage??'';vEl.disabled=true;
+    acEl.value=parentNode.acDc||'dc';acEl.disabled=true;
+  } else {
+    vEl.disabled=false;acEl.disabled=false;
+  }
+}
+
+function updateAfAcdcLock(parentId) {
+  const parentNode=parentId?state.nodes[parentId]:null;
+  const acEl=document.getElementById('af-acdc');
+  if (parentNode){acEl.value=parentNode.acDc||'dc';acEl.disabled=true;}
+  else acEl.disabled=false;
+}
+
 function efReshow() {
   const n=mNode&&state.nodes[mNode]?state.nodes[mNode]:null;
   const cr=n?n.convRole:null;
   const tp=document.getElementById('ef-type').value;
   const st=document.getElementById('ef-status').value;
   const hc=n?children(n.id,state.nodes).length>0:false;
+  const pid=document.getElementById('ef-parent').value||null;
+  applyVoltageAcdcLock(n,pid);
   const ac=document.getElementById('ef-acdc').value;
   efShowSections(tp,cr,st,hc,ac);
 }
@@ -1110,37 +1174,44 @@ function efAttachAcCapDerive() {
   aEl.addEventListener('blur',()=>{ const a=parseF(aEl.value),v=getV(); if (a!==null&&v>0&&vaEl.value==='') vaEl.value=fmtPField(a*v); });
   vaEl.addEventListener('blur',()=>{ const va=parseF(vaEl.value),v=getV(); if (va!==null&&v>0&&aEl.value==='') aEl.value=fmtPField(va/v); });
 }
-function efAttachAcLoadDerive(prefix) {
+function efAttachAcLoadDerive(prefix,recalcId) {
   const getV=()=>parseF(document.getElementById('ef-voltage').value)||0;
-  const getVal=k=>parseF(document.getElementById(prefix+k)?.value);
-  const setIfEmpty=(k,val)=>{
-    if (val===null||val===undefined) return;
-    const el=document.getElementById(prefix+k);
-    if (el&&el.value==='') el.value=fmtPField(val);
+  const getId=k=>document.getElementById(prefix+k);
+  const getVal=k=>parseF(getId(k)?.value);
+  const setRec=(k,val)=>{
+    const el=getId(k);if(!el||val===null||val===undefined)return;
+    el.value=fmtPField(val)??'';el.classList.add('field-recalculated');
   };
-  ['a','va','w','var','pf'].forEach(k=>{
-    const el=document.getElementById(prefix+k);if (!el) return;
-    el.addEventListener('blur',()=>{
-      const v=getV();
-      const w=getVal('w'),vr=getVal('var'),va=getVal('va'),a=getVal('a'),pf=getVal('pf');
-      const has=x=>x!==null;
-      if (has(w)&&has(vr)) {
-        const p=deriveAcFromWVar(w,vr,v);
-        setIfEmpty('va',p.va);setIfEmpty('a',p.a);setIfEmpty('pf',p.pf);
-      } else if (has(va)&&has(w)) {
-        const var2=Math.sqrt(Math.max(0,va*va-w*w));
-        const p=deriveAcFromWVar(w,var2,v);
-        setIfEmpty('var',p.var);setIfEmpty('a',p.a);setIfEmpty('pf',p.pf);
-      } else if (has(va)&&has(pf)) {
-        const w2=va*pf;
-        const p=deriveAcFromWVar(w2,Math.sqrt(Math.max(0,va*va-w2*w2)),v);
-        setIfEmpty('w',p.w);setIfEmpty('var',p.var);setIfEmpty('a',p.a);
-      } else if (has(va)&&v>0) {
-        setIfEmpty('a',va/v);
-      } else if (has(a)&&v>0) {
-        setIfEmpty('va',a*v);
-      }
-    });
+  const clearRec=()=>['a','va','w','var','pf'].forEach(k=>getId(k)?.classList.remove('field-recalculated'));
+  const showMsg=fields=>{
+    if(!recalcId)return;
+    const div=document.getElementById(recalcId);if(!div)return;
+    div.querySelector('.recalc-fields').textContent=fields.join(', ');
+    div.classList.remove('hidden');
+    div.querySelector('.recalc-ok').onclick=()=>div.classList.add('hidden');
+  };
+  ['a','va','w','var','pf'].forEach(k=>{const el=getId(k);if(!el)return;el.addEventListener('focus',()=>el.classList.remove('field-recalculated'));});
+  getId('a')?.addEventListener('blur',()=>{
+    const v=getV(),a=getVal('a');if(a===null||v<=0)return;
+    clearRec();
+    const va=a*v,pf=getVal('pf')??1,w=va*pf,var_=Math.sqrt(Math.max(0,va*va-w*w));
+    setRec('va',va);setRec('w',w);setRec('var',var_);
+    showMsg(['VA','W','VAR']);
+  });
+  getId('va')?.addEventListener('blur',()=>{
+    const v=getV(),va=getVal('va');if(va===null)return;
+    clearRec();
+    const a=v>0?va/v:null,pf=getVal('pf')??1,w=va*pf,var_=Math.sqrt(Math.max(0,va*va-w*w));
+    if(a!==null)setRec('a',a);
+    setRec('w',w);setRec('var',var_);
+    showMsg(a!==null?['A','W','VAR']:['W','VAR']);
+  });
+  getId('w')?.addEventListener('blur',()=>{
+    const va=getVal('va'),w=getVal('w');if(va===null||w===null)return;
+    clearRec();
+    const var_=Math.sqrt(Math.max(0,va*va-w*w)),pf=va>0?Math.min(1,w/va):null;
+    setRec('var',var_);if(pf!==null)setRec('pf',pf);
+    showMsg(pf!==null?['VAR','pf']:['VAR']);
   });
 }
 
@@ -1187,6 +1258,7 @@ function openEdit(nodeId) {
   document.getElementById('edit-form').classList.remove('hidden');
   document.getElementById('add-form' ).classList.add('hidden');
   document.getElementById('btn-del'  ).classList.toggle('hidden',isRoot&&state.rootIds.length<=1);
+  document.getElementById('btn-duplicate').style.display='';
 
   // Parent dropdown: always shown; roots show "No Parent" selected
   document.getElementById('ef-parent-group').classList.remove('hidden');
@@ -1198,7 +1270,8 @@ function openEdit(nodeId) {
   ftype.value=n.type;ftype.disabled=false;
   document.getElementById('ef-parent').onchange=()=>{
     const cur=ftype.value;
-    fillTypeSelect(ftype,!document.getElementById('ef-parent').value);
+    const pid=document.getElementById('ef-parent').value||null;
+    fillTypeSelect(ftype,!pid);
     if (ftype.querySelector(`option[value="${cur}"]`)) ftype.value=cur;
     else ftype.value=ftype.options[0]?.value||'';
     efReshow();
@@ -1211,8 +1284,8 @@ function openEdit(nodeId) {
   document.getElementById('ef-status').value=n.status;
   document.getElementById('ef-voltage').value=n.voltage!==null&&n.voltage!==undefined?n.voltage:'';
   document.getElementById('ef-acdc').value=n.acDc||'dc';
-
-  const acDc=n.acDc||'dc';
+  applyVoltageAcdcLock(n,n.parentId);
+  const acDc=document.getElementById('ef-acdc').value;
 
   // Capacity fields
   if (hasCap(n.type)&&!n.convRole) {
@@ -1282,7 +1355,7 @@ function openEdit(nodeId) {
     const effEl=document.getElementById('ef-conv-pair-eff');
     effEl.value=eff;effEl.disabled=n.convRole==='out';
     document.getElementById('ef-convpf').value=cpf;
-    document.getElementById('ef-convpf-group').classList.toggle('hidden',n.type!=='TRU');
+    document.getElementById('ef-convpf-group').classList.toggle('hidden',!['TRU','Frequency Converter'].includes(n.type));
     document.getElementById('ef-conv-pair-hint').textContent=n.convRole==='out'?'Efficiency and pf are set on the IN node.':'';
     efAttachConvPairListeners();
   }
@@ -1299,8 +1372,8 @@ function openEdit(nodeId) {
   efAttachDcDerive('ef-load-a','ef-load-w');
   efAttachDcDerive('ef-ov-a','ef-ov-w');
   efAttachAcCapDerive();
-  efAttachAcLoadDerive('ef-exld-ac-');
-  efAttachAcLoadDerive('ef-load-ac-');
+  efAttachAcLoadDerive('ef-exld-ac-','ef-exld-ac-recalc');
+  efAttachAcLoadDerive('ef-load-ac-','ef-load-ac-recalc');
 
   efRenderSiblings(n.parentId,nodeId);
   document.getElementById('btn-save').disabled=false;
@@ -1351,18 +1424,30 @@ function doEditSave() {
       if (val===null) return null;
       return acdcType==='ac'?{w:null,var:null,va:val,a:volt>0?val/volt:null,pf:null}:{w:val,var:null,va:null,a:volt>0?val/volt:null,pf:null};
     };
-    const mkLd=(val,acdcType,volt)=>{
+    const mkLd=(val,acdcType,volt,pf=1.0)=>{
       val=val||0;
-      return acdcType==='ac'?deriveAcFromWVar(val,0,volt):deriveDcFromA(volt>0?val/volt:0,volt);
+      if (acdcType==='ac') {
+        const w=val*pf,var_=Math.sqrt(Math.max(0,val*val-w*w));
+        return autoAc(w,var_,val,null,pf,volt);
+      }
+      return deriveDcFromA(volt>0?val/volt:0,volt);
     };
     if (n.convRole==='in') {
-      data.capacity=mkCap(inCapVal,inAcDc,inV);data.existingLoad=mkLd(inLdVal,inAcDc,inV);
+      data.capacity=mkCap(inCapVal,inAcDc,inV);
+      data.existingLoad=mkLd(inLdVal,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
       data.efficiency=eff;data.convPf=cpf;data.netChangeOverride=null;
-      if (paired) {paired.capacity=mkCap(outCapVal,outAcDc,outV);paired.existingLoad=mkLd(outLdVal,outAcDc,outV);}
+      if (paired) {
+        paired.capacity=mkCap(outCapVal,outAcDc,outV);
+        paired.existingLoad=mkLd(outLdVal,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
+      }
     } else {
-      data.capacity=mkCap(outCapVal,outAcDc,outV);data.existingLoad=mkLd(outLdVal,outAcDc,outV);
+      data.capacity=mkCap(outCapVal,outAcDc,outV);
+      data.existingLoad=mkLd(outLdVal,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       data.netChangeOverride=null;
-      if (paired) {paired.capacity=mkCap(inCapVal,inAcDc,inV);paired.existingLoad=mkLd(inLdVal,inAcDc,inV);}
+      if (paired) {
+        paired.capacity=mkCap(inCapVal,inAcDc,inV);
+        paired.existingLoad=mkLd(inLdVal,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
+      }
     }
   } else if (hasCap(type)) {
     if (acDc==='ac') {
@@ -1412,11 +1497,12 @@ function afCols(type,acDc) {
   if (isConv(type)) {
     const inAcDc=CONV_IN_ACDC[type]||'ac';const outAcDc=CONV_OUT_ACDC[type]||'dc';
     const inU=inAcDc==='ac'?'VA':'W';const outU=outAcDc==='ac'?'VA':'W';
-    cols.push({key:'efficiency',label:'Eff.',          itype:'text',ph:'0.85', w:'55px',def:'0.85'});
-    cols.push({key:'inputCap',  label:`IN Cap (${inU})`,  itype:'text',ph:'opt.',w:'80px'});
-    cols.push({key:'outputCap', label:`OUT Cap (${outU})`,itype:'text',ph:'auto',w:'80px'});
-    cols.push({key:'inputLoad', label:`IN Load (${inU})`, itype:'text',ph:'0',  w:'80px',def:'0'});
-    cols.push({key:'outputLoad',label:`OUT Load (${outU})`,itype:'text',ph:'auto',w:'80px'});
+    cols.push({key:'efficiency', label:'Eff.',              itype:'text',ph:'0.85',  w:'55px',def:'0.85'});
+    cols.push({key:'outVoltage', label:'OUT Volts',          itype:'text',ph:'e.g. 28',w:'65px'});
+    cols.push({key:'inputCap',   label:`IN Cap (${inU})`,   itype:'text',ph:'opt.', w:'80px'});
+    cols.push({key:'outputCap',  label:`OUT Cap (${outU})`, itype:'text',ph:'auto', w:'80px'});
+    cols.push({key:'inputLoad',  label:`IN Load (${inU})`,  itype:'text',ph:'0',    w:'80px',def:'0'});
+    cols.push({key:'outputLoad', label:`OUT Load (${outU})`,itype:'text',ph:'auto', w:'80px'});
   } else if (isLoad(type)) {
     if (acDc==='ac') {
       cols.push({key:'load_va', label:'Load (VA)',  itype:'text',ph:'e.g. 1000',w:'80px'});
@@ -1461,6 +1547,9 @@ function afRenderTable() {
   const acDc=document.getElementById('af-acdc')?.value||'dc';
   if (!type) return;
   afCapture();
+  const pid=document.getElementById('af-parent').value||null;
+  const parentNode=pid?state.nodes[pid]:null;
+  const lockVoltage=!isConv(type)&&!!parentNode;
   const cols=afCols(type,acDc);
   const wrap=document.getElementById('af-table-wrap');
   if (!afRows.length) {
@@ -1471,8 +1560,13 @@ function afRenderTable() {
   const body=afRows.map((ri,idx)=>{
     const saved=afRowData[ri]||{};
     const cells=cols.map(c=>{
-      const val=saved[c.key]!==undefined?saved[c.key]:(c.def??'');
-      return `<td><input data-row="${ri}" data-key="${c.key}" type="${c.itype||'text'}" value="${esc(String(val))}" placeholder="${esc(c.ph||'')}"></td>`;
+      let val=saved[c.key]!==undefined?saved[c.key]:(c.def??'');
+      let extraAttrs='';
+      if (c.key==='voltage'&&lockVoltage) {
+        val=parentNode.voltage??'';
+        extraAttrs=' readonly style="opacity:.6"';
+      }
+      return `<td><input data-row="${ri}" data-key="${c.key}" type="${c.itype||'text'}" value="${esc(String(val))}" placeholder="${esc(c.ph||'')}"${extraAttrs}></td>`;
     }).join('');
     return `<tr><td class="row-num">${idx+1}</td>${cells}<td><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
   }).join('');
@@ -1499,11 +1593,30 @@ function afRenderTable() {
         const el=g(k);if(!el)return;
         el.addEventListener('blur',()=>{
           const v=getVolt();
-          const va=parseF(g('ex_load_va')?.value),w=parseF(g('ex_load_w')?.value),vr=parseF(g('ex_load_var')?.value);
-          const has=x=>x!==null;
-          if(has(w)&&has(vr)){const p=deriveAcFromWVar(w,vr,v);setIfEmpty('ex_load_va',p.va);}
-          else if(has(va)&&has(w)){const var2=Math.sqrt(Math.max(0,va*va-w*w));setIfEmpty('ex_load_var',var2);}
-          else if(has(va)&&v>0){/* could derive A but no A column */}
+          const va=parseF(g('ex_load_va')?.value),w=parseF(g('ex_load_w')?.value);
+          if(va!==null&&w!==null){setIfEmpty('ex_load_var',Math.sqrt(Math.max(0,va*va-w*w)));}
+        });
+      });
+      ['load_va','load_w','load_var'].forEach(k=>{
+        const el=g(k);if(!el)return;
+        el.addEventListener('blur',()=>{
+          const va=parseF(g('load_va')?.value),w=parseF(g('load_w')?.value);
+          if(va!==null&&w!==null){setIfEmpty('load_var',Math.sqrt(Math.max(0,va*va-w*w)));}
+        });
+      });
+    });
+  } else if (isLoad(type)&&acDc==='ac') {
+    afRows.forEach(ri=>{
+      const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
+      const setIfEmpty=(key,val)=>{if(val===null||val===undefined)return;const el=g(key);if(el&&el.value==='')el.value=fmtPField(val);};
+      ['load_va','load_w','load_var','load_pf'].forEach(k=>{
+        const el=g(k);if(!el)return;
+        el.addEventListener('blur',()=>{
+          const va=parseF(g('load_va')?.value),w=parseF(g('load_w')?.value);
+          if(va!==null&&w!==null){
+            setIfEmpty('load_var',Math.sqrt(Math.max(0,va*va-w*w)));
+            setIfEmpty('load_pf',va>0?w/va:null);
+          }
         });
       });
     });
@@ -1519,11 +1632,26 @@ function openAdd(parentId) {
   document.getElementById('btn-del'  ).classList.add('hidden');
   fillParentSelect('af-parent',null,parentId);
   const aftype=document.getElementById('af-type');
-  fillTypeSelect(aftype,false);aftype.value=afLastType||'Generator';
+  fillTypeSelect(aftype,parentId===null);
+  aftype.value=afLastType||'Generator';
+  if (!aftype.querySelector(`option[value="${aftype.value}"]`)) aftype.value=aftype.options[0]?.value||'';
   document.getElementById('af-status').value=afLastStatus||'existing';
-  const warn=addWarnCheck(parentId,afLastType);
+  const pid0=parentId||null;
+  updateAfAcdcLock(pid0);
+  const warn=addWarnCheck(pid0,aftype.value);
   setWarnBox('af-warn-box',warn);mBlocked=!!(warn?.block);
   document.getElementById('btn-save').disabled=mBlocked;
+  document.getElementById('af-parent').onchange=()=>{
+    const pid=document.getElementById('af-parent').value||null;
+    const cur=aftype.value;
+    fillTypeSelect(aftype,!pid);
+    if (!aftype.querySelector(`option[value="${cur}"]`)) aftype.value=aftype.options[0]?.value||'';
+    updateAfAcdcLock(pid);
+    const w=addWarnCheck(pid,aftype.value);
+    setWarnBox('af-warn-box',w);mBlocked=!!(w?.block);
+    document.getElementById('btn-save').disabled=mBlocked;
+    afRenderTable();
+  };
   afRenderTable();
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
@@ -1545,24 +1673,30 @@ function doAddSave() {
     if (isConv(type)) {
       const eff=Math.max(0.001,Math.min(1,+getRaw('efficiency')||0.85));
       const inAcDc=CONV_IN_ACDC[type]||'ac';const outAcDc=CONV_OUT_ACDC[type]||'dc';
-      const inU=inAcDc==='ac'?'va':'w';const outU=outAcDc==='ac'?'va':'w';
+      const cpf=type==='TRU'?0.95:1.0;
+      const outVoltage=getN('outVoltage')??voltage;
+      const outV2=outVoltage||0;
       const inCapV=getN('inputCap');const outCapV=getN('outputCap');
       const inLdV=getN('inputLoad')??0;const outLdV=getN('outputLoad')??0;
       const mkC=(val,acdcType,volt)=>{
         if (val===null) return null;
         return acdcType==='ac'?{w:null,var:null,va:val,a:volt>0?val/volt:null,pf:null}:{w:val,var:null,va:null,a:volt>0?val/volt:null,pf:null};
       };
-      const mkL=(val,acdcType,volt)=>{
+      const mkL=(val,acdcType,volt,pf=1.0)=>{
         val=val||0;
-        return acdcType==='ac'?deriveAcFromWVar(val,0,volt):deriveDcFromA(volt>0?val/volt:0,volt);
+        if (acdcType==='ac') {
+          const w=val*pf,var_=Math.sqrt(Math.max(0,val*val-w*w));
+          return autoAc(w,var_,val,null,pf,volt);
+        }
+        return deriveDcFromA(volt>0?val/volt:0,volt);
       };
       const inData={type,status,convRole:'in',description:desc+' (IN)',refDes,voltage,acDc:inAcDc,
-        capacity:mkC(inCapV,inAcDc,v),existingLoad:mkL(inLdV,inAcDc,v),efficiency:eff,
-        convPf:(type==='TRU'?0.95:1.0),netChangeOverride:null};
+        capacity:mkC(inCapV,inAcDc,v),existingLoad:mkL(inLdV,inAcDc,v,inAcDc==='ac'?cpf:1.0),
+        efficiency:eff,convPf:cpf,netChangeOverride:null};
       const inId=addNode(pid,inData);
       if (!pid) state.rootIds.push(inId);
-      addNode(inId,{type,status,convRole:'out',description:desc+' (OUT)',refDes,voltage,acDc:outAcDc,
-        capacity:mkC(outCapV,outAcDc,v),existingLoad:mkL(outLdV,outAcDc,v),netChangeOverride:null});
+      addNode(inId,{type,status,convRole:'out',description:desc+' (OUT)',refDes,voltage:outVoltage,acDc:outAcDc,
+        capacity:mkC(outCapV,outAcDc,outV2),existingLoad:mkL(outLdV,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null});
     } else if (isLoad(type)) {
       let lv;
       if (acDc==='ac') lv=autoAc(getN('load_w'),getN('load_var'),getN('load_va'),getN('load_a'),getN('load_pf'),v);
@@ -1662,6 +1796,8 @@ function buildPrint() {
 
 // ── EVENTS ────────────────────────────────────────────────────────────────────
 function initEvents() {
+  document.getElementById('btn-add-root').addEventListener('click',()=>openAdd(null));
+  document.getElementById('btn-duplicate').addEventListener('click',duplicateNode);
   document.getElementById('btn-new').addEventListener('click',()=>{
     if (!confirm('Start a new analysis? Any unsaved changes will be lost.')) return;
     state=freshState();collapsed=new Set();recalc();renderAll();persist();
@@ -1718,7 +1854,6 @@ function initEvents() {
     setWarnBox('af-warn-box',warn);mBlocked=!!(warn?.block);
     document.getElementById('btn-save').disabled=mBlocked;
   };
-  document.getElementById('af-parent').addEventListener('change',afRecheck);
   document.getElementById('af-type'  ).addEventListener('change',e=>{afLastType=e.target.value;afRecheck();afRenderTable();});
   document.getElementById('af-acdc'  ).addEventListener('change',afRenderTable);
   document.getElementById('af-status').addEventListener('change',e=>{afLastStatus=e.target.value;});
