@@ -229,7 +229,7 @@
   <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div id="modal">
       <div class="modal-header">
-        <h2 id="modal-title">Edit Item(s)</h2>
+        <h2 id="modal-title">Edit Item</h2>
         <button id="modal-close" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
@@ -1188,7 +1188,7 @@ function efAttachAcLoadDerive(prefix,recalcId) {
     const div=document.getElementById(recalcId);if(!div)return;
     div.querySelector('.recalc-fields').textContent=fields.join(', ');
     div.classList.remove('hidden');
-    div.querySelector('.recalc-ok').onclick=()=>div.classList.add('hidden');
+    div.querySelector('.recalc-ok').onclick=()=>{clearRec();div.querySelector('.recalc-fields').textContent='';div.classList.add('hidden');};
   };
   ['a','va','w','var','pf'].forEach(k=>{const el=getId(k);if(!el)return;el.addEventListener('focus',()=>el.classList.remove('field-recalculated'));});
   getId('a')?.addEventListener('blur',()=>{
@@ -1212,6 +1212,21 @@ function efAttachAcLoadDerive(prefix,recalcId) {
     const var_=Math.sqrt(Math.max(0,va*va-w*w)),pf=va>0?Math.min(1,w/va):null;
     setRec('var',var_);if(pf!==null)setRec('pf',pf);
     showMsg(pf!==null?['VAR','pf']:['VAR']);
+  });
+  getId('var')?.addEventListener('blur',()=>{
+    const va=getVal('va'),var_=getVal('var');if(va===null||var_===null)return;
+    clearRec();
+    const w=Math.sqrt(Math.max(0,va*va-var_*var_));
+    const pf=va>0?Math.min(1,w/va):null;
+    setRec('w',w);if(pf!==null)setRec('pf',pf);
+    showMsg(pf!==null?['W','pf']:['W']);
+  });
+  getId('pf')?.addEventListener('blur',()=>{
+    const va=getVal('va'),pf=getVal('pf');if(va===null||pf===null)return;
+    clearRec();
+    const w=va*pf,var_=Math.sqrt(Math.max(0,va*va-w*w));
+    setRec('w',w);setRec('var',var_);
+    showMsg(['W','VAR']);
   });
 }
 
@@ -1254,7 +1269,7 @@ function openEdit(nodeId) {
   mMode='edit';mNode=nodeId;mBlocked=false;
   const isRoot=state.rootIds.includes(nodeId);
 
-  document.getElementById('modal-title').textContent='Edit Item(s)';
+  document.getElementById('modal-title').textContent='Edit Item';
   document.getElementById('edit-form').classList.remove('hidden');
   document.getElementById('add-form' ).classList.add('hidden');
   document.getElementById('btn-del'  ).classList.toggle('hidden',isRoot&&state.rootIds.length<=1);
