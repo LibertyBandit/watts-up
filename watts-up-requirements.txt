@@ -1,0 +1,38 @@
+Watts Up — Program Description
+================================
+Captured: 2026-04-18
+
+I want to create an aircraft electrical load analysis program called "Watts Up" to calculate aircraft electrical load changes.  The electrical load should be organized in a hierarchical tree structure that represents the aircraft power distribution system starting with the Total Aircraft Load as the root node. The program will document load changes to the aircraft power distribution system associated with a modification to the aircraft and calculate the net changes, new loads, and remaining capacity for each item in the power distribution system affected by the modification.
+
+For a new electrical load analysis, prompt the user to enter the aircraft make, model, marketing designation, and serial number, and flight phase (or scenario) being analyzed.  The default flight phase will be Cruise.
+
+Power Units: For now, to simplify the program, we will only use watts, although in the future we will want to add volts, amps, whether the system power is alternating current (AC) or direct current (DC), and for AC devices we will also want to track Volt-Amps (VA), Volt-Amp-Reactive (VAR), and power factor (pf).
+
+Single-phase or 3-phase AC: For now, we will treat all AC loads as single-phase, but in the future will want the option to separate AC circuits into three phases when applicable.
+
+Flight Phases (or Scenarios): For now, we will also only consider a single scenario, usually identified as a flight phase, although in the future we will want the option to add multiple flight phases and scenarios such as Take-off and Climb, Cruise, Approach and Landing, Emergency, or generator failures that will be consider changes to the base analysis dependent on the scenario being considered.
+
+Intervals: For now, we will treat all values as continuous.  In the future we will want to add the option to diffentiate loads based on intervals.  The intervals will change depending on the aircraft make and model being analyzed, but some examples are instantaneous loads, 5-second loads, 5-minute loads, 15-minute loads, and continuous or permanent loads.
+
+In addition to the Total Aircraft load, other items within the power distribution system that will be represented by the nodes may include power generation devices like generators or alternators; power conversion devices like a transformer rectifier unit (TRU), which converts alternating current (AC) power to direct current (DC) power, an inverter, which converts AC power to DC power, a transformer, which steps AC voltage up or down, or a DC to DC converter, which steps DC voltage up or down; power distribution devices like feeders or buses; circuit protection devices like circuit breakers or fuses; and equipment that draws power from the aircraft power distribution system or loads.
+
+For each item included in the electrical load analysis, prompt the user to enter device type, description, an optional reference designator (RefDes), and whether the item is existing or new, and if it is existing, whether it is being removed.  The entry should also identify the parent item in the power distribution system.
+
+For loads, the user should be able to enter a load value associated with the item. For the Total Aircraft Load, power generation, power conversion, power distribution, and circuit protection devices, the user should be prompted for capacity, existing load (for new items this is will be 0 by default), and net change as an optional entry that can either be manually entered or calculated from the loads or other items that are children or branches that recieve power from the item.
+
+For power conversion devices, prompt the user to enter the device efficiency (default value is 85% or 0.85) that will be applied when transferring loads through the device; all load changes to the output of the power conversion device (net accumulated change from the items represented as children or branches in the tree attached to the power conversion item) will be divided by the efficiency and the quotient applied as the load change to the source item (or parent item in the tree). For example, if the net change to the output of a TRU is 85 watts and the TRU has an 85% efficiency rating, the load change passed to the next higher item in the tree will be 85/0.85 = 100 watts.
+
+To simplify data entry, it would be helpful to be able to enter multiple branch items for each item in a table or in tables grouped by branch item category and whether the branch items are existing, removed, or new.
+
+As the user enters data, the program should calculate the changes to the power distribution system.  Starting with the terminal nodes, the program should calculate the net changes, new load, and remaining capacity for each parent item by subtracting loads for removed items, adding loads for new items, and adding net changes for any items that have net changes.  This process should be repeated iteratively up the tree for each level up to the Total Aircraft Load.
+
+Load items and removed items will typically be terminal nodes, and the program should warn the user if the user tries to enter items as branches from a load or removed item. The program should also warn the user if any of the following occur: a negative load value is entered; an item has a new load value that is negative after the net changes are added to the existing load; an item has a new load value that exceeds the capacity of the item; the user tries to add branches with loads to an item after manually entering a net change value to that item.
+
+================================
+Future Enhancements (noted in description)
+================================
+- Add volts, amps, AC/DC designation
+- Track VA, VAR, and power factor (pf) for AC devices
+- Three-phase AC circuit support
+- Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency, generator failure, etc.)
+- Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)

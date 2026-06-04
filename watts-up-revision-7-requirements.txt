@@ -1,0 +1,30 @@
+Revision 7
+==========================================
+Note: Backward compatibility with data from the previous version is desired but not required.  
+Start with updates and corrections to the Edit Item(s) dialog box.
+1. Change the name of the Edit Item(s) dialog box to “Edit Item”.
+2. Retain the following (previously implemented) automatic calculations when the user over-rides data:
+a. IF user manually over-rides Amps value THEN 
+i. re-calculate VA (VA=Volts * Amps); 
+ii. re-calculate Watts (W = VA * pf)
+iii. re-calculate VAR (VAR = sqrt(VA^2 - W^2))
+b. IF user manually over-rides VA value THEN 
+i. re-calculate Amps (A=VA / V); 
+ii. re-calculate Watts (Watts = VA * pf)
+iii. re-calculate VAR (VAR = sqrt(VA^2 - W^2))
+c. IF user manually over-rides Watts value THEN 
+i. re-calculate VAR (VAR = sqrt(VA^2 - W^2)); 
+ii. re-calculate pf (pf = W / VA)
+3. In addition to the calculations listed under item 2 above, incorporate the following:
+a. IF user manually over-rides VAR value THEN 
+i. re-calculate Watts (Watts = sqrt(VA^2 - VAR^2)); 
+ii. re-calculate pf (pf = (sqrt(VA^2 - VAR^2))/ VA)
+b. IF user manually over-rides pf value THEN 
+i. re-calculate Watts (Watts = VA * pf); 
+ii. re-calculate VAR (VAR = sqrt(VA^2 – (VA*pf)^2))
+4. Retain the following (previously implemented) when the user over-rides data:
+a. highlight re-calculated fields 
+b. display a message indicating which fields were re-calculated
+c. Request user acknowledgement
+5. Modify item 4 above with the following:
+* After user acknowledgement, remove the highlighting from the recalculated fields and clear the message indicating which field was re-calculated

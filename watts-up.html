@@ -130,9 +130,10 @@
     .field-hint{font-size:.7rem;color:var(--text-muted)}
     .field-warn{font-size:.7rem;color:var(--accent-yellow)}
     .field-error{font-size:.7rem;color:var(--accent-red)}
-    .field-recalculated{background-color:#ffe066 !important;color:#000 !important}
-    .recalc-msg{font-size:.78rem;color:#b8860b;margin-top:.2rem;display:flex;gap:.4rem;align-items:center}
-    .recalc-ok{font-size:.75rem;padding:.1rem .4rem;cursor:pointer;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border);border-radius:4px}
+    .btn-reset{font-size:.7rem;padding:.1rem .45rem;cursor:pointer;background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:4px;white-space:nowrap;flex-shrink:0}
+    .btn-reset:hover{color:var(--text-primary);border-color:var(--text-muted)}
+    .section-label-row{display:flex;align-items:center;justify-content:space-between;margin-top:.4rem;border-bottom:1px solid var(--border);padding-bottom:.2rem}
+    .section-label-row .section-label{border-bottom:none;margin-top:0;padding-bottom:0;flex:1}
     .sibling-wrap h3{font-size:.76rem;font-weight:600;color:var(--text-secondary);margin-bottom:.3rem}
     .sibling-table{width:100%;border-collapse:collapse;font-size:.73rem}
     .sibling-table th{text-align:left;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);padding:.18rem .35rem}
@@ -278,7 +279,10 @@
           </div>
 
           <div id="ef-sec-cap" class="hidden">
-            <div class="section-label">Capacity</div>
+            <div class="section-label-row">
+              <div class="section-label">Capacity</div>
+              <button type="button" class="btn-reset" data-ids="ef-cap-a,ef-cap-w,ef-cap-a2,ef-cap-va">Reset</button>
+            </div>
             <div id="ef-cap-dc">
               <div class="form-row">
                 <div class="form-group"><label>Cap (A)</label><input id="ef-cap-a" type="text" inputmode="decimal" placeholder="optional"></div>
@@ -291,7 +295,10 @@
                 <div class="form-group"><label>Cap (VA)</label><input id="ef-cap-va" type="text" inputmode="decimal" placeholder="optional"></div>
               </div>
             </div>
-            <div class="section-label" style="margin-top:.4rem">Existing Load</div>
+            <div class="section-label-row">
+              <div class="section-label">Existing Load</div>
+              <button type="button" class="btn-reset" data-ids="ef-exld-a,ef-exld-w,ef-exld-ac-a,ef-exld-ac-va,ef-exld-ac-w,ef-exld-ac-var,ef-exld-ac-pf">Reset</button>
+            </div>
             <div id="ef-exld-dc">
               <div class="form-row">
                 <div class="form-group"><label>Ex. Load (A)</label><input id="ef-exld-a" type="text" inputmode="decimal" value="0"></div>
@@ -309,25 +316,32 @@
                 <div class="form-group"><label>Ex. Load (pf)</label><input id="ef-exld-ac-pf" type="text" inputmode="decimal"></div>
               </div>
             </div>
-            <div class="recalc-msg hidden" id="ef-exld-ac-recalc">Recalculated: <span class="recalc-fields"></span> <button class="recalc-ok">OK</button></div>
-            <div class="section-label" style="margin-top:.4rem">Net Change Override</div>
-            <div id="ef-override-dc">
-              <div class="form-row">
-                <div class="form-group"><label>Override (A)</label><input id="ef-ov-a" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
-                <div class="form-group"><label>Override (W)</label><input id="ef-ov-w" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+            <div id="ef-sec-override">
+              <div class="section-label-row">
+                <div class="section-label">Net Change Override</div>
+                <button type="button" class="btn-reset" data-ids="ef-ov-a,ef-ov-w,ef-ov-ac-w,ef-ov-ac-var">Reset</button>
               </div>
-            </div>
-            <div id="ef-override-ac" class="hidden">
-              <div class="form-row">
-                <div class="form-group"><label>Override (W)</label><input id="ef-ov-ac-w" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
-                <div class="form-group"><label>Override (VAR)</label><input id="ef-ov-ac-var" type="text" inputmode="decimal" placeholder="VAR=0 if blank"></div>
+              <div id="ef-override-dc">
+                <div class="form-row">
+                  <div class="form-group"><label>Override (A)</label><input id="ef-ov-a" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+                  <div class="form-group"><label>Override (W)</label><input id="ef-ov-w" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+                </div>
               </div>
+              <div id="ef-override-ac" class="hidden">
+                <div class="form-row">
+                  <div class="form-group"><label>Override (W)</label><input id="ef-ov-ac-w" type="text" inputmode="decimal" placeholder="Leave blank to auto-calculate"></div>
+                  <div class="form-group"><label>Override (VAR)</label><input id="ef-ov-ac-var" type="text" inputmode="decimal" placeholder="VAR=0 if blank"></div>
+                </div>
+              </div>
+              <span class="field-hint">Overrides the sum calculated from child items.</span>
             </div>
-            <span class="field-hint">Overrides the sum calculated from child items.</span>
           </div>
 
           <div id="ef-sec-load" class="hidden">
-            <div class="section-label">Load Value</div>
+            <div class="section-label-row">
+              <div class="section-label">Load Value</div>
+              <button type="button" class="btn-reset" data-ids="ef-load-a,ef-load-w,ef-load-ac-a,ef-load-ac-va,ef-load-ac-w,ef-load-ac-var,ef-load-ac-pf">Reset</button>
+            </div>
             <div id="ef-load-dc">
               <div class="form-row">
                 <div class="form-group"><label>Load (A)</label><input id="ef-load-a" type="text" inputmode="decimal"></div>
@@ -345,7 +359,6 @@
                 <div class="form-group"><label>Load (pf)</label><input id="ef-load-ac-pf" type="text" inputmode="decimal"></div>
               </div>
             </div>
-            <div class="recalc-msg hidden" id="ef-load-ac-recalc">Recalculated: <span class="recalc-fields"></span> <button class="recalc-ok">OK</button></div>
             <span id="ef-loadval-msg" class="field-warn hidden">Load values should be positive.</span>
           </div>
 
@@ -359,14 +372,33 @@
           </div>
 
           <div id="ef-sec-conv-pair" class="hidden">
-            <div class="section-label">Input / Output Values</div>
-            <div class="form-row">
-              <div class="form-group"><label id="ef-in-cap-lbl">Input Capacity</label><input id="ef-in-cap" type="text" inputmode="decimal" placeholder="optional"></div>
-              <div class="form-group"><label id="ef-out-cap-lbl">Output Capacity</label><input id="ef-out-cap" type="text" inputmode="decimal" placeholder="auto-calc"></div>
+            <div class="section-label">Conversion Parameters</div>
+            <!-- Row 1: Capacity -->
+            <div class="section-label-row" style="margin-top:.3rem">
+              <div class="section-label" style="font-size:.65rem">Capacity</div>
+              <button type="button" class="btn-reset" data-ids="ef-in-cap-a,ef-in-cap-vaw,ef-out-cap-a,ef-out-cap-vaw">Reset</button>
             </div>
             <div class="form-row">
-              <div class="form-group"><label id="ef-in-load-lbl">Input Exist. Load (W)</label><input id="ef-in-load" type="text" inputmode="decimal" value="0"></div>
-              <div class="form-group"><label id="ef-out-load-lbl">Output Exist. Load (W)</label><input id="ef-out-load" type="text" inputmode="decimal" value="0"></div>
+              <div class="form-group"><label id="ef-in-cap-a-lbl">IN Cap (A)</label><input id="ef-in-cap-a" type="text" inputmode="decimal" placeholder="optional"></div>
+              <div class="form-group"><label id="ef-in-cap-vaw-lbl">IN Cap (VA)</label><input id="ef-in-cap-vaw" type="text" inputmode="decimal" placeholder="optional"></div>
+              <div class="form-group"><label id="ef-out-cap-a-lbl">OUT Cap (A)</label><input id="ef-out-cap-a" type="text" inputmode="decimal" placeholder="optional"></div>
+              <div class="form-group"><label id="ef-out-cap-vaw-lbl">OUT Cap (VA)</label><input id="ef-out-cap-vaw" type="text" inputmode="decimal" placeholder="optional"></div>
+            </div>
+            <!-- Row 2: Existing Load -->
+            <div class="section-label-row" style="margin-top:.3rem">
+              <div class="section-label" style="font-size:.65rem">Existing Load</div>
+              <button type="button" class="btn-reset" data-ids="ef-in-ld-a,ef-in-ld-vaw,ef-out-ld-a,ef-out-ld-vaw">Reset</button>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label id="ef-in-ld-a-lbl">IN Load (A)</label><input id="ef-in-ld-a" type="text" inputmode="decimal" value="0"></div>
+              <div class="form-group"><label id="ef-in-ld-vaw-lbl">IN Load (VA)</label><input id="ef-in-ld-vaw" type="text" inputmode="decimal" value="0"></div>
+              <div class="form-group"><label id="ef-out-ld-a-lbl">OUT Load (A)</label><input id="ef-out-ld-a" type="text" inputmode="decimal" value="0"></div>
+              <div class="form-group"><label id="ef-out-ld-vaw-lbl">OUT Load (VA)</label><input id="ef-out-ld-vaw" type="text" inputmode="decimal" value="0"></div>
+            </div>
+            <!-- Row 3: Efficiency / Conv PF -->
+            <div class="section-label-row" style="margin-top:.3rem">
+              <div class="section-label" style="font-size:.65rem">Parameters</div>
+              <button type="button" class="btn-reset" data-ids="ef-conv-pair-eff,ef-convpf">Reset</button>
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -374,10 +406,9 @@
                 <input id="ef-conv-pair-eff" type="text" inputmode="decimal" value="0.85">
                 <span id="ef-conv-pair-eff-msg" class="field-error hidden">Must be between 0.01 and 1.0.</span>
               </div>
-              <div class="form-group" id="ef-convpf-group">
+              <div class="form-group hidden" id="ef-convpf-group">
                 <label>Conv. Power Factor</label>
                 <input id="ef-convpf" type="text" inputmode="decimal" value="0.95">
-                <span class="field-hint">AC input pf.</span>
               </div>
             </div>
             <span class="field-hint" id="ef-conv-pair-hint"></span>
@@ -422,11 +453,12 @@
 
       </div><!-- /modal-body -->
       <div class="modal-footer">
-        <button id="btn-del"       class="btn-danger hidden">Delete</button>
+        <button id="btn-del"        class="btn-danger hidden">Delete</button>
         <div class="spacer"></div>
-        <button id="btn-cancel"    class="btn-default">Cancel</button>
-        <button id="btn-duplicate" class="btn-default" style="display:none">Duplicate</button>
-        <button id="btn-save"      class="btn-primary">Save</button>
+        <button id="btn-calculate"  class="btn-default" style="display:none">Calculate</button>
+        <button id="btn-cancel"     class="btn-default">Cancel</button>
+        <button id="btn-duplicate"  class="btn-default" style="display:none">Duplicate</button>
+        <button id="btn-save"       class="btn-primary">Save</button>
       </div>
     </div>
   </div>
@@ -764,8 +796,8 @@ function badgeHtml(node) {
 }
 function ncHtml(nc,acDc) {
   if (!nc) return '';
-  const val=acDc==='ac'?(nc.va||0):(nc.w||0);
-  const unit=acDc==='ac'?'VA':'W';
+  const val=acDc==='ac'?(nc.va||0):(nc.a||0);
+  const unit=acDc==='ac'?'VA':'A';
   if (Math.abs(val)<0.001) return `<span class="node-nc nc-zero">±0 ${unit}</span>`;
   const sign=val>0?'+':''; const cls=val>0?'nc-pos':'nc-neg';
   return `<span class="node-nc ${cls}">${sign}${fmtN(val)} ${unit}</span>`;
@@ -1070,6 +1102,7 @@ function closeModal() {
   document.getElementById('ef-acdc').disabled=false;
   document.getElementById('af-acdc').disabled=false;
   document.getElementById('btn-duplicate').style.display='none';
+  document.getElementById('btn-calculate').style.display='none';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
 }
@@ -1144,7 +1177,6 @@ function findPairedNode(node) {
 
 function efShowSections(type,convRole,status,hasChildren,acDc) {
   const isConvPair=!!convRole;
-  const showNewLoad=status==='new'&&!isLoad(type)&&!isConvPair&&!hasChildren;
   const dc=acDc!=='ac';
   document.getElementById('ef-sec-cap'      ).classList.toggle('hidden',isLoad(type)||isConvPair);
   document.getElementById('ef-sec-load'     ).classList.toggle('hidden',!isLoad(type));
@@ -1154,6 +1186,7 @@ function efShowSections(type,convRole,status,hasChildren,acDc) {
   document.getElementById('ef-cap-ac'       ).classList.toggle('hidden', dc);
   document.getElementById('ef-exld-dc'      ).classList.toggle('hidden',!dc);
   document.getElementById('ef-exld-ac'      ).classList.toggle('hidden', dc);
+  document.getElementById('ef-sec-override' ).classList.toggle('hidden',hasChildren||isConvPair);
   document.getElementById('ef-override-dc'  ).classList.toggle('hidden',!dc);
   document.getElementById('ef-override-ac'  ).classList.toggle('hidden', dc);
   document.getElementById('ef-load-dc'      ).classList.toggle('hidden',!dc);
@@ -1174,80 +1207,57 @@ function efAttachAcCapDerive() {
   aEl.addEventListener('blur',()=>{ const a=parseF(aEl.value),v=getV(); if (a!==null&&v>0&&vaEl.value==='') vaEl.value=fmtPField(a*v); });
   vaEl.addEventListener('blur',()=>{ const va=parseF(vaEl.value),v=getV(); if (va!==null&&v>0&&aEl.value==='') aEl.value=fmtPField(va/v); });
 }
-function efAttachAcLoadDerive(prefix,recalcId) {
-  const getV=()=>parseF(document.getElementById('ef-voltage').value)||0;
-  const getId=k=>document.getElementById(prefix+k);
-  const getVal=k=>parseF(getId(k)?.value);
-  const setRec=(k,val)=>{
-    const el=getId(k);if(!el||val===null||val===undefined)return;
-    el.value=fmtPField(val)??'';el.classList.add('field-recalculated');
-  };
-  const clearRec=()=>['a','va','w','var','pf'].forEach(k=>getId(k)?.classList.remove('field-recalculated'));
-  const showMsg=fields=>{
-    if(!recalcId)return;
-    const div=document.getElementById(recalcId);if(!div)return;
-    div.querySelector('.recalc-fields').textContent=fields.join(', ');
-    div.classList.remove('hidden');
-    div.querySelector('.recalc-ok').onclick=()=>{clearRec();div.querySelector('.recalc-fields').textContent='';div.classList.add('hidden');};
-  };
-  ['a','va','w','var','pf'].forEach(k=>{const el=getId(k);if(!el)return;el.addEventListener('focus',()=>el.classList.remove('field-recalculated'));});
-  getId('a')?.addEventListener('blur',()=>{
-    const v=getV(),a=getVal('a');if(a===null||v<=0)return;
-    clearRec();
-    const va=a*v,pf=getVal('pf')??1,w=va*pf,var_=Math.sqrt(Math.max(0,va*va-w*w));
-    setRec('va',va);setRec('w',w);setRec('var',var_);
-    showMsg(['VA','W','VAR']);
-  });
-  getId('va')?.addEventListener('blur',()=>{
-    const v=getV(),va=getVal('va');if(va===null)return;
-    clearRec();
-    const a=v>0?va/v:null,pf=getVal('pf')??1,w=va*pf,var_=Math.sqrt(Math.max(0,va*va-w*w));
-    if(a!==null)setRec('a',a);
-    setRec('w',w);setRec('var',var_);
-    showMsg(a!==null?['A','W','VAR']:['W','VAR']);
-  });
-  getId('w')?.addEventListener('blur',()=>{
-    const va=getVal('va'),w=getVal('w');if(va===null||w===null)return;
-    clearRec();
-    const var_=Math.sqrt(Math.max(0,va*va-w*w)),pf=va>0?Math.min(1,w/va):null;
-    setRec('var',var_);if(pf!==null)setRec('pf',pf);
-    showMsg(pf!==null?['VAR','pf']:['VAR']);
-  });
-  getId('var')?.addEventListener('blur',()=>{
-    const va=getVal('va'),var_=getVal('var');if(va===null||var_===null)return;
-    clearRec();
-    const w=Math.sqrt(Math.max(0,va*va-var_*var_));
-    const pf=va>0?Math.min(1,w/va):null;
-    setRec('w',w);if(pf!==null)setRec('pf',pf);
-    showMsg(pf!==null?['W','pf']:['W']);
-  });
-  getId('pf')?.addEventListener('blur',()=>{
-    const va=getVal('va'),pf=getVal('pf');if(va===null||pf===null)return;
-    clearRec();
-    const w=va*pf,var_=Math.sqrt(Math.max(0,va*va-w*w));
-    setRec('w',w);setRec('var',var_);
-    showMsg(['W','VAR']);
-  });
-}
+function doEditCalculate() {
+  const acDc=document.getElementById('ef-acdc').value;
+  const v=parseF(document.getElementById('ef-voltage').value)||0;
+  const g=id=>document.getElementById(id);
+  const getV=id=>{const el=g(id);return el?parseF(el.value):null;};
+  const setIfEmpty=(id,val)=>{if(val===null||val===undefined)return;const el=g(id);if(el&&el.value.trim()==='')el.value=fmtPField(val)??'';};
 
-function efAttachConvPairListeners() {
-  const inCap=document.getElementById('ef-in-cap'),outCap=document.getElementById('ef-out-cap');
-  const inLd=document.getElementById('ef-in-load'),outLd=document.getElementById('ef-out-load');
-  const effEl=document.getElementById('ef-conv-pair-eff');
-  const pfEl=document.getElementById('ef-convpf');
-  const getEff=()=>Math.max(0.001,Math.min(1,+effEl.value||0.85));
-  const getPf=()=>document.getElementById('ef-convpf-group').classList.contains('hidden')?1.0:(parseF(pfEl?.value)||1.0);
-  inCap.oninput=()=>{ const v=+inCap.value; if(!isNaN(v)&&inCap.value!=='') outCap.value=String(Math.round(v*getEff()*getPf()*1e6)/1e6); else outCap.value=''; };
-  outCap.oninput=()=>{ const v=+outCap.value; if(!isNaN(v)&&outCap.value!=='') inCap.value=String(Math.round(v/(getEff()*getPf())*1e6)/1e6); else inCap.value=''; };
-  inLd.oninput=()=>{ const v=+inLd.value; if(!isNaN(v)) outLd.value=String(Math.round(v*getEff()*getPf()*1e6)/1e6); };
-  outLd.oninput=()=>{ const v=+outLd.value; if(!isNaN(v)) inLd.value=String(Math.round(v/(getEff()*getPf())*1e6)/1e6); };
-  effEl.oninput=()=>{
-    const v=+effEl.value;
-    if (v>0&&v<=1) {
-      if (inCap.value!=='') outCap.value=String(Math.round(+inCap.value*v*getPf()*1e6)/1e6);
-      if (inLd.value!=='')  outLd.value=String(Math.round(+inLd.value*v*getPf()*1e6)/1e6);
+  function calcAcGroup(prefix) {
+    const p=k=>prefix+k;
+    const a=getV(p('a')),va=getV(p('va')),w=getV(p('w')),var_=getV(p('var')),pf=getV(p('pf'));
+    // A → VA
+    if (a!==null&&v>0) setIfEmpty(p('va'),a*v);
+    // VA → A
+    if (va!==null&&v>0) setIfEmpty(p('a'),va/v);
+    // read va again after possible fill
+    const va2=getV(p('va'))||va;
+    // pf → W
+    if (va2!==null&&pf!==null) setIfEmpty(p('w'),va2*pf);
+    // W → VAR, pf
+    const w2=getV(p('w'))||w;
+    if (va2!==null&&w2!==null) {
+      setIfEmpty(p('var'),Math.sqrt(Math.max(0,va2*va2-w2*w2)));
+      setIfEmpty(p('pf'),va2>0?Math.min(1,w2/va2):null);
     }
-  };
+    // VAR → W, pf
+    const var2=getV(p('var'))||var_;
+    if (va2!==null&&var2!==null) {
+      const wFromVar=Math.sqrt(Math.max(0,va2*va2-var2*var2));
+      setIfEmpty(p('w'),wFromVar);
+      setIfEmpty(p('pf'),va2>0?Math.min(1,wFromVar/va2):null);
+    }
+  }
+
+  function calcDcGroup(aId,wId) {
+    const a=getV(aId),w=getV(wId);
+    if (a!==null&&v>0) setIfEmpty(wId,a*v);
+    if (w!==null&&v>0) setIfEmpty(aId,w/v);
+  }
+
+  if (acDc==='ac') {
+    // AC cap: A ↔ VA
+    const ca=getV('ef-cap-a2'),cva=getV('ef-cap-va');
+    if (ca!==null&&v>0) setIfEmpty('ef-cap-va',ca*v);
+    if (cva!==null&&v>0) setIfEmpty('ef-cap-a2',cva/v);
+    calcAcGroup('ef-exld-ac-');
+    calcAcGroup('ef-load-ac-');
+  } else {
+    calcDcGroup('ef-cap-a','ef-cap-w');
+    calcDcGroup('ef-exld-a','ef-exld-w');
+    calcDcGroup('ef-load-a','ef-load-w');
+  }
 }
 
 function efRenderSiblings(parentId,excludeId) {
@@ -1353,26 +1363,34 @@ function openEdit(nodeId) {
     const outNode=n.convRole==='out'?n:paired;
     const inAcDc=CONV_IN_ACDC[n.type]||'ac';
     const outAcDc=CONV_OUT_ACDC[n.type]||'dc';
-    const inCapUnit=inAcDc==='ac'?'VA':'W';
-    const outCapUnit=outAcDc==='ac'?'VA':'W';
-    document.getElementById('ef-in-cap-lbl').textContent=`Input Cap (${inCapUnit})`;
-    document.getElementById('ef-out-cap-lbl').textContent=`Output Cap (${outCapUnit})`;
-    document.getElementById('ef-in-load-lbl').textContent=`Input Exist. Load (${inCapUnit})`;
-    document.getElementById('ef-out-load-lbl').textContent=`Output Exist. Load (${outCapUnit})`;
-    const inCapV=inAcDc==='ac'?inNode?.capacity?.va:inNode?.capacity?.w;
-    const outCapV=outAcDc==='ac'?outNode?.capacity?.va:outNode?.capacity?.w;
-    const inLdV=inAcDc==='ac'?inNode?.existingLoad?.va:inNode?.existingLoad?.w;
-    const outLdV=outAcDc==='ac'?outNode?.existingLoad?.va:outNode?.existingLoad?.w;
-    document.getElementById('ef-in-cap').value  =fmtPField(inCapV);
-    document.getElementById('ef-out-cap').value =fmtPField(outCapV);
-    document.getElementById('ef-in-load').value =fmtPField(inLdV??0);
-    document.getElementById('ef-out-load').value=fmtPField(outLdV??0);
+    const inVAWUnit=inAcDc==='ac'?'VA':'W';
+    const outVAWUnit=outAcDc==='ac'?'VA':'W';
+    document.getElementById('ef-in-cap-a-lbl').textContent=`IN Cap (A)`;
+    document.getElementById('ef-in-cap-vaw-lbl').textContent=`IN Cap (${inVAWUnit})`;
+    document.getElementById('ef-out-cap-a-lbl').textContent=`OUT Cap (A)`;
+    document.getElementById('ef-out-cap-vaw-lbl').textContent=`OUT Cap (${outVAWUnit})`;
+    document.getElementById('ef-in-ld-a-lbl').textContent=`IN Load (A)`;
+    document.getElementById('ef-in-ld-vaw-lbl').textContent=`IN Load (${inVAWUnit})`;
+    document.getElementById('ef-out-ld-a-lbl').textContent=`OUT Load (A)`;
+    document.getElementById('ef-out-ld-vaw-lbl').textContent=`OUT Load (${outVAWUnit})`;
+    const inCapVAW=inAcDc==='ac'?inNode?.capacity?.va:inNode?.capacity?.w;
+    const outCapVAW=outAcDc==='ac'?outNode?.capacity?.va:outNode?.capacity?.w;
+    const inLdVAW=inAcDc==='ac'?inNode?.existingLoad?.va:inNode?.existingLoad?.w;
+    const outLdVAW=outAcDc==='ac'?outNode?.existingLoad?.va:outNode?.existingLoad?.w;
+    document.getElementById('ef-in-cap-a').value  =fmtPField(inNode?.capacity?.a);
+    document.getElementById('ef-in-cap-vaw').value=fmtPField(inCapVAW);
+    document.getElementById('ef-out-cap-a').value =fmtPField(outNode?.capacity?.a);
+    document.getElementById('ef-out-cap-vaw').value=fmtPField(outCapVAW);
+    document.getElementById('ef-in-ld-a').value  =fmtPField(inNode?.existingLoad?.a??0);
+    document.getElementById('ef-in-ld-vaw').value=fmtPField(inLdVAW??0);
+    document.getElementById('ef-out-ld-a').value  =fmtPField(outNode?.existingLoad?.a??0);
+    document.getElementById('ef-out-ld-vaw').value=fmtPField(outLdVAW??0);
     const effEl=document.getElementById('ef-conv-pair-eff');
     effEl.value=eff;effEl.disabled=n.convRole==='out';
     document.getElementById('ef-convpf').value=cpf;
-    document.getElementById('ef-convpf-group').classList.toggle('hidden',!['TRU','Frequency Converter'].includes(n.type));
-    document.getElementById('ef-conv-pair-hint').textContent=n.convRole==='out'?'Efficiency and pf are set on the IN node.':'';
-    efAttachConvPairListeners();
+    const showCpf=['TRU','Inverter','Frequency Converter'].includes(n.type);
+    document.getElementById('ef-convpf-group').classList.toggle('hidden',!showCpf);
+    document.getElementById('ef-conv-pair-hint').textContent=n.convRole==='out'?'Efficiency and Conv. PF are set on the IN node.':'';
   }
 
   document.getElementById('ef-loadval-msg').classList.add('hidden');
@@ -1387,8 +1405,19 @@ function openEdit(nodeId) {
   efAttachDcDerive('ef-load-a','ef-load-w');
   efAttachDcDerive('ef-ov-a','ef-ov-w');
   efAttachAcCapDerive();
-  efAttachAcLoadDerive('ef-exld-ac-','ef-exld-ac-recalc');
-  efAttachAcLoadDerive('ef-load-ac-','ef-load-ac-recalc');
+
+  // Wire Reset buttons
+  document.getElementById('edit-form').querySelectorAll('.btn-reset').forEach(btn=>{
+    btn.onclick=()=>{
+      (btn.dataset.ids||'').split(',').forEach(id=>{
+        const el=document.getElementById(id.trim());if(el)el.value='';
+      });
+    };
+  });
+
+  // Show Calculate button in edit mode
+  document.getElementById('btn-calculate').style.display='';
+  document.getElementById('btn-calculate').onclick=doEditCalculate;
 
   efRenderSiblings(n.parentId,nodeId);
   document.getElementById('btn-save').disabled=false;
@@ -1429,39 +1458,45 @@ function doEditSave() {
     const paired=findPairedNode(n);
     const inAcDc=CONV_IN_ACDC[n.type]||'ac';
     const outAcDc=CONV_OUT_ACDC[n.type]||'dc';
-    const inCapVal=pF('ef-in-cap');const outCapVal=pF('ef-out-cap');
-    const inLdVal=pF('ef-in-load')??0;const outLdVal=pF('ef-out-load')??0;
+    const inCapA=pF('ef-in-cap-a');const inCapVAW=pF('ef-in-cap-vaw');
+    const outCapA=pF('ef-out-cap-a');const outCapVAW=pF('ef-out-cap-vaw');
+    const inLdA=pF('ef-in-ld-a')??0;const inLdVAW=pF('ef-in-ld-vaw')??0;
+    const outLdA=pF('ef-out-ld-a')??0;const outLdVAW=pF('ef-out-ld-vaw')??0;
     const eff=+document.getElementById('ef-conv-pair-eff').value||0.85;
     const cpf=+document.getElementById('ef-convpf').value||1.0;
     const inV=n.convRole==='in'?v:(paired?.voltage||v);
     const outV=n.convRole==='out'?v:(paired?.voltage||v);
-    const mkCap=(val,acdcType,volt)=>{
-      if (val===null) return null;
-      return acdcType==='ac'?{w:null,var:null,va:val,a:volt>0?val/volt:null,pf:null}:{w:val,var:null,va:null,a:volt>0?val/volt:null,pf:null};
+    const mkCap=(aVal,vawVal,acdcType,volt)=>{
+      if (aVal===null&&vawVal===null) return null;
+      const a=aVal!==null?aVal:(vawVal!==null&&volt>0?vawVal/volt:null);
+      if (acdcType==='ac') { const va=vawVal!==null?vawVal:(aVal!==null&&volt>0?aVal*volt:null); return {w:null,var:null,va,a,pf:null}; }
+      else { const w=vawVal!==null?vawVal:(aVal!==null&&volt>0?aVal*volt:null); return {w,var:null,va:null,a,pf:null}; }
     };
-    const mkLd=(val,acdcType,volt,pf=1.0)=>{
-      val=val||0;
+    const mkLd=(aVal,vawVal,acdcType,volt,pf=1.0)=>{
+      vawVal=vawVal||0;
       if (acdcType==='ac') {
-        const w=val*pf,var_=Math.sqrt(Math.max(0,val*val-w*w));
-        return autoAc(w,var_,val,null,pf,volt);
+        const w=vawVal*pf,var_=Math.sqrt(Math.max(0,vawVal*vawVal-w*w));
+        const a=aVal!==null?aVal:(volt>0?vawVal/volt:null);
+        return {va:vawVal,w,var:var_,a,pf};
       }
-      return deriveDcFromA(volt>0?val/volt:0,volt);
+      const a=aVal!==null?aVal:(volt>0?vawVal/volt:null);
+      return {w:vawVal,a,va:null,var:null,pf:null};
     };
     if (n.convRole==='in') {
-      data.capacity=mkCap(inCapVal,inAcDc,inV);
-      data.existingLoad=mkLd(inLdVal,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
+      data.capacity=mkCap(inCapA,inCapVAW,inAcDc,inV);
+      data.existingLoad=mkLd(inLdA,inLdVAW,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
       data.efficiency=eff;data.convPf=cpf;data.netChangeOverride=null;
       if (paired) {
-        paired.capacity=mkCap(outCapVal,outAcDc,outV);
-        paired.existingLoad=mkLd(outLdVal,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
+        paired.capacity=mkCap(outCapA,outCapVAW,outAcDc,outV);
+        paired.existingLoad=mkLd(outLdA,outLdVAW,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       }
     } else {
-      data.capacity=mkCap(outCapVal,outAcDc,outV);
-      data.existingLoad=mkLd(outLdVal,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
+      data.capacity=mkCap(outCapA,outCapVAW,outAcDc,outV);
+      data.existingLoad=mkLd(outLdA,outLdVAW,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       data.netChangeOverride=null;
       if (paired) {
-        paired.capacity=mkCap(inCapVal,inAcDc,inV);
-        paired.existingLoad=mkLd(inLdVal,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
+        paired.capacity=mkCap(inCapA,inCapVAW,inAcDc,inV);
+        paired.existingLoad=mkLd(inLdA,inLdVAW,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
       }
     }
   } else if (hasCap(type)) {
@@ -1567,10 +1602,6 @@ function afRenderTable() {
   const lockVoltage=!isConv(type)&&!!parentNode;
   const cols=afCols(type,acDc);
   const wrap=document.getElementById('af-table-wrap');
-  if (!afRows.length) {
-    wrap.innerHTML='<p style="color:var(--text-muted);font-size:.78rem;padding:.4rem 0">No items yet — click "+ Add Another Row".</p>';
-    return;
-  }
   const head='<th class="row-num">#</th>'+cols.map(c=>`<th style="min-width:${c.w||'auto'}">${c.label}</th>`).join('')+'<th></th>';
   const body=afRows.map((ri,idx)=>{
     const saved=afRowData[ri]||{};
@@ -1583,10 +1614,21 @@ function afRenderTable() {
       }
       return `<td><input data-row="${ri}" data-key="${c.key}" type="${c.itype||'text'}" value="${esc(String(val))}" placeholder="${esc(c.ph||'')}"${extraAttrs}></td>`;
     }).join('');
-    return `<tr><td class="row-num">${idx+1}</td>${cells}<td><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
+    return `<tr><td class="row-num">${idx+1}</td>${cells}<td style="white-space:nowrap"><button class="af-dup btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Duplicate">⧉</button><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
   }).join('');
   wrap.innerHTML=`<table class="add-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   wrap.querySelectorAll('.af-del').forEach(btn=>btn.addEventListener('click',()=>{afCapture();afRows=afRows.filter(x=>x!==+btn.dataset.row);afRenderTable();}));
+  wrap.querySelectorAll('.af-dup').forEach(btn=>btn.addEventListener('click',()=>{
+    afCapture();
+    const srcRow=+btn.dataset.row;
+    const newRi=++afRowCtr;
+    const srcData={...afRowData[srcRow]||{}};
+    if (srcData.description) srcData.description=srcData.description+' (copy)';
+    afRowData[newRi]=srcData;
+    const idx=afRows.indexOf(srcRow);
+    afRows.splice(idx+1,0,newRi);
+    afRenderTable();
+  }));
   if (isConv(type)) {
     afRows.forEach(ri=>{
       const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
@@ -1641,10 +1683,13 @@ function afRenderTable() {
 function openAdd(parentId) {
   mMode='add';mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
+  // Start with one blank row
+  afRows.push(++afRowCtr);afRowData[afRowCtr]={};
   document.getElementById('modal-title').textContent='Add Item(s)';
   document.getElementById('add-form' ).classList.remove('hidden');
   document.getElementById('edit-form').classList.add('hidden');
   document.getElementById('btn-del'  ).classList.add('hidden');
+  document.getElementById('btn-calculate').style.display='none';
   fillParentSelect('af-parent',null,parentId);
   const aftype=document.getElementById('af-type');
   fillTypeSelect(aftype,parentId===null);
@@ -1688,7 +1733,7 @@ function doAddSave() {
     if (isConv(type)) {
       const eff=Math.max(0.001,Math.min(1,+getRaw('efficiency')||0.85));
       const inAcDc=CONV_IN_ACDC[type]||'ac';const outAcDc=CONV_OUT_ACDC[type]||'dc';
-      const cpf=type==='TRU'?0.95:1.0;
+      const cpf=['TRU','Inverter'].includes(type)?0.95:1.0;
       const outVoltage=getN('outVoltage')??voltage;
       const outV2=outVoltage||0;
       const inCapV=getN('inputCap');const outCapV=getN('outputCap');
