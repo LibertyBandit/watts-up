@@ -1276,7 +1276,7 @@ function efRenderSiblings(parentId,excludeId) {
 
 function openEdit(nodeId) {
   const n=state.nodes[nodeId];if (!n) return;
-  mMode='edit';mNode=nodeId;mBlocked=false;
+  mMode='edit';mNode=nodeId;mBlocked=false;efClearedSections.clear();
   const isRoot=state.rootIds.includes(nodeId);
 
   document.getElementById('modal-title').textContent='Edit Item';
@@ -1537,6 +1537,7 @@ function doEditSave() {
 
 // ── ADD MODAL ─────────────────────────────────────────────────────────────────
 let afRows=[],afRowCtr=0,afRowData={},afLastType='Generator',afLastStatus='existing';
+let efClearedSections=new Set();
 
 function afCols(type,acDc) {
   const cols=[
@@ -1683,6 +1684,7 @@ function afRenderTable() {
 function openAdd(parentId) {
   mMode='add';mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
+  document.getElementById('af-table-wrap').innerHTML='';
   // Start with one blank row
   afRows.push(++afRowCtr);afRowData[afRowCtr]={};
   document.getElementById('modal-title').textContent='Add Item(s)';
@@ -1917,7 +1919,22 @@ function initEvents() {
   document.getElementById('af-type'  ).addEventListener('change',e=>{afLastType=e.target.value;afRecheck();afRenderTable();});
   document.getElementById('af-acdc'  ).addEventListener('change',afRenderTable);
   document.getElementById('af-status').addEventListener('change',e=>{afLastStatus=e.target.value;});
-  document.getElementById('af-add-row').addEventListener('click',()=>{afCapture();afRows.push(afRowCtr++);afRenderTable();});
+  document.getElementById('af-add-row').addEventListener('click',()=>{afCapture();afRows.push(++afRowCtr);afRenderTable();});
+
+  // Edit-form: auto-clear sibling fields on first keystroke per section per dialog open
+  const efSections=[];
+  document.getElementById('edit-form').querySelectorAll('[data-ids]').forEach(btn=>{
+    const ids=(btn.dataset.ids||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(ids.length>1) efSections.push(ids);
+  });
+  document.getElementById('edit-form').addEventListener('input',e=>{
+    const el=e.target;
+    if(el.tagName!=='INPUT'||el.value==='') return;
+    const idx=efSections.findIndex(ids=>ids.includes(el.id));
+    if(idx<0||efClearedSections.has(idx)) return;
+    efClearedSections.add(idx);
+    efSections[idx].forEach(id=>{if(id!==el.id){const sib=document.getElementById(id);if(sib)sib.value='';}});
+  });
 
   // Formula eval on blur
   document.querySelector('.modal-body').addEventListener('focusout',e=>{
