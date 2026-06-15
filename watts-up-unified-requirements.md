@@ -1,6 +1,6 @@
 # Watts Up — Unified Requirements
-Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-7-requirements.txt
-Last updated: 2026-05-12 (through Revision 7)
+Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-9-requirements.txt
+Last updated: 2026-06-14 (through Revision 10)
 
 ---
 
@@ -40,7 +40,7 @@ the **OUT** node (output side) is its child. Labels are suffixed "(IN)" and "(OU
 
 Efficiency factor: default **0.85**; input = output / efficiency; output = input × efficiency.
 
-| Type | IN side | OUT side | convPf default |
+| Type | IN side | OUT side | Default convPf |
 |---|---|---|---|
 | TRU | AC | DC | **0.95** |
 | Inverter | DC | AC | 1.0 |
@@ -53,7 +53,7 @@ Power conversion input formulas:
 - For AC input: VA(IN) = W(OUT) / (efficiency × convPf)
 
 convPf applies to **all** AC conv-item calculations (capacity, existing load, load, net change,
-new load). convPf field is visible in the dialog for TRU and Frequency Converter.
+new load). convPf field is visible in the dialog for TRU, Inverter, and Frequency Converter.
 
 ### 3.4 Distribution / Protection
 - Feeder
@@ -104,7 +104,7 @@ Formulas: A = W / V; W = V × A
   rendered in subdued (secondary) text; RefDes omitted if blank
 - Net change badge displayed per node:
   - AC items: VA value
-  - DC items: W value
+  - DC items: A value
   - Positive NC: orange; Negative NC: green
 - Collapse / expand toggle per node
 - **Edit** button on each node
@@ -164,25 +164,31 @@ Formulas: A = W / V; W = V × A
 ### 7.3 Capacity section (non-load items)
 - DC: A, W
 - AC: A, VA
+- **Reset button**: Clears all fields in this section (A and W for DC; A and VA for AC)
 
 ### 7.4 Existing Load section
 - DC: A, W
 - AC: Row 1 — A, VA; Row 2 — W, VAR, pf
 - For **new** non-load items: replaced by a **Load** field; Load field hidden if item has children
+- **Reset button**: Clears all fields in this section (A and W for DC; A, VA, W, VAR, pf for AC)
 
 ### 7.5 Load section (Load-type items only)
 - DC: A, W
 - AC: Row 1 — A, VA; Row 2 — W, VAR, pf
+- **Reset button**: Clears all fields in this section (A and W for DC; A, VA, W, VAR, pf for AC)
 
 ### 7.6 Net Change Override section
 - DC: W field + A field (A and W auto-derive from each other)
 - AC: W field + VAR field (VAR defaults to 0 on save if left blank)
+- **Hidden** when the item has children
+- **Reset button**: Clears all fields in this section
 
-### 7.7 AC field cascade derive (on field blur)
-Applies to all AC field groups (Existing Load, Load). Requires VA to be set for W/VAR/pf
-triggers; requires V > 0 for A/VA triggers. No-op if prerequisite values are missing.
+### 7.7 AC field derivation formulas
+Used by the Calculate button (§7.12). Applies to all AC field groups (Existing Load, Load).
+Requires VA to be set for W/VAR/pf derivations; requires V > 0 for A/VA derivations.
+No-op if prerequisite values are missing.
 
-| Field edited | Fields recalculated | Formulas |
+| Field entered | Fields derived | Formulas |
 |---|---|---|
 | **A** | VA, W, VAR | VA = V×A; W = VA×pf; VAR = √(VA²−W²) |
 | **VA** | A, W, VAR | A = VA/V; W = VA×pf; VAR = √(VA²−W²) |
@@ -190,16 +196,26 @@ triggers; requires V > 0 for A/VA triggers. No-op if prerequisite values are mis
 | **VAR** | W, pf | W = √(VA²−VAR²); pf = W/VA |
 | **pf** | W, VAR | W = VA×pf; VAR = √(VA²−W²) |
 
-### 7.8 Cascade derive feedback
-- Recalculated fields highlighted **yellow**
-- Message displayed listing which fields were recalculated
-- **OK** button for user acknowledgement
-- After OK: yellow highlights removed from all fields; message text cleared; message hidden
+### 7.8 Auto-clear on first entry (Revision 9)
+When the user types into any field in a section (Capacity, Existing Load, Load, Net Change Override)
+for the first time after opening the dialog, all other fields in that section are automatically
+cleared. This fires once per section per dialog open session, enabling a clean Calculate workflow
+without requiring a manual Reset first.
 
 ### 7.9 Conversion parameters section (conversion items only)
 - **Efficiency** input (default 0.85)
-- **convPf** input — visible for TRU and Frequency Converter (default TRU = 0.95, FC = 1.0)
-- IN/OUT capacity and load auto-derive via efficiency and convPf on input
+- **convPf** input — visible for TRU, Inverter, and Frequency Converter
+  (default: TRU = 0.95, Inverter = 1.0, FC = 1.0)
+- Three-row layout with Reset button per row:
+
+| Row | DC-side fields | AC-side fields |
+|---|---|---|
+| Row 1 — Capacity | Input Cap (A), Input Cap (W) | Input Cap (A), Input Cap (VA) |
+| Row 2 — Existing Load | Input Exist. Load (A), Input Exist. Load (W) | Input Exist. Load (A), Input Exist. Load (VA) |
+| Row 3 — Efficiency/PF | Efficiency, Conv. Power Factor (Reset) | — |
+
+Each row's Reset button clears all fields in that row.
+Input/output capacity and existing load auto-derive via efficiency and convPf; see §7.12.
 
 ### 7.10 Duplicate button
 - Copies the current node; appends "(copy)" to the description
@@ -207,6 +223,13 @@ triggers; requires V > 0 for A/VA triggers. No-op if prerequisite values are mis
 
 ### 7.11 Formula entry
 All numeric fields accept Excel-style expressions starting with `=` (e.g., `=28*2` → `56`).
+
+### 7.12 Calculate button
+Fills blank fields from entered values using power formulas. Applies on button press; also applies
+automatically on save for any remaining blank fields.
+- **AC sections**: derives per the field table in §7.7
+- **DC sections**: derives missing A or W using A = W/V or W = V×A
+- **Conversion items**: derives input/output capacity and existing load via efficiency and convPf
 
 ---
 
@@ -220,9 +243,10 @@ All numeric fields accept Excel-style expressions starting with `=` (e.g., `=28*
 3. **Status**: Existing / New / Removed
 4. **AC / DC** selector — locked to parent's AC/DC when parent is selected
 5. Master-detail table (§8.3)
+6. **Duplicate row button** per row — copies the row and appends "(copy)" to the description
 
 ### 8.2 State memory
-- On open: clear existing table rows
+- On open: fully reset the table (clear DOM and row data) and display one blank row
 - Remember last-used Item Type and Status; restore on next open
 
 ### 8.3 Table columns (context-sensitive)
@@ -296,12 +320,70 @@ Parent pre-set to "No Parent (New Root)".
 
 ---
 
-## 13. Print
+## 13. Print / Export Report (Revision 10)
 
-- Print-optimized layout triggered by Print button
-- Header: aircraft metadata
-- AC Summary table and DC Summary table (ordered per §6.3)
-- Warnings section
+### 13.1 Print Settings Dialog
+Clicking "Print Report" opens a settings dialog before printing. The dialog contains:
+- **AC Summary — Columns to Include**: checkboxes for each sub-unit under each group (§13.2)
+- **DC Summary — Columns to Include**: checkboxes for each sub-unit under each group (§13.3)
+- **Options**: Conv IN NC-only toggle; Show bar charts toggle
+- Buttons: Reset to Defaults | Cancel | Print
+
+### 13.2 AC Report Column Groups and Defaults
+| Group | Units | Default |
+|---|---|---|
+| Rating / Capacity | A, VA | A ✓, VA ✓ |
+| Existing Load | VA, W, VAR, pf | all ✓ |
+| Added (Removed) | W, VAR | W ✓, VAR ✓ |
+| Net Change | W, VAR | W ✓, VAR ✓ |
+| New Load | VA, W, VAR, pf | all ✓ |
+| Remaining | VA | VA ✓ |
+
+### 13.3 DC Report Column Groups and Defaults
+A and W selected by default for all groups: Rating/Capacity, Existing Load, Added (Removed),
+Net Change, New Load, Remaining.
+
+### 13.4 Ampere Rating in Name (Protection Devices)
+If the user deselects "A" from Rating/Capacity, Circuit Breakers and Fuses still show their
+ampere rating appended inline to the component name: `FWD UPPER CB [581CB1] (7.5 A)`.
+
+### 13.5 Conversion Input (IN) Nodes — Net Change Only
+By default, Conv IN nodes (TRU input side, etc.) display values only in the Net Change columns;
+all other columns show "—". This reflects that the input side change is driven by output loading.
+Togglable via the "Conv IN NC-only" option in the Print Settings dialog.
+
+### 13.6 Negative Values and Removed Loads
+Negative values and removed-load entries are shown in parentheses instead of with a minus sign.
+For example, a removed 2.5 A load displays as `(2.5)`.
+
+### 13.7 Adaptive Number Rounding
+| Range | Format |
+|---|---|
+| pf | X.XX (exactly 2 decimals) |
+| \|n\| < 10 | X.XXX (trailing zeros suppressed) |
+| 10 ≤ \|n\| < 100 | XX.XX |
+| 100 ≤ \|n\| < 1,000 | XXX.X |
+| 1,000 ≤ \|n\| < 10,000 | X,XXX |
+| 10,000 ≤ \|n\| < 100,000 | round to nearest 10 |
+
+Zero-valued cells (< 0.0005 absolute) display as "—".
+
+### 13.8 Bar Chart Summary (Optional)
+When "Include load bar charts" is enabled, a Load Summary Charts section is appended showing
+horizontal bar charts for: Aircraft Total (Root), Generation nodes, Conversion OUT nodes, and
+Distribution nodes. Each bar shows three segments:
+- Blue: Existing Load
+- Orange: Net Change (positive) / Green: Net Change (negative)
+- Light gray: Remaining Capacity
+
+Bar label includes Description and RefDes; caption shows Cap, New Load, and utilization %.
+
+### 13.9 Report Header
+Includes: Make, Model, Marketing Designation, Serial #, Flight Phase, and print date.
+
+### 13.10 Section Ordering
+AC Summary first if the first root node is AC; DC Summary first otherwise. Warnings section
+follows the tables. Bar charts (if enabled) appear after both summary tables.
 
 ---
 

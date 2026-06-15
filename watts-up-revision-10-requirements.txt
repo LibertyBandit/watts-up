@@ -1,0 +1,47 @@
+Revision 10
+==========================================
+Note: Backward compatibility with data from the previous version is desired but not required.  
+
+For Revision 10, I would like modifications to the exportable / print report.
+
+I have saved a "Watts Up Revision 10 Output Report.xlsx" file to the project folder that gives the generally desirable information and organization in the AC Summary and DC Summary tabs.
+
+Some highlights:
+
+1. The user should be able to select the desired units to include in the print/output report, but the defaults should be
+	a. For AC items -
+		Rating / Capacity: A for circuit protective devices; VA for Aircraft Total, and Power Distribution Items
+		Existing Load: VA, W, VAR, and pf
+		Added (Removed) Loads: W, VAR
+		Net Change: W, VAR
+		New Load: VA, W, VAR, and pf
+		Remaining: VA
+	b. For DC items - A, W for all categories
+
+2. If the user does not select A for Rating / Capacity, A should still be incorporated into the entry for all circuit protective devices.
+	For example, "FWD UPPER EFFECT LTS CB [581CB1] (7.5 A)".
+
+3. Power conversion device input categories should be selectable, but by default should only show the net change that reflects the changes to the output loading.
+	For example, the AC input entry for a TRU would only list values in the Net Change columns based on the changes to the DC loads.
+
+4. Show negative numbers and removed loads in parenthesis. 
+
+5. Not well incorporated into the "Watts Up Revision 10 Output Report.xlsx" file is to round numbers in the report as follows:
+
+	a. Power factor (pf) is rounded to two decimal places (X.XX)
+
+	b. Where applicable, all other values (n) in this report are rounded as shown below:
+        	         n < 10	 	X.XXX
+		    10 = n < 100	 XX.XX
+		   100 = n < 1,000	 XXX.X
+		 1,000 = n < 10,000	 X,XXX
+		10,000 = n < 100,000	XX,XX0
+
+	  Note: This is not intended, to add implied precision by adding 0 after a decimal.
+		If, for example, a number is entered or calculated to be 1.2 amps, then it should be displayed as 1.2, not 1.200.
+
+
+6. Additional formatting (font size, effect, highlighting, etc.) are desirable if they improve readability.
+
+7. Bonus points for nested bar graphs showing capacity, existing load, net change, new load for Aircraft Total, Generation, Conversion (output), and Power Distribution items.
+
