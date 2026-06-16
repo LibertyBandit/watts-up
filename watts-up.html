@@ -173,9 +173,11 @@
       .rpt-over td{background:#ffe8e8 !important}
       .rpt-warn td{background:#fff8e0 !important}
       .rpt-over-val{font-weight:700;color:#900}
+      .rpt-grp{border-left:2pt solid #777 !important}
+      .rpt-grp-first{border-left:2pt solid #777 !important}
       tr{page-break-inside:avoid}
-      .rpt-lbl-removed td{font-style:italic;color:#666;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
-      .rpt-lbl-added td{font-weight:700;color:#333;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
+      .rpt-lbl-removed td{font-style:italic;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
+      .rpt-lbl-added td{font-weight:700;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
       .rpt-warn-list{padding-left:1.2rem;margin:.2rem 0;font-size:8pt;color:#700}
     }
     .hidden{display:none !important}
@@ -1908,7 +1910,7 @@ let printCfg=null;
 function defaultPrintCfg(){
   return {
     ac:{
-      cap:    {a:true, va:true, w:false,var:false,pf:false},
+      cap:    {a:false,va:true, w:false,var:false,pf:false},
       exload: {a:false,va:true, w:true, var:true, pf:true},
       added:  {a:false,va:false,w:true, var:true, pf:false},
       nc:     {a:false,va:false,w:true, var:true, pf:false},
@@ -1931,7 +1933,7 @@ function fmtRpt(v){
 }
 function fmtPfRpt(v){const n=+v;if(isNaN(n)||Math.abs(n)<0.005)return null;return n.toFixed(2);}
 function rptTxt(val,isPf,isNeg){const s=isPf?fmtPfRpt(val):fmtRpt(val);if(s===null)return'—';return isNeg?`(${s})`:s;}
-function rptTd(val,isPf,isNeg,ec){return `<td class="rpt-num${ec?' '+ec:''}">${rptTxt(val,isPf,isNeg)}</td>`;}
+function rptTd(val,isPf,isNeg,ec,gf){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}">${rptTxt(val,isPf,isNeg)}</td>`;}
 
 const AC_ALL_KEYS=[{k:'a',l:'A'},{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}];
 const AC_GROUPS=[
@@ -1953,13 +1955,13 @@ const DC_GROUPS=[
 
 function activeCols(groups,cfgSec){
   const cols=[];
-  groups.forEach(g=>{const gc=cfgSec[g.id];if(!gc)return;g.keys.forEach(kd=>{if(gc[kd.k])cols.push({group:g.id,groupLabel:g.label,...kd});});});
+  groups.forEach(g=>{const gc=cfgSec[g.id];if(!gc)return;let first=true;g.keys.forEach(kd=>{if(gc[kd.k]){cols.push({group:g.id,groupLabel:g.label,isGroupFirst:first,...kd});first=false;}});});
   return cols;
 }
 function buildRptHeader(cols){
   const runs=[];
   cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
-  return `<thead><tr><th class="rpt-left" rowspan="2">Component</th>${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub">${c.l}</th>`).join('')}</tr></thead>`;
+  return `<thead><tr><th class="rpt-left" rowspan="2"></th>${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
 }
 function buildRptRow(n,depth,cols,cfg){
   const isProt=NT.PROTECTION.includes(n.type);
@@ -1971,32 +1973,34 @@ function buildRptRow(n,depth,cols,cfg){
   const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
   const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
   const ampSpan=ampInline?`<span style="float:right;color:#555;font-size:6.5pt;margin-left:6pt;white-space:nowrap">(${ampInline} A)</span>`:'';
-  const descWrap=removed?`<em style="color:#666">${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
+  const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
+  const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
   const rowCls=ov?' class="rpt-over"':(wn?' class="rpt-warn"':'');
   const cells=cols.map(col=>{
-    const{group,k,isPf}=col;
-    if(isConvIn&&cfg.convInNcOnly&&group!=='nc')return'<td class="rpt-num">—</td>';
+    const{group,k,isPf,isGroupFirst}=col;
+    const gf=isGroupFirst?'rpt-grp-first':'';
+    if(isConvIn&&cfg.convInNcOnly&&group!=='nc')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
     let val=null;let isNeg=false;let ec='';
-    if(group==='cap'){if(!hasC||!n.capacity)return'<td class="rpt-num">—</td>';val=n.capacity[k];}
-    else if(group==='exload'){if(!hasC)return'<td class="rpt-num">—</td>';val=n.existingLoad?.[k];}
+    if(group==='cap'){if(!hasC||!n.capacity)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.capacity[k];}
+    else if(group==='exload'){if(!hasC)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.existingLoad?.[k];}
     else if(group==='added'){
-      if(!isLd||n.status==='existing')return'<td class="rpt-num">—</td>';
+      if(!isLd||n.status==='existing')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
     }else if(group==='nc'){
-      if(isLd)return'<td class="rpt-num">—</td>';
+      if(isLd)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._netChange?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }else if(group==='newload'){
-      if(!hasC)return'<td class="rpt-num">—</td>';
+      if(!hasC)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
       if(ov)ec='rpt-over-val';
     }else if(group==='rem'){
-      if(n._remainingCapacity==null)return'<td class="rpt-num">—</td>';
+      if(n._remainingCapacity==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }
-    if(val==null)return'<td class="rpt-num">—</td>';
-    return rptTd(val,isPf||false,isNeg,ec);
+    if(val==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+    return rptTd(val,isPf||false,isNeg,ec,gf);
   });
-  return `<tr${rowCls}><td style="padding-left:${depth*14+3}px">${ampSpan}${descWrap}</td>${cells.join('')}</tr>`;
+  return `<tr${rowCls} style="font-size:${fs}pt"><td style="padding-left:${depth*14+3}px">${ampSpan}${descWrap}</td>${cells.join('')}</tr>`;
 }
 function buildSectionRows(acDc,cols,cfg){
   const nodes=state.nodes;
@@ -2014,16 +2018,19 @@ function buildSectionRows(acDc,cols,cfg){
   const emRem=new Set(),emAdd=new Set();
   const rows=[];
   const ncols=cols.length+1;
-  function visit(id,depth){
+  function visit(id,depth,inRem,inAdd){
     const n=nodes[id];if(!n)return;
     const pid=n.parentId??'__root__';
-    if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);}
-    else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);}
+    let nowInRem=inRem,nowInAdd=inAdd;
+    if(!inRem&&!inAdd){
+      if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);nowInRem=true;}
+      else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
+    }
     rows.push(buildRptRow(n,depth,cols,cfg));
     const children=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
-    children.forEach(cid=>visit(cid,depth+1));
+    children.forEach(cid=>visit(cid,depth+1,nowInRem,nowInAdd));
   }
-  secRoots.forEach(id=>visit(id,0));
+  secRoots.forEach(id=>visit(id,0,false,false));
   return rows.join('');
 }
 function buildPrintR10(){

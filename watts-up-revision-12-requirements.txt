@@ -1,0 +1,51 @@
+Revision 12
+==========================================
+Note: Backward compatibility with data from the previous version is desired but not required.  
+
+For Revision 12, we are making progress, but still need a few tweaks.  The following items are updates / changes from the Revision 10 and 11 versions.
+
+The "Watts Up Revision 10 Output Report.xlsx" file is still applicable in terms of the generally desirable information and organization in the AC Summary and DC Summary tabs.
+
+
+1. The user should be able to select the desired units to include in the print/output report, 
+	a. For AC items -
+		 i. No change from revision 11
+		ii. set the defaults to the following -
+			Rating / Capacity: VA for all component categories
+			Existing Load: No change from revision 11
+			Added (Removed) Loads: No change from revision 11
+			Net Change: No change from revision 11
+			New Load: No change from revision 11
+			Remaining: No change from revision 11
+	b. No change from revision 11
+
+2. No change from revision 11.
+
+3. No change from Revision 11. 
+
+4. No change from Revision 11. 
+
+5. No change from Revision 11 (for now).  At some point may add user input to define rounding schedule.
+
+6. Tree structure and formatting
+	a. It would be desirable to incorporate "Removed" and "Added" in appropriate places as nodes in report tree.  
+		Refer to the "Watts Up Revision 10 Output Report.xlsx" file and the use of Removed and Added nodes to designate groups of Removed and Added items
+		Revision 12 change: Once "Removed" or "Added" has been included in a branch, it is assumed that all descendent nodes in that branch are included under the label.
+			For example, The STARLINK PSU circuit breaker is already identified as "Added"; remove the added label between the STARLINK PSU circuit breaker and STARLINK PSU load.
+	b. Additional formatting (font size, effect, highlighting, etc.) are desirable if they improve readability.
+		Do not use strikethrough for removed items in the print report. Consider other font effects instead (for example, italicize for removed, bold for new items)
+		Revision 12 change: -Keep the "Removed" items italicized, but use black (normal contrast) font instead of gray.
+			-Emphasize (increase the line weight) the vertical line between the column groups
+			-As an experiment, try changing the Font Size for the rows based on the tree level.
+				Aircraft total (and associated row values) would be the largest font, with progressively smaller (0.5 pt, or 1 pt) font reduction for each subsequent level in the tree.  
+				Sibling rows would be the same font size.
+				This means the Aircraft Total font size would need to be decreased, to maintain legibility for the lowest tree levels.
+				Objective is to increase the visual detection of sibling rows.
+
+7. No change from Revision 11.
+
+8. Change the AC Summary and DC Summary labels at the tops of the summary sections to include the voltage.  For example "115 VAC Summary" and "28 VDC Summary".
+	Revision 12 change: Change DC Summary to 28 VDC Summary (include DC system voltage).
+
+9. Remove the word "Component" from the top left cell in the header.
+
