@@ -2018,10 +2018,17 @@ function buildSectionRows(acDc,cols,cfg){
   const emRem=new Set(),emAdd=new Set();
   const rows=[];
   const ncols=cols.length+1;
+  let prevDepth=-1;
   function visit(id,depth,inRem,inAdd){
     const n=nodes[id];if(!n)return;
     const pid=n.parentId??'__root__';
     let nowInRem=inRem,nowInAdd=inAdd;
+    // Blank spacer when transitioning back up from a deeper branch
+    if(prevDepth>depth){
+      const ht=Math.max(1.5,7-depth*1.5).toFixed(1);
+      rows.push(`<tr style="height:${ht}pt"><td colspan="${ncols}" style="border:none;padding:0;background:transparent !important"></td></tr>`);
+    }
+    prevDepth=depth;
     if(!inRem&&!inAdd){
       if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);nowInRem=true;}
       else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
