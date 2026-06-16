@@ -174,17 +174,8 @@
       .rpt-warn td{background:#fff8e0 !important}
       .rpt-over-val{font-weight:700;color:#900}
       tr{page-break-inside:avoid}
-      .bars-section{margin-top:.4rem}
-      .bars-label{font-size:8.5pt;font-weight:700;margin:.25rem 0 .15rem;color:#333}
-      .bar-row{margin-bottom:.25rem;display:flex;align-items:center;gap:.35rem;font-size:7pt}
-      .bar-label{width:185pt;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7.5pt}
-      .bar-refdes{font-size:6pt;color:#666;font-family:monospace}
-      .bar-track{flex:1;height:9pt;display:flex;border:1pt solid #aaa;overflow:hidden;background:#efefef;border-radius:1pt}
-      .bar-ex{background:#4a6fa5;height:100%}
-      .bar-nc-pos{background:#d07018;height:100%}
-      .bar-nc-neg{background:#2e8a2e;height:100%}
-      .bar-rem{background:#e0e0e0;height:100%}
-      .bar-vals{font-size:6.5pt;color:#444;white-space:nowrap;font-family:'Courier New',monospace}
+      .rpt-lbl-removed td{font-style:italic;color:#666;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
+      .rpt-lbl-added td{font-weight:700;color:#333;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
       .rpt-warn-list{padding-left:1.2rem;margin:.2rem 0;font-size:8pt;color:#700}
     }
     .hidden{display:none !important}
@@ -491,12 +482,12 @@
       <div class="modal-body" style="overflow-y:auto">
         <div class="section-label">AC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
-          <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Rating / Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-ac-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-va"> VA</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-exload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-pf"> pf</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Added (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-ac-nc-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-var"> VAR</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">New Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-newload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-pf"> pf</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Remaining</td><td><label class="po-chk"><input type="checkbox" id="po-ac-rem-va"> VA</label></td></tr>
+          <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Rating / Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-ac-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Added (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-added-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-added-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-ac-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">New Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-newload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Remaining</td><td><label class="po-chk"><input type="checkbox" id="po-ac-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-pf"> pf</label></td></tr>
         </table>
         <div class="section-label" style="margin-top:.75rem">DC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
@@ -510,7 +501,6 @@
         <div class="section-label" style="margin-top:.75rem">Options</div>
         <div style="display:flex;flex-direction:column;gap:.35rem;font-size:.82rem;margin-top:.3rem">
           <label class="po-chk"><input type="checkbox" id="po-conv-nc-only"> Show conversion input (IN) side with Net Change only</label>
-          <label class="po-chk"><input type="checkbox" id="po-show-bars"> Include load bar charts</label>
         </div>
       </div>
       <div class="modal-footer">
@@ -1917,9 +1907,16 @@ function buildPrint() {
 let printCfg=null;
 function defaultPrintCfg(){
   return {
-    ac:{cap:{a:true,va:true},exload:{va:true,w:true,var:true,pf:true},added:{w:true,var:true},nc:{w:true,var:true},newload:{va:true,w:true,var:true,pf:true},rem:{va:true}},
+    ac:{
+      cap:    {a:true, va:true, w:false,var:false,pf:false},
+      exload: {a:false,va:true, w:true, var:true, pf:true},
+      added:  {a:false,va:false,w:true, var:true, pf:false},
+      nc:     {a:false,va:false,w:true, var:true, pf:false},
+      newload:{a:false,va:true, w:true, var:true, pf:true},
+      rem:    {a:false,va:true, w:false,var:false,pf:false},
+    },
     dc:{cap:{a:true,w:true},exload:{a:true,w:true},added:{a:true,w:true},nc:{a:true,w:true},newload:{a:true,w:true},rem:{a:true,w:true}},
-    convInNcOnly:true,showBars:true,
+    convInNcOnly:true,
   };
 }
 function fmtRpt(v){
@@ -1936,13 +1933,14 @@ function fmtPfRpt(v){const n=+v;if(isNaN(n)||Math.abs(n)<0.005)return null;retur
 function rptTxt(val,isPf,isNeg){const s=isPf?fmtPfRpt(val):fmtRpt(val);if(s===null)return'—';return isNeg?`(${s})`:s;}
 function rptTd(val,isPf,isNeg,ec){return `<td class="rpt-num${ec?' '+ec:''}">${rptTxt(val,isPf,isNeg)}</td>`;}
 
+const AC_ALL_KEYS=[{k:'a',l:'A'},{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}];
 const AC_GROUPS=[
-  {id:'cap',    label:'Rating / Capacity', keys:[{k:'a',l:'A'},{k:'va',l:'VA'}]},
-  {id:'exload', label:'Existing Load',     keys:[{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}]},
-  {id:'added',  label:'Added (Removed)',   keys:[{k:'w',l:'W'},{k:'var',l:'VAR'}]},
-  {id:'nc',     label:'Net Change',        keys:[{k:'w',l:'W'},{k:'var',l:'VAR'}]},
-  {id:'newload',label:'New Load',          keys:[{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}]},
-  {id:'rem',    label:'Remaining',         keys:[{k:'va',l:'VA'}]},
+  {id:'cap',    label:'Rating / Capacity', keys:AC_ALL_KEYS},
+  {id:'exload', label:'Existing Load',     keys:AC_ALL_KEYS},
+  {id:'added',  label:'Added (Removed)',   keys:AC_ALL_KEYS},
+  {id:'nc',     label:'Net Change',        keys:AC_ALL_KEYS},
+  {id:'newload',label:'New Load',          keys:AC_ALL_KEYS},
+  {id:'rem',    label:'Remaining',         keys:AC_ALL_KEYS},
 ];
 const DC_GROUPS=[
   {id:'cap',    label:'Rating / Capacity', keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
@@ -1970,9 +1968,10 @@ function buildRptRow(n,depth,cols,cfg){
   const ws=n._warnings||[];const ov=ws.some(w=>w.code==='W3');const wn=ws.length>0&&!ov;
   const removed=n.status==='removed';
   const cfgSide=n.acDc==='ac'?cfg.ac:cfg.dc;
-  let desc=(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'');
-  if(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null){const af=fmtRpt(n.capacity.a);if(af)desc+=` (${af} A)`;}
-  const dStyle=removed?' style="text-decoration:line-through;opacity:.6"':'';
+  const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
+  const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+  const ampSpan=ampInline?`<span style="float:right;color:#555;font-size:6.5pt;margin-left:6pt;white-space:nowrap">(${ampInline} A)</span>`:'';
+  const descWrap=removed?`<em style="color:#666">${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
   const rowCls=ov?' class="rpt-over"':(wn?' class="rpt-warn"':'');
   const cells=cols.map(col=>{
     const{group,k,isPf}=col;
@@ -1997,58 +1996,51 @@ function buildRptRow(n,depth,cols,cfg){
     if(val==null)return'<td class="rpt-num">—</td>';
     return rptTd(val,isPf||false,isNeg,ec);
   });
-  return `<tr${rowCls}><td${dStyle} style="padding-left:${depth*14+3}px">${esc(desc)}</td>${cells.join('')}</tr>`;
+  return `<tr${rowCls}><td style="padding-left:${depth*14+3}px">${ampSpan}${descWrap}</td>${cells.join('')}</tr>`;
 }
-function buildBars(st){
-  if(!st)return'';
-  const allIds=preOrder(st.rootIds,st.nodes);
-  const barIds=allIds.filter(id=>{const n=st.nodes[id];if(!n)return false;return n.type==='Root'||NT.GENERATION.includes(n.type)||NT.DISTRIBUTION.includes(n.type)||(isConv(n.type)&&n.convRole==='out');});
-  if(!barIds.length)return'';
-  const acBar=barIds.filter(id=>st.nodes[id].acDc==='ac');
-  const dcBar=barIds.filter(id=>st.nodes[id].acDc!=='ac');
-  function oneBar(n){
-    const isAc=n.acDc==='ac';
-    const capV=isAc?(n.capacity?.va||0):(n.capacity?.a||0);
-    const exV =isAc?(n.existingLoad?.va||0):(n.existingLoad?.a||0);
-    const ncV =isAc?(n._netChange?.va||0):(n._netChange?.a||0);
-    const nlV =isAc?(n._newLoad?.va||0):(n._newLoad?.a||0);
-    const unit=isAc?'VA':'A';
-    if(!capV)return'';
-    const exP=Math.min(100,Math.max(0,(exV/capV)*100));
-    const ncP=Math.min(100-exP,Math.max(0,(Math.abs(ncV)/capV)*100));
-    const remP=Math.max(0,100-exP-ncP);
-    return `<div class="bar-row">
-      <div class="bar-label">${esc(n.description||'unnamed')}${n.refDes?` <span class="bar-refdes">[${esc(n.refDes)}]</span>`:''}</div>
-      <div class="bar-track"><div class="bar-ex" style="width:${exP.toFixed(1)}%"></div><div class="${ncV>=0?'bar-nc-pos':'bar-nc-neg'}" style="width:${ncP.toFixed(1)}%"></div><div class="bar-rem" style="width:${remP.toFixed(1)}%"></div></div>
-      <div class="bar-vals">Cap ${fmtRpt(capV)||'0'} ${unit} | New ${fmtRpt(nlV)||'0'} ${unit} (${capV>0?((nlV/capV)*100).toFixed(0):0}%)</div>
-    </div>`;
+function buildSectionRows(acDc,cols,cfg){
+  const nodes=state.nodes;
+  const statusOrd={existing:0,removed:1,new:2};
+  // Build a set of IDs for this acDc side and a children map within that set
+  const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
+  const childrenOf={};
+  secSet.forEach(id=>{
+    const pid=nodes[id].parentId;
+    if(pid&&secSet.has(pid)){if(!childrenOf[pid])childrenOf[pid]=[];childrenOf[pid].push(id);}
+  });
+  // Virtual section roots: nodes in secSet whose parent is not in secSet
+  const secRoots=[...secSet].filter(id=>{const pid=nodes[id].parentId;return!pid||!secSet.has(pid);});
+  secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+  const emRem=new Set(),emAdd=new Set();
+  const rows=[];
+  const ncols=cols.length+1;
+  function visit(id,depth){
+    const n=nodes[id];if(!n)return;
+    const pid=n.parentId??'__root__';
+    if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);}
+    else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);}
+    rows.push(buildRptRow(n,depth,cols,cfg));
+    const children=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+    children.forEach(cid=>visit(cid,depth+1));
   }
-  let html='<div class="bars-section"><div class="rpt-section-hdr">Load Summary Charts</div>';
-  if(acBar.length)html+='<div class="bars-label">AC (VA)</div>'+acBar.map(id=>oneBar(st.nodes[id])).filter(Boolean).join('');
-  if(dcBar.length)html+='<div class="bars-label">DC (A)</div>'+dcBar.map(id=>oneBar(st.nodes[id])).filter(Boolean).join('');
-  return html+'</div>';
+  secRoots.forEach(id=>visit(id,0));
+  return rows.join('');
 }
 function buildPrintR10(){
   if(!state)return;
   if(!printCfg)printCfg=defaultPrintCfg();
   const cfg=printCfg;const m=state.meta;
-  const allIds=preOrder(state.rootIds,state.nodes);
-  const dm={};
-  allIds.forEach(id=>{const p=state.nodes[id]?.parentId;dm[id]=p===null?0:(dm[p]||0)+1;});
-  const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
-  const acIds=allIds.filter(id=>state.nodes[id]?.acDc==='ac');
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
-  const vOf=(ids,acDc)=>{const n=state.nodes[ids.find(id=>state.nodes[id]?.acDc===acDc)];return n?.voltage!=null?` (${n.voltage} V${acDc==='ac'?'AC':'DC'})`:'';}
-  const mkTbl=(ids,cols,label)=>{
-    if(!ids.length)return'';
-    const rows=ids.map(id=>{const n=state.nodes[id];return n?buildRptRow(n,dm[id]||0,cols,cfg):''}).join('');
-    return `<div class="rpt-section-hdr">${label}</div><table class="rpt-table">${buildRptHeader(cols)}<tbody>${rows}</tbody></table>`;
+  const vLbl=(acDc)=>{const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)];return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;};
+  const mkTbl=(acDc,cols,label)=>{
+    if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
+    return `<div class="rpt-section-hdr">${label}</div><table class="rpt-table">${buildRptHeader(cols)}<tbody>${buildSectionRows(acDc,cols,cfg)}</tbody></table>`;
   };
-  const acSec=mkTbl(acIds,acCols,'AC Summary'+vOf(state.rootIds,'ac'));
-  const dcSec=mkTbl(dcIds,dcCols,'DC Summary'+vOf(state.rootIds,'dc'));
-  const bars=cfg.showBars?buildBars(state):'';
+  const al=vLbl('ac'),dl=vLbl('dc');
+  const acSec=mkTbl('ac',acCols,al?`${al} Summary`:'AC Summary');
+  const dcSec=mkTbl('dc',dcCols,dl?`${dl} Summary`:'DC Summary');
   const ws=allWarnings();
   const warnSec=ws.length?`<div class="rpt-section-hdr">Warnings</div><ul class="rpt-warn-list">${ws.map(w=>`<li>${w.message}</li>`).join('')}</ul>`:'';
   document.getElementById('print-region').innerHTML=`
@@ -2061,7 +2053,7 @@ function buildPrintR10(){
         <span><b>Flight Phase:</b> ${esc(m.flightPhase||'—')}</span>
         <span><b>Date:</b> ${new Date().toLocaleDateString()}</span>
       </div>
-    </div>${acFirst?acSec+dcSec:dcSec+acSec}${bars}${warnSec}`;
+    </div>${acFirst?acSec+dcSec:dcSec+acSec}${warnSec}`;
 }
 
 // ── PRINT SETTINGS ───────────────────────────────────────────────────────────
@@ -2069,38 +2061,38 @@ function openPrintOpts(){
   if(!printCfg)printCfg=defaultPrintCfg();
   const c=printCfg;
   const chk=(id,v)=>{const el=document.getElementById(id);if(el)el.checked=!!v;};
-  chk('po-ac-cap-a',c.ac.cap.a);chk('po-ac-cap-va',c.ac.cap.va);
-  chk('po-ac-exload-va',c.ac.exload.va);chk('po-ac-exload-w',c.ac.exload.w);chk('po-ac-exload-var',c.ac.exload.var);chk('po-ac-exload-pf',c.ac.exload.pf);
-  chk('po-ac-added-w',c.ac.added.w);chk('po-ac-added-var',c.ac.added.var);
-  chk('po-ac-nc-w',c.ac.nc.w);chk('po-ac-nc-var',c.ac.nc.var);
-  chk('po-ac-newload-va',c.ac.newload.va);chk('po-ac-newload-w',c.ac.newload.w);chk('po-ac-newload-var',c.ac.newload.var);chk('po-ac-newload-pf',c.ac.newload.pf);
-  chk('po-ac-rem-va',c.ac.rem.va);
+  chk('po-ac-cap-a',c.ac.cap.a);chk('po-ac-cap-va',c.ac.cap.va);chk('po-ac-cap-w',c.ac.cap.w);chk('po-ac-cap-var',c.ac.cap.var);chk('po-ac-cap-pf',c.ac.cap.pf);
+  chk('po-ac-exload-a',c.ac.exload.a);chk('po-ac-exload-va',c.ac.exload.va);chk('po-ac-exload-w',c.ac.exload.w);chk('po-ac-exload-var',c.ac.exload.var);chk('po-ac-exload-pf',c.ac.exload.pf);
+  chk('po-ac-added-a',c.ac.added.a);chk('po-ac-added-va',c.ac.added.va);chk('po-ac-added-w',c.ac.added.w);chk('po-ac-added-var',c.ac.added.var);chk('po-ac-added-pf',c.ac.added.pf);
+  chk('po-ac-nc-a',c.ac.nc.a);chk('po-ac-nc-va',c.ac.nc.va);chk('po-ac-nc-w',c.ac.nc.w);chk('po-ac-nc-var',c.ac.nc.var);chk('po-ac-nc-pf',c.ac.nc.pf);
+  chk('po-ac-newload-a',c.ac.newload.a);chk('po-ac-newload-va',c.ac.newload.va);chk('po-ac-newload-w',c.ac.newload.w);chk('po-ac-newload-var',c.ac.newload.var);chk('po-ac-newload-pf',c.ac.newload.pf);
+  chk('po-ac-rem-a',c.ac.rem.a);chk('po-ac-rem-va',c.ac.rem.va);chk('po-ac-rem-w',c.ac.rem.w);chk('po-ac-rem-var',c.ac.rem.var);chk('po-ac-rem-pf',c.ac.rem.pf);
   chk('po-dc-cap-a',c.dc.cap.a);chk('po-dc-cap-w',c.dc.cap.w);
   chk('po-dc-exload-a',c.dc.exload.a);chk('po-dc-exload-w',c.dc.exload.w);
   chk('po-dc-added-a',c.dc.added.a);chk('po-dc-added-w',c.dc.added.w);
   chk('po-dc-nc-a',c.dc.nc.a);chk('po-dc-nc-w',c.dc.nc.w);
   chk('po-dc-newload-a',c.dc.newload.a);chk('po-dc-newload-w',c.dc.newload.w);
   chk('po-dc-rem-a',c.dc.rem.a);chk('po-dc-rem-w',c.dc.rem.w);
-  chk('po-conv-nc-only',c.convInNcOnly);chk('po-show-bars',c.showBars);
+  chk('po-conv-nc-only',c.convInNcOnly);
   document.getElementById('print-opts').classList.remove('hidden');
 }
 function applyPrintOpts(){
   if(!printCfg)printCfg=defaultPrintCfg();
   const c=printCfg;
   const get=(id)=>{const el=document.getElementById(id);return el?el.checked:false;};
-  c.ac.cap.a=get('po-ac-cap-a');c.ac.cap.va=get('po-ac-cap-va');
-  c.ac.exload.va=get('po-ac-exload-va');c.ac.exload.w=get('po-ac-exload-w');c.ac.exload.var=get('po-ac-exload-var');c.ac.exload.pf=get('po-ac-exload-pf');
-  c.ac.added.w=get('po-ac-added-w');c.ac.added.var=get('po-ac-added-var');
-  c.ac.nc.w=get('po-ac-nc-w');c.ac.nc.var=get('po-ac-nc-var');
-  c.ac.newload.va=get('po-ac-newload-va');c.ac.newload.w=get('po-ac-newload-w');c.ac.newload.var=get('po-ac-newload-var');c.ac.newload.pf=get('po-ac-newload-pf');
-  c.ac.rem.va=get('po-ac-rem-va');
+  c.ac.cap.a=get('po-ac-cap-a');c.ac.cap.va=get('po-ac-cap-va');c.ac.cap.w=get('po-ac-cap-w');c.ac.cap.var=get('po-ac-cap-var');c.ac.cap.pf=get('po-ac-cap-pf');
+  c.ac.exload.a=get('po-ac-exload-a');c.ac.exload.va=get('po-ac-exload-va');c.ac.exload.w=get('po-ac-exload-w');c.ac.exload.var=get('po-ac-exload-var');c.ac.exload.pf=get('po-ac-exload-pf');
+  c.ac.added.a=get('po-ac-added-a');c.ac.added.va=get('po-ac-added-va');c.ac.added.w=get('po-ac-added-w');c.ac.added.var=get('po-ac-added-var');c.ac.added.pf=get('po-ac-added-pf');
+  c.ac.nc.a=get('po-ac-nc-a');c.ac.nc.va=get('po-ac-nc-va');c.ac.nc.w=get('po-ac-nc-w');c.ac.nc.var=get('po-ac-nc-var');c.ac.nc.pf=get('po-ac-nc-pf');
+  c.ac.newload.a=get('po-ac-newload-a');c.ac.newload.va=get('po-ac-newload-va');c.ac.newload.w=get('po-ac-newload-w');c.ac.newload.var=get('po-ac-newload-var');c.ac.newload.pf=get('po-ac-newload-pf');
+  c.ac.rem.a=get('po-ac-rem-a');c.ac.rem.va=get('po-ac-rem-va');c.ac.rem.w=get('po-ac-rem-w');c.ac.rem.var=get('po-ac-rem-var');c.ac.rem.pf=get('po-ac-rem-pf');
   c.dc.cap.a=get('po-dc-cap-a');c.dc.cap.w=get('po-dc-cap-w');
   c.dc.exload.a=get('po-dc-exload-a');c.dc.exload.w=get('po-dc-exload-w');
   c.dc.added.a=get('po-dc-added-a');c.dc.added.w=get('po-dc-added-w');
   c.dc.nc.a=get('po-dc-nc-a');c.dc.nc.w=get('po-dc-nc-w');
   c.dc.newload.a=get('po-dc-newload-a');c.dc.newload.w=get('po-dc-newload-w');
   c.dc.rem.a=get('po-dc-rem-a');c.dc.rem.w=get('po-dc-rem-w');
-  c.convInNcOnly=get('po-conv-nc-only');c.showBars=get('po-show-bars');
+  c.convInNcOnly=get('po-conv-nc-only');
 }
 
 // ── EVENTS ────────────────────────────────────────────────────────────────────

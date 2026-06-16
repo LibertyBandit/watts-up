@@ -1,6 +1,6 @@
 # Watts Up — Unified Requirements
 Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-9-requirements.txt
-Last updated: 2026-06-14 (through Revision 10)
+Last updated: 2026-06-15 (through Revision 11)
 
 ---
 
@@ -330,14 +330,16 @@ Clicking "Print Report" opens a settings dialog before printing. The dialog cont
 - Buttons: Reset to Defaults | Cancel | Print
 
 ### 13.2 AC Report Column Groups and Defaults
-| Group | Units | Default |
-|---|---|---|
-| Rating / Capacity | A, VA | A ✓, VA ✓ |
-| Existing Load | VA, W, VAR, pf | all ✓ |
-| Added (Removed) | W, VAR | W ✓, VAR ✓ |
-| Net Change | W, VAR | W ✓, VAR ✓ |
-| New Load | VA, W, VAR, pf | all ✓ |
-| Remaining | VA | VA ✓ |
+All AC groups offer A, VA, W, VAR, pf for selection.
+
+| Group | Default units selected |
+|---|---|
+| Rating / Capacity | A, VA |
+| Existing Load | VA, W, VAR, pf |
+| Added (Removed) | W, VAR |
+| Net Change | W, VAR |
+| New Load | VA, W, VAR, pf |
+| Remaining | VA |
 
 ### 13.3 DC Report Column Groups and Defaults
 A and W selected by default for all groups: Rating/Capacity, Existing Load, Added (Removed),
@@ -345,7 +347,8 @@ Net Change, New Load, Remaining.
 
 ### 13.4 Ampere Rating in Name (Protection Devices)
 If the user deselects "A" from Rating/Capacity, Circuit Breakers and Fuses still show their
-ampere rating appended inline to the component name: `FWD UPPER CB [581CB1] (7.5 A)`.
+ampere rating right-justified within the description cell: `FWD UPPER CB [581CB1]  (7.5 A)`.
+The amp text floats to the right side of the cell.
 
 ### 13.5 Conversion Input (IN) Nodes — Net Change Only
 By default, Conv IN nodes (TRU input side, etc.) display values only in the Net Change columns;
@@ -368,22 +371,23 @@ For example, a removed 2.5 A load displays as `(2.5)`.
 
 Zero-valued cells (< 0.0005 absolute) display as "—".
 
-### 13.8 Bar Chart Summary (Optional)
-When "Include load bar charts" is enabled, a Load Summary Charts section is appended showing
-horizontal bar charts for: Aircraft Total (Root), Generation nodes, Conversion OUT nodes, and
-Distribution nodes. Each bar shows three segments:
-- Blue: Existing Load
-- Orange: Net Change (positive) / Green: Net Change (negative)
-- Light gray: Remaining Capacity
-
-Bar label includes Description and RefDes; caption shows Cap, New Load, and utilization %.
-
-### 13.9 Report Header
+### 13.8 Report Header
 Includes: Make, Model, Marketing Designation, Serial #, Flight Phase, and print date.
 
-### 13.10 Section Ordering
-AC Summary first if the first root node is AC; DC Summary first otherwise. Warnings section
-follows the tables. Bar charts (if enabled) appear after both summary tables.
+### 13.9 Section Ordering and Labels
+AC section first if the first root node is AC; DC section first otherwise. Warnings section
+follows. Section labels include voltage: e.g., "115 VAC Summary" or "28 VDC Summary" (derived
+from the root node voltage; falls back to "AC Summary" / "DC Summary" if no root voltage).
+
+### 13.10 Tree Grouping Within Sections
+Within each parent's children, items are ordered: existing first, then a "Removed" label row
+followed by removed items, then an "Added" label row followed by new items. Label rows span
+the full table width at the same indentation as the items they introduce.
+
+### 13.11 Status Formatting
+- Removed items: description in italic, subdued color
+- New items: description in bold
+- No strikethrough
 
 ---
 

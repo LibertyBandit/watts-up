@@ -1,0 +1,40 @@
+Revision 11
+==========================================
+Note: Backward compatibility with data from the previous version is desired but not required.  
+
+For Revision 11, I would like clarify the modifications to the exportable / print report.  The following items are updates / changes from the Revision 10 version.
+
+The "Watts Up Revision 10 Output Report.xlsx" file is still applicable in terms of the generally desirable information and organization in the AC Summary and DC Summary tabs.
+
+
+1. The user should be able to select the desired units to include in the print/output report, 
+	a. For AC items -
+		 i. allow the user to select from A, VA, W, VAR, and pf for all categories (Rating / Capacity, Existing Load, Added (Removed) Loads, Net Change, New Load, Remaining)
+		ii. set the defaults to the following -
+			Rating / Capacity: A for circuit protective devices; VA for Aircraft Total, and Power Distribution Items
+			Existing Load: VA, W, VAR, and pf
+			Added (Removed) Loads: W, VAR
+			Net Change: W, VAR
+			New Load: VA, W, VAR, and pf
+			Remaining: VA
+	b. For DC items - allow the user to select from A, W for all categories, with A, W set as defaults for all categories
+
+2. If the user does not select A for Rating / Capacity, A should still be incorporated into the entry for all circuit protective devices.
+	For example, "FWD UPPER EFFECT LTS CB [581CB1] (7.5 A)" with the "(7.5 A)" text right justified in the cell.
+
+3. No change from Revision 10. 
+
+4. No change from Revision 10. 
+
+5. No change from Revision 10 (for now).  At some point may add user input to define rounding schedule.
+
+6. Tree structure and formatting
+	a. It would be desirable to incorporate "Removed" and "Added" in appropriate places as nodes in report tree.  
+		Refer to the "Watts Up Revision 10 Output Report.xlsx" file and the use of Removed and Added nodes to designate groups of Removed and Added items
+	b. Additional formatting (font size, effect, highlighting, etc.) are desirable if they improve readability.
+		Do not use strikethrough for removed items in the print report. Consider other font effects instead (for example, italicize for removed, bold for new items) 
+
+7. The bar graphs did not work.  Delete for now, that is a low priority.
+
+8. Change the AC Summary and DC Summary labels at the tops of the summary sections to include the voltage.  For example "115 VAC Summary" and "28 VDC Summary".
+
