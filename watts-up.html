@@ -169,7 +169,7 @@
       .rpt-sub{text-align:right;font-size:7pt}
       .rpt-table tbody tr:nth-child(even){background:#f9f9f9}
       .rpt-table td{border:1pt solid #ccc;padding:1.5pt 4pt}
-      .rpt-num{text-align:right;font-family:'Courier New',monospace;font-size:7pt}
+      .rpt-num{text-align:right;font-family:'Courier New',monospace}
       .rpt-over td{background:#ffe8e8 !important}
       .rpt-warn td{background:#fff8e0 !important}
       .rpt-over-val{font-weight:700;color:#900}
@@ -2040,7 +2040,7 @@ function buildPrintR10(){
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
-  const vLbl=(acDc)=>{const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)];return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;};
+  const vLbl=(acDc)=>{const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??Object.values(state.nodes).find(n=>n.acDc===acDc&&n.voltage!=null);return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;};
   const mkTbl=(acDc,cols,label)=>{
     if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
     return `<div class="rpt-section-hdr">${label}</div><table class="rpt-table">${buildRptHeader(cols)}<tbody>${buildSectionRows(acDc,cols,cfg)}</tbody></table>`;
