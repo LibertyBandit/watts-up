@@ -178,6 +178,7 @@
       tr{page-break-inside:avoid}
       .rpt-lbl-removed td{font-style:italic;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
       .rpt-lbl-added td{font-weight:700;font-size:6.5pt;padding-top:3pt;padding-bottom:1pt;border:none;background:transparent !important}
+      .rpt-parent-sep td{border-top:0.75pt solid #888 !important}
       .rpt-warn-list{padding-left:1.2rem;margin:.2rem 0;font-size:8pt;color:#700}
     }
     .hidden{display:none !important}
@@ -1963,7 +1964,7 @@ function buildRptHeader(cols){
   cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
   return `<thead><tr><th class="rpt-left" rowspan="2"></th>${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
 }
-function buildRptRow(n,depth,cols,cfg){
+function buildRptRow(n,depth,cols,cfg,topBorder){
   const isProt=NT.PROTECTION.includes(n.type);
   const isConvIn=n.convRole==='in';
   const isLd=isLoad(n.type);const hasC=hasCap(n.type);
@@ -1975,7 +1976,8 @@ function buildRptRow(n,depth,cols,cfg){
   const ampSpan=ampInline?`<span style="float:right;color:#555;font-size:6.5pt;margin-left:6pt;white-space:nowrap">(${ampInline} A)</span>`:'';
   const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
   const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
-  const rowCls=ov?' class="rpt-over"':(wn?' class="rpt-warn"':'');
+  const cls=[];if(ov)cls.push('rpt-over');else if(wn)cls.push('rpt-warn');if(topBorder)cls.push('rpt-parent-sep');
+  const rowCls=cls.length?` class="${cls.join(' ')}"`:'';
   const cells=cols.map(col=>{
     const{group,k,isPf,isGroupFirst}=col;
     const gf=isGroupFirst?'rpt-grp-first':'';
@@ -1994,6 +1996,7 @@ function buildRptRow(n,depth,cols,cfg){
       val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
       if(ov)ec='rpt-over-val';
     }else if(group==='rem'){
+      if(removed)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       if(n._remainingCapacity==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }
@@ -2015,11 +2018,12 @@ function buildSectionRows(acDc,cols,cfg){
   // Virtual section roots: nodes in secSet whose parent is not in secSet
   const secRoots=[...secSet].filter(id=>{const pid=nodes[id].parentId;return!pid||!secSet.has(pid);});
   secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+  const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
   const emRem=new Set(),emAdd=new Set();
   const rows=[];
   const ncols=cols.length+1;
   let prevDepth=-1;
-  function visit(id,depth,inRem,inAdd){
+  function visit(id,depth,inRem,inAdd,topBorder){
     const n=nodes[id];if(!n)return;
     const pid=n.parentId??'__root__';
     let nowInRem=inRem,nowInAdd=inAdd;
@@ -2034,11 +2038,11 @@ function buildSectionRows(acDc,cols,cfg){
       if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);nowInRem=true;}
       else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
     }
-    rows.push(buildRptRow(n,depth,cols,cfg));
+    rows.push(buildRptRow(n,depth,cols,cfg,topBorder));
     const children=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
-    children.forEach(cid=>visit(cid,depth+1,nowInRem,nowInAdd));
+    children.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
   }
-  secRoots.forEach(id=>visit(id,0,false,false));
+  secRoots.forEach(id=>visit(id,0,false,false,false));
   return rows.join('');
 }
 function buildPrintR10(){
