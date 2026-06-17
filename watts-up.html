@@ -2026,9 +2026,8 @@ function buildSectionRows(acDc,cols,cfg){
     // Blank spacer when transitioning back up from a deeper branch
     if(prevDepth>depth){
       const ht=Math.max(1.5,7-depth*1.5).toFixed(1);
-      const willHaveLabel=!inRem&&!inAdd&&((n.status==='removed'&&!emRem.has(pid))||(n.status==='new'&&!emAdd.has(pid)));
-      const bg=willHaveLabel?'background:transparent !important':'background:#bbb !important';
-      rows.push(`<tr style="height:${ht}pt"><td colspan="${ncols}" style="border:none;padding:0;${bg}"></td></tr>`);
+      const lw=Math.max(0.75,3-depth*0.5).toFixed(2);
+      rows.push(`<tr style="height:${ht}pt"><td colspan="${ncols}" style="border:none;border-bottom:${lw}pt solid #666;padding:0;background:transparent"></td></tr>`);
     }
     prevDepth=depth;
     if(!inRem&&!inAdd){
