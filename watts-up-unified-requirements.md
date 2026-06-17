@@ -1,6 +1,6 @@
 # Watts Up — Unified Requirements
 Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-9-requirements.txt
-Last updated: 2026-06-15 (through Revision 11)
+Last updated: 2026-06-16 (through Revision 13)
 
 ---
 
@@ -320,13 +320,13 @@ Parent pre-set to "No Parent (New Root)".
 
 ---
 
-## 13. Print / Export Report (Revision 10)
+## 13. Print / Export Report (Revisions 10–13)
 
 ### 13.1 Print Settings Dialog
 Clicking "Print Report" opens a settings dialog before printing. The dialog contains:
 - **AC Summary — Columns to Include**: checkboxes for each sub-unit under each group (§13.2)
 - **DC Summary — Columns to Include**: checkboxes for each sub-unit under each group (§13.3)
-- **Options**: Conv IN NC-only toggle; Show bar charts toggle
+- **Options**: Conv IN NC-only toggle
 - Buttons: Reset to Defaults | Cancel | Print
 
 ### 13.2 AC Report Column Groups and Defaults
@@ -334,7 +334,7 @@ All AC groups offer A, VA, W, VAR, pf for selection.
 
 | Group | Default units selected |
 |---|---|
-| Rating / Capacity | A, VA |
+| Rating / Capacity | VA |
 | Existing Load | VA, W, VAR, pf |
 | Added (Removed) | W, VAR |
 | Net Change | W, VAR |
@@ -379,21 +379,69 @@ AC section first if the first root node is AC; DC section first otherwise. Warni
 follows. Section labels include voltage: e.g., "115 VAC Summary" or "28 VDC Summary" (derived
 from the root node voltage; falls back to "AC Summary" / "DC Summary" if no root voltage).
 
-### 13.10 Tree Grouping Within Sections
+### 13.10 Tree Grouping, Layout, and Visual Hierarchy
+
 Within each parent's children, items are ordered: existing first, then a "Removed" label row
 followed by removed items, then an "Added" label row followed by new items. Label rows span
 the full table width at the same indentation as the items they introduce.
 
-### 13.11 Status Formatting
-- Removed items: description in italic, subdued color
+**Label suppression**: once a "Removed" or "Added" label has been emitted for a given parent,
+all descendants in that branch inherit the label context — no additional labels are inserted
+for their children.
+
+**Depth-based font sizes**: row font size = max(6.5, 8.5 − depth × 0.5) pt. Depth 0 rows
+render at 8.5 pt; each additional level reduces by 0.5 pt, with a floor of 6.5 pt (reached at
+depth ≥ 4). The font size applies to the entire row — description and all numeric cells.
+
+**Branch-transition spacer rows**: when the tree traversal returns to a shallower depth (a new
+sibling branch starts), a blank spacer row is inserted before the first node at the shallower
+level. Spacer height = max(1.5, 7 − depth × 1.5) pt; bottom border weight =
+max(0.75, 3 − depth × 0.5) pt solid. Spacer rows are not inserted before "Removed" or "Added"
+label rows.
+
+**Parent-child separator border**: when a parent node and its first child both have non-zero
+net changes (the child contributes to the parent's net change), a 0.75 pt top border is drawn
+on the child's row to visually separate the parent-child boundary.
+
+**Header**: the top-left header cell (description column) is blank — no "Component" label.
+
+### 13.11 Status Formatting and Column Suppression
+
+**Row text formatting:**
+- Removed items: description in italic, black font
 - New items: description in bold
 - No strikethrough
 
+**Column suppression by status** (live summary table and print report):
+
+| Item status | Existing Load | New Load | Remaining |
+|---|---|---|---|
+| Existing | shown | shown | shown |
+| New | — | shown | shown |
+| Removed | shown | — | — |
+
+New items have no pre-modification load to display; removed items have no post-modification
+state to display.
+
 ---
 
-## 14. Future Enhancements (Deferred)
+## 14. Future Enhancements
+
+### 14.1 Planned — Revision 14: References and Notes
+
+- **Document reference field** on any node: free-text reference to an associated document
+  (drawing number, installation manual section, spec reference, STC document number, etc.).
+  Displayed alongside the node label in the summary table and print report.
+- **Notes field** on any node: free-text annotation (e.g., "pending OEM approval",
+  "verify load with vendor", "see installation drawing"). Shown as a secondary line or
+  tooltip in the summary table; included in the print report row.
+- **Report notes section**: optional section at the bottom of the printed report listing
+  all annotated nodes with their notes, keyed back to node description/RefDes.
+
+### 14.2 Deferred
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)
+- Print settings: user-defined rounding schedule
