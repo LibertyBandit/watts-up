@@ -949,16 +949,16 @@ function renderTable() {
       const cap=hasCap(n.type)&&n.capacity;
       const capA=cap?powTd(n.capacity,'a'):naTd();
       const capW=cap?powTd(n.capacity,'w'):naTd();
-      const exA=hasCap(n.type)?powTd(n.existingLoad,'a'):naTd();
-      const exW=hasCap(n.type)?powTd(n.existingLoad,'w'):naTd();
+      const exA=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'a'):naTd();
+      const exW=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'w'):naTd();
       const ldA=isLoad(n.type)?powTd(n.loadValue,'a'):naTd();
       const ldW=isLoad(n.type)?powTd(n.loadValue,'w'):naTd();
       const ncA=!isLoad(n.type)?valPow(n._netChange,'a',false):naTd();
       const ncW=!isLoad(n.type)?valPow(n._netChange,'w',false):naTd();
-      const nlA=hasCap(n.type)?valPow(n._newLoad,'a',ov):naTd();
-      const nlW=hasCap(n.type)?valPow(n._newLoad,'w',ov):naTd();
-      const remA=n._remainingCapacity!==null?valPow(n._remainingCapacity,'a',false):naTd();
-      const remW=n._remainingCapacity!==null?valPow(n._remainingCapacity,'w',false):naTd();
+      const nlA=hasCap(n.type)&&n.status!=='removed'?valPow(n._newLoad,'a',ov):naTd();
+      const nlW=hasCap(n.type)&&n.status!=='removed'?valPow(n._newLoad,'w',ov):naTd();
+      const remA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'a',false):naTd();
+      const remW=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'w',false):naTd();
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
         <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
@@ -977,11 +977,11 @@ function renderTable() {
       const cap=hasCap(n.type)&&n.capacity;
       const capA=cap?powTd(n.capacity,'a'):naTd();
       const capVA=cap?powTd(n.capacity,'va'):naTd();
-      const exA=hasCap(n.type)?powTd(n.existingLoad,'a'):naTd();
-      const exVA=hasCap(n.type)?powTd(n.existingLoad,'va'):naTd();
-      const exW=hasCap(n.type)?powTd(n.existingLoad,'w'):naTd();
-      const exVAR=hasCap(n.type)?powTd(n.existingLoad,'var'):naTd();
-      const exPF=hasCap(n.type)?powTd(n.existingLoad,'pf'):naTd();
+      const exA=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'a'):naTd();
+      const exVA=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'va'):naTd();
+      const exW=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'w'):naTd();
+      const exVAR=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'var'):naTd();
+      const exPF=hasCap(n.type)&&n.status!=='new'?powTd(n.existingLoad,'pf'):naTd();
       const ldA=isLoad(n.type)?powTd(n.loadValue,'a'):naTd();
       const ldVA=isLoad(n.type)?powTd(n.loadValue,'va'):naTd();
       const ldW=isLoad(n.type)?powTd(n.loadValue,'w'):naTd();
@@ -992,13 +992,13 @@ function renderTable() {
       const ncW=!isLoad(n.type)?valPow(n._netChange,'w',false):naTd();
       const ncVAR=!isLoad(n.type)?valPow(n._netChange,'var',false):naTd();
       const ncPF=!isLoad(n.type)?powTd(n._netChange,'pf'):naTd();
-      const nlA=hasCap(n.type)?valPow(n._newLoad,'a',ov):naTd();
-      const nlVA=hasCap(n.type)?valPow(n._newLoad,'va',ov):naTd();
-      const nlW=hasCap(n.type)?valPow(n._newLoad,'w',ov):naTd();
-      const nlVAR=hasCap(n.type)?valPow(n._newLoad,'var',ov):naTd();
-      const nlPF=hasCap(n.type)?powTd(n._newLoad,'pf'):naTd();
-      const remA=n._remainingCapacity!==null?valPow(n._remainingCapacity,'a',false):naTd();
-      const remVA=n._remainingCapacity!==null?valPow(n._remainingCapacity,'va',false):naTd();
+      const nlA=hasCap(n.type)&&n.status!=='removed'?valPow(n._newLoad,'a',ov):naTd();
+      const nlVA=hasCap(n.type)&&n.status!=='removed'?valPow(n._newLoad,'va',ov):naTd();
+      const nlW=hasCap(n.type)&&n.status!=='removed'?valPow(n._newLoad,'w',ov):naTd();
+      const nlVAR=hasCap(n.type)&&n.status!=='removed'?valPow(n._newLoad,'var',ov):naTd();
+      const nlPF=hasCap(n.type)&&n.status!=='removed'?powTd(n._newLoad,'pf'):naTd();
+      const remA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'a',false):naTd();
+      const remVA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'va',false):naTd();
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
         <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
@@ -1984,7 +1984,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder){
     if(isConvIn&&cfg.convInNcOnly&&group!=='nc')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
     let val=null;let isNeg=false;let ec='';
     if(group==='cap'){if(!hasC||!n.capacity)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.capacity[k];}
-    else if(group==='exload'){if(!hasC)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.existingLoad?.[k];}
+    else if(group==='exload'){if(!hasC||n.status==='new')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.existingLoad?.[k];}
     else if(group==='added'){
       if(!isLd||n.status==='existing')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
@@ -1992,7 +1992,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder){
       if(isLd)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._netChange?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }else if(group==='newload'){
-      if(!hasC)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+      if(!hasC||removed)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
       if(ov)ec='rpt-over-val';
     }else if(group==='rem'){
