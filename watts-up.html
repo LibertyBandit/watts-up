@@ -183,6 +183,66 @@
     }
     .hidden{display:none !important}
     .empty-state{padding:2rem;text-align:center;color:var(--text-muted);font-size:.82rem}
+    /* ── TABS ── */
+    #tab-bar{flex-shrink:0;background:var(--bg-secondary);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;padding:0 1rem;gap:0}
+    .tab-btn{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:.45rem .9rem;font-size:.82rem;color:var(--text-secondary);cursor:pointer;margin-bottom:-1px}
+    .tab-btn:hover{color:var(--text-primary)}
+    .tab-btn.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue);font-weight:600}
+    /* ── DOCUMENT PANEL ── */
+    #doc-panel{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:1.2rem}
+    .doc-section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:.3rem;margin-bottom:.6rem}
+    .doc-identity-form{display:flex;flex-wrap:wrap;gap:.4rem .9rem;align-items:center}
+    .doc-identity-form label{display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text-secondary);white-space:nowrap}
+    .doc-identity-form input{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.18rem .4rem;font-size:.82rem;font-family:inherit}
+    .doc-identity-form input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .doc-list{display:flex;flex-direction:column;gap:.45rem}
+    .doc-list-item{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:.5rem .65rem;display:flex;flex-direction:column;gap:.25rem}
+    .doc-list-item-row{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+    .doc-list-item input{background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit}
+    .doc-list-item input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .doc-item-num{font-size:.78rem;font-weight:700;color:var(--accent-blue);min-width:22px;flex-shrink:0}
+    .doc-item-lbl{font-size:.72rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
+    .doc-item-opt{font-size:.72rem;color:var(--text-muted);opacity:.65;white-space:nowrap;flex-shrink:0}
+    .doc-list-btns{display:flex;gap:.25rem;flex-shrink:0;margin-left:auto}
+    .doc-list-btns button{font-size:.72rem;padding:.12rem .35rem;background:var(--bg-hover);color:var(--text-secondary);border:1px solid var(--border);border-radius:4px;cursor:pointer}
+    .doc-list-btns button:hover{color:var(--text-primary)}
+    .doc-add-btn{align-self:flex-start;margin-top:.15rem;font-size:.78rem;padding:.25rem .65rem}
+    .doc-text-pair{display:flex;gap:1rem}
+    .doc-text-pair .doc-ta-group{flex:1}
+    .doc-ta-group{display:flex;flex-direction:column;gap:.3rem}
+    .doc-ta-group label{font-size:.78rem;color:var(--text-secondary);font-weight:500}
+    .doc-ta-group textarea{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:.4rem .55rem;font-size:.82rem;font-family:inherit;resize:vertical;min-height:80px}
+    .doc-ta-group textarea:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .doc-empty-hint{font-size:.76rem;color:var(--text-muted);font-style:italic;padding:.2rem 0}
+    /* ── NOTES & REFS IN EDIT MODAL ── */
+    .nr-toggle{display:flex;align-items:center;gap:.4rem;cursor:pointer;user-select:none;padding-bottom:.2rem;border-bottom:1px solid var(--border);margin-top:.3rem}
+    .nr-toggle:hover .nr-toggle-label{color:var(--text-secondary)}
+    .nr-toggle-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)}
+    .nr-toggle-arrow{font-size:.65rem;color:var(--text-muted);transition:transform .15s}
+    .nr-toggle-arrow.open{transform:rotate(90deg)}
+    .nr-body{display:flex;flex-direction:column;gap:.5rem;margin-top:.4rem}
+    .nr-note-item{display:flex;gap:.35rem;align-items:center}
+    .nr-note-item input{flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit}
+    .nr-note-item input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .nr-ref-item{padding:.28rem .45rem;border-radius:4px;border:1px solid var(--border);background:var(--bg-primary);display:flex;flex-direction:column;gap:.2rem}
+    .nr-ref-item>label{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--text-secondary);cursor:pointer}
+    .nr-ref-item>label input[type=checkbox]{cursor:pointer;flex-shrink:0}
+    .nr-ref-comment{display:flex;align-items:center;gap:.4rem;margin-left:1.4rem}
+    .nr-ref-comment span{font-size:.72rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
+    .nr-ref-comment input{flex:1;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.18rem .4rem;font-size:.76rem;font-family:inherit}
+    .nr-ref-comment input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .nr-empty-hint{font-size:.76rem;color:var(--text-muted);font-style:italic;padding:.15rem 0}
+    /* ── PRINT: NOTES ADDITIONS ── */
+    @media print{
+      .rpt-notes-col{width:24pt;text-align:center !important;padding:1.5pt 2pt !important}
+      .rpt-note-marker{font-size:5.5pt;color:#333}
+      .rpt-annot-section{margin-top:.4rem;font-size:8pt}
+      .rpt-annot-section h3{font-size:8.5pt;font-weight:700;margin-bottom:.15rem;border-bottom:1pt solid #888;padding-bottom:.1rem;color:#111;text-transform:uppercase;letter-spacing:.2pt;margin-top:.5rem}
+      .rpt-annot-section ol,.rpt-annot-section ul{padding-left:1.1rem;margin:.1rem 0}
+      .rpt-annot-section li{margin-bottom:.1rem;font-size:7.5pt}
+      .rpt-gen-notes-sec{margin-bottom:.35rem}
+      .rpt-gen-notes-sec ul{padding-left:1.1rem;margin:.1rem 0;font-size:8pt}
+    }
   </style>
 </head>
 <body>
@@ -201,15 +261,10 @@
     </div>
   </header>
 
-  <section id="meta-bar">
-    <form id="meta-form" autocomplete="off">
-      <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
-      <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
-      <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
-      <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
-      <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
-    </form>
-  </section>
+  <div id="tab-bar">
+    <button id="tab-analysis" class="tab-btn active">Analysis</button>
+    <button id="tab-document" class="tab-btn">Document</button>
+  </div>
 
   <div id="warning-banner" class="hidden">
     <div class="banner-header" id="banner-header">
@@ -217,6 +272,47 @@
       <span id="banner-toggle">▲ Collapse</span>
     </div>
     <div class="banner-items" id="banner-items"></div>
+  </div>
+
+  <div id="doc-panel" class="hidden">
+    <div>
+      <div class="doc-section-title">Aircraft &amp; Document Identity</div>
+      <form id="doc-identity-form" class="doc-identity-form" autocomplete="off">
+        <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
+        <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
+        <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
+        <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
+        <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
+        <label>Doc #        <input name="documentNumber"       type="text" placeholder="e.g. RPT1234"></label>
+        <label>Rev          <input name="revisionLevel"        type="text" placeholder="e.g. A" style="width:52px"></label>
+        <label>Prepared by  <input name="preparedBy"           type="text" placeholder="Name"></label>
+        <label>Approved by  <input name="approvedBy"           type="text" placeholder="Name"></label>
+        <label>Rev Date     <input name="revisionDate"         type="text" placeholder="e.g. Jun-20-2026"></label>
+      </form>
+    </div>
+    <div>
+      <div class="doc-section-title">References</div>
+      <div id="doc-ref-list" class="doc-list"></div>
+      <button id="doc-add-ref" class="btn-default doc-add-btn">+ Add Reference</button>
+    </div>
+    <div>
+      <div class="doc-section-title">General Notes</div>
+      <div id="doc-note-list" class="doc-list"></div>
+      <button id="doc-add-note" class="btn-default doc-add-btn">+ Add Note</button>
+    </div>
+    <div>
+      <div class="doc-section-title">Section Text</div>
+      <div class="doc-text-pair">
+        <div class="doc-ta-group">
+          <label>Introduction</label>
+          <textarea id="doc-intro" rows="6" placeholder="Describe the scope and purpose of this analysis…"></textarea>
+        </div>
+        <div class="doc-ta-group">
+          <label>Compliance Statement</label>
+          <textarea id="doc-compliance" rows="6" placeholder="State the applicable regulation and compliance finding…"></textarea>
+        </div>
+      </div>
+    </div>
   </div>
 
   <main id="main-layout">
@@ -428,6 +524,20 @@
             <h3>Siblings (other children of same parent)</h3>
             <div id="ef-sibling-body"></div>
           </div>
+
+          <div id="ef-notes-refs">
+            <div class="nr-toggle" id="ef-nr-toggle">
+              <span class="nr-toggle-arrow" id="ef-nr-arrow">▶</span>
+              <span class="nr-toggle-label">Notes &amp; References</span>
+            </div>
+            <div class="nr-body hidden" id="ef-nr-body">
+              <div class="section-label" style="margin-top:.1rem">Row Notes</div>
+              <div id="ef-row-notes"></div>
+              <button type="button" id="ef-add-note" class="btn-default" style="align-self:flex-start;font-size:.75rem;padding:.2rem .55rem;margin-top:.15rem">+ Add Note</button>
+              <div class="section-label" style="margin-top:.35rem">Row References</div>
+              <div id="ef-row-refs"></div>
+            </div>
+          </div>
         </div><!-- /edit-form -->
 
         <!-- ADD FORM -->
@@ -636,7 +746,7 @@ let state=null;
 
 function makeNode(type,parentId,overrides={}) {
   const node={id:uid(),type,description:'',refDes:'',status:'existing',parentId,convRole:null,
-    voltage:null,acDc:'dc',_netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
+    voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],_netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
   if (hasCap(type)) {node.capacity=null;node.existingLoad=mkPow(0,0,0,0,1);node.netChangeOverride=null;}
   if (isConv(type)) {node.efficiency=0.85;node.convPf=(type==='TRU'?0.95:1.0);}
   if (isLoad(type)) {node.loadValue=mkPow();}
@@ -646,7 +756,9 @@ function makeNode(type,parentId,overrides={}) {
 function freshState() {
   const rid=uid();
   const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115});
-  return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise'},
+  return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',
+    documentNumber:'',revisionLevel:'',preparedBy:'',approvedBy:'',revisionDate:'',
+    introText:'',generalNotes:[],complianceText:'',references:[]},
     nodes:{[rid]:root},rootIds:[rid],lastSaved:null};
 }
 
@@ -656,7 +768,20 @@ function migrateLegacy(p) {
     const roots=Object.values(p.nodes||{}).filter(n=>n.parentId===null);
     p.rootIds=roots.map(n=>n.id);
   }
+  // Default new meta fields
+  const m=p.meta||{};
+  if (!m.documentNumber)  m.documentNumber='';
+  if (!m.revisionLevel)   m.revisionLevel='';
+  if (!m.preparedBy)      m.preparedBy='';
+  if (!m.approvedBy)      m.approvedBy='';
+  if (!m.revisionDate)    m.revisionDate='';
+  if (!m.introText)       m.introText='';
+  if (!m.complianceText)  m.complianceText='';
+  if (!Array.isArray(m.generalNotes)) m.generalNotes=[];
+  if (!Array.isArray(m.references))   m.references=[];
   Object.values(p.nodes||{}).forEach(n=>{
+    if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
+    if (!Array.isArray(n.rowRefs))  n.rowRefs=[];
     if (!n.acDc) n.acDc='dc';
     if (n.voltage===undefined) n.voltage=null;
     if (isConv(n.type)&&n.convPf===undefined) n.convPf=(n.type==='TRU'?0.95:1.0);
@@ -1068,17 +1193,166 @@ function renderWarnings() {
   document.getElementById('banner-title').textContent=`⚠ ${ws.length} Warning${ws.length>1?'s':''}`;
   document.getElementById('banner-items').innerHTML=ws.map(w=>`<span>• ${w.message}</span>`).join('');
 }
+const DOC_IDENTITY_KEYS=['make','model','marketingDesignation','serialNumber','flightPhase',
+  'documentNumber','revisionLevel','preparedBy','approvedBy','revisionDate'];
+
 function renderMeta() {
   if (!state) return;
-  const f=document.getElementById('meta-form');
-  Object.entries(state.meta).forEach(([k,v])=>{ const el=f.elements[k]; if (el&&el.value!==(v||'')) el.value=v||''; });
+  const f=document.getElementById('doc-identity-form');
+  if (!f) return;
+  DOC_IDENTITY_KEYS.forEach(k=>{const el=f.elements[k];if(el&&el.value!==(state.meta[k]||''))el.value=state.meta[k]||'';});
 }
+
+function renderRefList() {
+  if (!state) return;
+  const el=document.getElementById('doc-ref-list');if(!el)return;
+  const refs=state.meta.references||[];
+  if (!refs.length){el.innerHTML='<div class="doc-empty-hint">No references yet. Click "+ Add Reference" to add one.</div>';return;}
+  el.innerHTML='';
+  refs.forEach((ref,i)=>{
+    const item=document.createElement('div');item.className='doc-list-item';
+    item.innerHTML=`
+      <div class="doc-list-item-row">
+        <span class="doc-item-num">[${i+1}]</span>
+        <span class="doc-item-lbl">Org</span><input data-field="organization" value="${esc(ref.organization||'')}" placeholder="Organization / Corporate Author" style="flex:1.2;min-width:100px">
+        <span class="doc-item-lbl">Doc #</span><input data-field="docNumber" value="${esc(ref.docNumber||'')}" placeholder="Document number" style="flex:1;min-width:80px">
+        <div class="doc-list-btns">
+          <button class="ref-up" title="Move up">↑</button>
+          <button class="ref-dn" title="Move down">↓</button>
+          <button class="ref-del" title="Remove" style="color:var(--accent-red)">✕</button>
+        </div>
+      </div>
+      <div class="doc-list-item-row">
+        <span style="min-width:22px"></span>
+        <span class="doc-item-lbl">Title</span><input data-field="title" value="${esc(ref.title||'')}" placeholder="Document title" style="flex:2;min-width:140px">
+        <span class="doc-item-opt">Rev</span><input data-field="revision" value="${esc(ref.revision||'')}" placeholder="optional" style="width:62px">
+        <span class="doc-item-opt">Date</span><input data-field="date" value="${esc(ref.date||'')}" placeholder="optional" style="width:120px">
+      </div>`;
+    item.querySelectorAll('input[data-field]').forEach(inp=>{
+      inp.addEventListener('input',()=>{ref[inp.dataset.field]=inp.value;persist();});
+    });
+    item.querySelector('.ref-up').addEventListener('click',()=>{
+      if(i===0)return;[refs[i-1],refs[i]]=[refs[i],refs[i-1]];persist();renderRefList();
+    });
+    item.querySelector('.ref-dn').addEventListener('click',()=>{
+      if(i>=refs.length-1)return;[refs[i],refs[i+1]]=[refs[i+1],refs[i]];persist();renderRefList();
+    });
+    item.querySelector('.ref-del').addEventListener('click',()=>{
+      if(!confirm(`Remove reference [${i+1}]?`))return;
+      refs.splice(i,1);persist();renderRefList();
+    });
+    el.appendChild(item);
+  });
+}
+
+function renderNoteList() {
+  if (!state) return;
+  const el=document.getElementById('doc-note-list');if(!el)return;
+  const notes=state.meta.generalNotes||[];
+  if (!notes.length){el.innerHTML='<div class="doc-empty-hint">No general notes yet. Click "+ Add Note" to add one.</div>';return;}
+  el.innerHTML='';
+  notes.forEach((note,i)=>{
+    const item=document.createElement('div');item.className='doc-list-item';
+    item.innerHTML=`<div class="doc-list-item-row">
+      <input value="${esc(note)}" placeholder="Note text" style="flex:1">
+      <div class="doc-list-btns">
+        <button class="note-up">↑</button><button class="note-dn">↓</button>
+        <button class="note-del" style="color:var(--accent-red)">✕</button>
+      </div></div>`;
+    const inp=item.querySelector('input');
+    inp.addEventListener('input',()=>{notes[i]=inp.value;persist();});
+    item.querySelector('.note-up').addEventListener('click',()=>{if(i===0)return;[notes[i-1],notes[i]]=[notes[i],notes[i-1]];persist();renderNoteList();});
+    item.querySelector('.note-dn').addEventListener('click',()=>{if(i>=notes.length-1)return;[notes[i],notes[i+1]]=[notes[i+1],notes[i]];persist();renderNoteList();});
+    item.querySelector('.note-del').addEventListener('click',()=>{notes.splice(i,1);persist();renderNoteList();});
+    el.appendChild(item);
+  });
+}
+
+function renderDocPanel() {
+  renderMeta();
+  renderRefList();
+  renderNoteList();
+  const intro=document.getElementById('doc-intro');
+  const comp=document.getElementById('doc-compliance');
+  if(state&&intro&&intro.value!==(state.meta.introText||''))intro.value=state.meta.introText||'';
+  if(state&&comp&&comp.value!==(state.meta.complianceText||''))comp.value=state.meta.complianceText||'';
+}
+
 function updateSaveEl() {
   const el=document.getElementById('save-indicator');
   if (!state?.lastSaved){el.textContent='';return;}
   el.textContent=`Saved ${new Date(state.lastSaved).toLocaleTimeString()}`;
 }
-function renderAll(){renderMeta();renderTree();renderTable();renderWarnings();updateSaveEl();}
+function renderAll(){renderDocPanel();renderTree();renderTable();renderWarnings();updateSaveEl();}
+// ── NOTES & REFS MODAL HELPERS ───────────────────────────────────────────────
+function renderEfNotesRefs(n) {
+  const notesEl=document.getElementById('ef-row-notes');
+  const refsEl=document.getElementById('ef-row-refs');
+  if (!notesEl||!refsEl) return;
+
+  // Row Notes — render from live array stored on the DOM element
+  notesEl._data=(n.rowNotes||[]).slice();
+  function redrawNotes() {
+    notesEl.innerHTML='';
+    notesEl._data.forEach((txt,i)=>{
+      const div=document.createElement('div');div.className='nr-note-item';
+      div.innerHTML=`<input type="text" value="${esc(txt)}" placeholder="Note text">
+        <button type="button" class="btn-node" style="color:var(--accent-red);padding:.12rem .38rem">✕</button>`;
+      div.querySelector('input').addEventListener('input',e=>{notesEl._data[i]=e.target.value;});
+      div.querySelector('button').addEventListener('click',()=>{notesEl._data.splice(i,1);redrawNotes();});
+      notesEl.appendChild(div);
+    });
+  }
+  redrawNotes();
+  document.getElementById('ef-add-note').onclick=()=>{
+    notesEl._data.push('');redrawNotes();
+    const inputs=notesEl.querySelectorAll('input');
+    if(inputs.length)inputs[inputs.length-1].focus();
+  };
+
+  // Row References — checklist from meta.references
+  const refs=state.meta.references||[];
+  const existing=n.rowRefs||[];
+  if (!refs.length) {
+    refsEl.innerHTML='<div class="nr-empty-hint">No references defined — add them in the Document tab.</div>';
+    return;
+  }
+  refsEl.innerHTML='';
+  refs.forEach((ref,i)=>{
+    const match=existing.find(r=>r.key===ref.key);
+    const checked=!!match;
+    const comment=match?.comment||'';
+    const div=document.createElement('div');div.className='nr-ref-item';
+    const shortTitle=(ref.title||'').length>55?(ref.title||'').slice(0,55)+'…':(ref.title||'');
+    div.innerHTML=`<label>
+        <input type="checkbox" data-refkey="${esc(ref.key)}"${checked?' checked':''}>
+        <strong>[${i+1}]</strong>&nbsp;${esc(ref.organization||'')}${ref.docNumber?' '+esc(ref.docNumber):''}${shortTitle?' — '+esc(shortTitle):''}
+      </label>
+      <div class="nr-ref-comment"${checked?'':' style="display:none"'}>
+        <span>Comment:</span>
+        <input type="text" value="${esc(comment)}" placeholder="Optional comment for this citation">
+      </div>`;
+    const chk=div.querySelector('input[type=checkbox]');
+    const commentRow=div.querySelector('.nr-ref-comment');
+    chk.addEventListener('change',()=>{commentRow.style.display=chk.checked?'':'none';});
+    refsEl.appendChild(div);
+  });
+}
+
+function collectEfNotes() {
+  return Array.from(document.querySelectorAll('#ef-row-notes .nr-note-item input'))
+    .map(el=>el.value.trim()).filter(Boolean);
+}
+
+function collectEfRefs() {
+  const result=[];
+  document.querySelectorAll('#ef-row-refs input[type=checkbox]:checked').forEach(chk=>{
+    const commentInp=chk.closest('.nr-ref-item')?.querySelector('.nr-ref-comment input');
+    result.push({key:chk.dataset.refkey,comment:commentInp?.value||''});
+  });
+  return result;
+}
+
 // ── MODAL SHARED ─────────────────────────────────────────────────────────────
 let mMode=null, mNode=null, mBlocked=false;
 
@@ -1470,6 +1744,18 @@ function openEdit(nodeId) {
   document.getElementById('btn-calculate').onclick=doEditCalculate;
 
   efRenderSiblings(n.parentId,nodeId);
+  renderEfNotesRefs(n);
+
+  // Nr toggle — reset to collapsed on each open
+  const nrBody=document.getElementById('ef-nr-body');
+  const nrArrow=document.getElementById('ef-nr-arrow');
+  nrBody.classList.add('hidden');
+  nrArrow.classList.remove('open');
+  document.getElementById('ef-nr-toggle').onclick=()=>{
+    const open=nrBody.classList.toggle('hidden');
+    nrArrow.classList.toggle('open',!open);
+  };
+
   document.getElementById('btn-save').disabled=false;
   document.getElementById('modal-overlay').classList.remove('hidden');
   document.getElementById('ef-desc').focus();
@@ -1581,6 +1867,8 @@ function doEditSave() {
       data.loadValue=autoDc(pF('ef-load-a'),pF('ef-load-w'),v);
     }
   }
+  data.rowNotes=collectEfNotes();
+  data.rowRefs=collectEfRefs();
   updateNode(mNode,data);
   closeModal();
 }
@@ -2045,6 +2333,117 @@ function buildSectionRows(acDc,cols,cfg){
   secRoots.forEach(id=>visit(id,0,false,false,false));
   return rows.join('');
 }
+function buildAnnotationMap() {
+  const refs=state.meta.references||[];
+  const refKeyToNum={};refs.forEach((r,i)=>refKeyToNum[r.key]=i+1);
+  let noteCounter=0;
+  const annotMap={};  // nodeId → {marker, noteNums, refEntries}
+  const notesList=[];  // [{num, text}]
+  preOrder(state.rootIds,state.nodes).forEach(id=>{
+    const n=state.nodes[id];if(!n)return;
+    const rn=(n.rowNotes||[]).filter(t=>t.trim());
+    const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
+    if(!rn.length&&!rr.length)return;
+    const noteNums=rn.map(text=>{const num=++noteCounter;notesList.push({num,text});return num;});
+    const refNums=[...new Set(rr.map(r=>refKeyToNum[r.key]).filter(Boolean))];
+    const parts=[];
+    if(noteNums.length)parts.push(noteNums.join(','));
+    if(refNums.length)parts.push(refNums.map(n=>`[${n}]`).join(''));
+    annotMap[id]={marker:parts.join(' '),noteNums,refEntries:rr};
+  });
+  return{annotMap,notesList};
+}
+
+function buildRptHeader(cols,hasAnnot){
+  const runs=[];
+  cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
+  const annotTh=hasAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
+  return `<thead><tr><th class="rpt-left" rowspan="2"></th>${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}${annotTh}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
+}
+
+function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
+  const isProt=NT.PROTECTION.includes(n.type);
+  const isConvIn=n.convRole==='in';
+  const isLd=isLoad(n.type);const hasC=hasCap(n.type);
+  const ws=n._warnings||[];const ov=ws.some(w=>w.code==='W3');const wn=ws.length>0&&!ov;
+  const removed=n.status==='removed';
+  const cfgSide=n.acDc==='ac'?cfg.ac:cfg.dc;
+  const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
+  const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+  const ampSpan=ampInline?`<span style="float:right;color:#555;font-size:6.5pt;margin-left:6pt;white-space:nowrap">(${ampInline} A)</span>`:'';
+  const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
+  const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
+  const cls=[];if(ov)cls.push('rpt-over');else if(wn)cls.push('rpt-warn');if(topBorder)cls.push('rpt-parent-sep');
+  const rowCls=cls.length?` class="${cls.join(' ')}"`:'';
+  const cells=cols.map(col=>{
+    const{group,k,isPf,isGroupFirst}=col;
+    const gf=isGroupFirst?'rpt-grp-first':'';
+    if(isConvIn&&cfg.convInNcOnly&&group!=='nc')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+    let val=null;let isNeg=false;let ec='';
+    if(group==='cap'){if(!hasC||!n.capacity)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.capacity[k];}
+    else if(group==='exload'){if(!hasC||n.status==='new')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;val=n.existingLoad?.[k];}
+    else if(group==='added'){
+      if(!isLd||n.status==='existing')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+      val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
+    }else if(group==='nc'){
+      if(isLd)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+      val=n._netChange?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+    }else if(group==='newload'){
+      if(!hasC||removed)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+      val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+      if(ov)ec='rpt-over-val';
+    }else if(group==='rem'){
+      if(removed)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+      if(n._remainingCapacity==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+      val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+    }
+    if(val==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+    return rptTd(val,isPf||false,isNeg,ec,gf);
+  });
+  const annotCell=annotMap
+    ?(annotMap[n.id]?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annotMap[n.id].marker)}</span></td>`:`<td class="rpt-notes-col"></td>`)
+    :'';
+  return `<tr${rowCls} style="font-size:${fs}pt"><td style="padding-left:${depth*14+3}px">${ampSpan}${descWrap}</td>${cells.join('')}${annotCell}</tr>`;
+}
+
+function buildSectionRows(acDc,cols,cfg,annotMap){
+  const nodes=state.nodes;
+  const statusOrd={existing:0,removed:1,new:2};
+  const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
+  const childrenOf={};
+  secSet.forEach(id=>{
+    const pid=nodes[id].parentId;
+    if(pid&&secSet.has(pid)){if(!childrenOf[pid])childrenOf[pid]=[];childrenOf[pid].push(id);}
+  });
+  const secRoots=[...secSet].filter(id=>{const pid=nodes[id].parentId;return!pid||!secSet.has(pid);});
+  secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+  const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
+  const emRem=new Set(),emAdd=new Set();
+  const rows=[];
+  const ncols=cols.length+1+(annotMap?1:0);
+  let prevDepth=-1;
+  function visit(id,depth,inRem,inAdd,topBorder){
+    const n=nodes[id];if(!n)return;
+    const pid=n.parentId??'__root__';
+    let nowInRem=inRem,nowInAdd=inAdd;
+    if(prevDepth>depth){
+      const ht=Math.max(1.5,7-depth*1.5).toFixed(1);
+      const lw=Math.max(0.75,3-depth*0.5).toFixed(2);
+      rows.push(`<tr style="height:${ht}pt"><td colspan="${ncols}" style="border:none;border-bottom:${lw}pt solid #666;padding:0;background:transparent"></td></tr>`);
+    }
+    prevDepth=depth;
+    if(!inRem&&!inAdd){
+      if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);nowInRem=true;}
+      else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
+    }
+    rows.push(buildRptRow(n,depth,cols,cfg,topBorder,annotMap));
+    const kids=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+    kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
+  }
+  secRoots.forEach(id=>visit(id,0,false,false,false));
+  return rows.join('');
+}
+
 function buildPrintR10(){
   if(!state)return;
   if(!printCfg)printCfg=defaultPrintCfg();
@@ -2053,26 +2452,58 @@ function buildPrintR10(){
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
   const vLbl=(acDc)=>{const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??Object.values(state.nodes).find(n=>n.acDc===acDc&&n.voltage!=null);return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;};
+
+  const {annotMap,notesList}=buildAnnotationMap();
+  const hasAnnot=Object.keys(annotMap).length>0;
+  const am=hasAnnot?annotMap:null;
+
   const mkTbl=(acDc,cols,label)=>{
     if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
-    return `<div class="rpt-section-hdr">${label}</div><table class="rpt-table">${buildRptHeader(cols)}<tbody>${buildSectionRows(acDc,cols,cfg)}</tbody></table>`;
+    return `<div class="rpt-section-hdr">${label}</div><table class="rpt-table">${buildRptHeader(cols,hasAnnot)}<tbody>${buildSectionRows(acDc,cols,cfg,am)}</tbody></table>`;
   };
   const al=vLbl('ac'),dl=vLbl('dc');
   const acSec=mkTbl('ac',acCols,al?`${al} Summary`:'AC Summary');
   const dcSec=mkTbl('dc',dcCols,dl?`${dl} Summary`:'DC Summary');
+
+  // General Notes section
+  const gn=m.generalNotes||[];
+  const gnSec=gn.length?`<div class="rpt-gen-notes-sec rpt-annot-section"><h3>General Notes</h3><ul>${gn.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:'';
+
+  // References section
+  const refs=m.references||[];
+  const refSec=refs.length?`<div class="rpt-annot-section"><h3>References</h3><ol>${refs.map(r=>{
+    const parts=[r.organization,r.docNumber,r.title?`<em>${esc(r.title)}</em>`:null,r.revision?`Revision ${esc(r.revision)}`:null,r.date?esc(r.date):null];
+    return `<li>${parts.filter(Boolean).join('. ')}.</li>`;
+  }).join('')}</ol></div>`:'';
+
+  // Row notes section
+  const notesSec=notesList.length?`<div class="rpt-annot-section"><h3>Notes</h3><ol>${notesList.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol></div>`:'';
+
+  // Reference comments section (per-row comments on citations)
+  const commentItems=[];
+  Object.values(annotMap).forEach(a=>{
+    a.refEntries.filter(r=>r.comment?.trim()).forEach(r=>{
+      const refNum=(state.meta.references||[]).findIndex(x=>x.key===r.key)+1;
+      if(refNum>0)commentItems.push(`Ref. [${refNum}]: ${esc(r.comment.trim())}`);
+    });
+  });
+  const commentSec=commentItems.length?`<div class="rpt-annot-section"><h3>Reference Notes</h3><ul>${commentItems.map(t=>`<li>${t}</li>`).join('')}</ul></div>`:'';
+
   const ws=allWarnings();
   const warnSec=ws.length?`<div class="rpt-section-hdr">Warnings</div><ul class="rpt-warn-list">${ws.map(w=>`<li>${w.message}</li>`).join('')}</ul>`:'';
+
   document.getElementById('print-region').innerHTML=`
     <div class="rpt-header">
-      <div class="rpt-title">Aircraft Electrical Load Analysis</div>
+      <div class="rpt-title">Aircraft Electrical Load Analysis${m.documentNumber?' &mdash; '+esc(m.documentNumber):''}</div>
       <div class="rpt-meta">
         <span><b>Make:</b> ${esc(m.make||'—')}</span><span><b>Model:</b> ${esc(m.model||'—')}</span>
         <span><b>Designation:</b> ${esc(m.marketingDesignation||'—')}</span>
         <span><b>Serial #:</b> ${esc(m.serialNumber||'—')}</span>
         <span><b>Flight Phase:</b> ${esc(m.flightPhase||'—')}</span>
+        ${m.revisionLevel?`<span><b>Rev:</b> ${esc(m.revisionLevel)}</span>`:''}
         <span><b>Date:</b> ${new Date().toLocaleDateString()}</span>
       </div>
-    </div>${acFirst?acSec+dcSec:dcSec+acSec}${warnSec}`;
+    </div>${gnSec}${refSec}${acFirst?acSec+dcSec:dcSec+acSec}${notesSec}${commentSec}${warnSec}`;
 }
 
 // ── PRINT SETTINGS ───────────────────────────────────────────────────────────
@@ -2141,9 +2572,59 @@ function initEvents() {
     document.querySelectorAll('.tree-children').forEach(u=>u.classList.add('collapsed'));
     document.querySelectorAll('.toggle-btn:not(.leaf)').forEach(b=>b.classList.add('is-collapsed'));
   });
-  let metaT;
-  document.getElementById('meta-form').addEventListener('input',e=>{
-    clearTimeout(metaT);metaT=setTimeout(()=>{if (!state) return;const k=e.target.name;if (k&&k in state.meta){state.meta[k]=e.target.value;persist();}},350);
+  // Tab switching
+  document.getElementById('tab-analysis').addEventListener('click',()=>{
+    document.getElementById('tab-analysis').classList.add('active');
+    document.getElementById('tab-document').classList.remove('active');
+    document.getElementById('main-layout').classList.remove('hidden');
+    document.getElementById('doc-panel').classList.add('hidden');
+  });
+  document.getElementById('tab-document').addEventListener('click',()=>{
+    document.getElementById('tab-document').classList.add('active');
+    document.getElementById('tab-analysis').classList.remove('active');
+    document.getElementById('doc-panel').classList.remove('hidden');
+    document.getElementById('main-layout').classList.add('hidden');
+    renderDocPanel();
+  });
+
+  // Document identity form
+  let docIdT;
+  document.getElementById('doc-identity-form').addEventListener('input',e=>{
+    clearTimeout(docIdT);docIdT=setTimeout(()=>{
+      if (!state) return;
+      const k=e.target.name;
+      if (k&&k in state.meta){state.meta[k]=e.target.value;persist();}
+    },350);
+  });
+
+  // Section text textareas
+  let introT,compT;
+  document.getElementById('doc-intro').addEventListener('input',e=>{
+    clearTimeout(introT);introT=setTimeout(()=>{if(state){state.meta.introText=e.target.value;persist();}},350);
+  });
+  document.getElementById('doc-compliance').addEventListener('input',e=>{
+    clearTimeout(compT);compT=setTimeout(()=>{if(state){state.meta.complianceText=e.target.value;persist();}},350);
+  });
+
+  // Add Reference
+  document.getElementById('doc-add-ref').addEventListener('click',()=>{
+    if (!state) return;
+    if (!state.meta.references) state.meta.references=[];
+    state.meta.references.push({key:uid(),organization:'',docNumber:'',title:'',revision:'',date:''});
+    persist();renderRefList();
+    // Focus the first field of the new entry
+    const items=document.querySelectorAll('#doc-ref-list .doc-list-item');
+    if(items.length)items[items.length-1].querySelector('input')?.focus();
+  });
+
+  // Add General Note
+  document.getElementById('doc-add-note').addEventListener('click',()=>{
+    if (!state) return;
+    if (!state.meta.generalNotes) state.meta.generalNotes=[];
+    state.meta.generalNotes.push('');
+    persist();renderNoteList();
+    const items=document.querySelectorAll('#doc-note-list .doc-list-item');
+    if(items.length)items[items.length-1].querySelector('input')?.focus();
   });
   document.getElementById('modal-close' ).addEventListener('click',closeModal);
   document.getElementById('btn-cancel'  ).addEventListener('click',closeModal);

@@ -425,20 +425,147 @@ state to display.
 
 ---
 
-## 14. Future Enhancements
+## 14. Revision 14 — Document Metadata, References, and Notes
 
-### 14.1 Planned — Revision 14: References and Notes
+### 14.1 New `meta` fields
 
-- **Document reference field** on any node: free-text reference to an associated document
-  (drawing number, installation manual section, spec reference, STC document number, etc.).
-  Displayed alongside the node label in the summary table and print report.
-- **Notes field** on any node: free-text annotation (e.g., "pending OEM approval",
-  "verify load with vendor", "see installation drawing"). Shown as a secondary line or
-  tooltip in the summary table; included in the print report row.
-- **Report notes section**: optional section at the bottom of the printed report listing
-  all annotated nodes with their notes, keyed back to node description/RefDes.
+**Document identity:**
+- `documentNumber` — e.g., "RPT1234"
+- `revisionLevel` — e.g., "A", "B", "1"
+- `preparedBy` — free text
+- `approvedBy` — free text
+- `revisionDate` — free text (e.g., "Jun-20-2026"; not a date picker)
 
-### 14.2 Deferred
+**Document section prose** (editable in Watts Up; later round-tripped via Word content controls):
+- `introText` — multi-line free text. Default: blank.
+- `generalNotes` — ordered array of strings (bulleted in report). Default: `[]`.
+- `complianceText` — multi-line free text. Default: blank.
+
+**Reference list:**
+- `references` — ordered array of reference objects (see §14.2). Default: `[]`.
+
+### 14.2 Reference object schema
+
+```json
+{
+  "key": "<uuid>",
+  "organization": "Gulfstream",
+  "docNumber": "GC514696308",
+  "title": "Supplementary Electrical Load Analysis",
+  "revision": "–",
+  "date": "September 20, 2006"
+}
+```
+- `key` — internal stable UUID; used by per-node `rowRefs` to survive reordering
+- `organization`, `docNumber`, `title` — required
+- `revision`, `date` — optional; omit or blank if not applicable
+- Display number (1, 2, 3…) is derived from list order at render time, not stored
+
+### 14.3 New per-node fields
+
+Added to every node:
+- `rowNotes` — ordered array of strings (0–N short notes tied to this row)
+- `rowRefs` — ordered array of `{ key: "<uuid>", comment: "<string>" }` objects
+  - `key` references an entry in `meta.references`
+  - `comment` is optional; blank = no comment
+
+### 14.4 Top-level tab layout
+
+The app gains two top-level tabs replacing the current single-panel layout:
+
+- **Analysis** tab — the current tree + summary table view (unchanged)
+- **Document** tab — all document metadata, references, notes, and section prose
+
+The aircraft metadata bar (Make, Model, Designation, Serial #, Flight Phase) moves into the
+Document tab. The toolbar (New, Import, Export JSON, Print Report) remains always visible.
+
+### 14.5 Document tab layout
+
+Four sub-sections within the Document tab:
+
+**A. Aircraft & Document Identity** — compact inline fields:
+`Make` | `Model` | `Designation` | `Serial #` | `Flight Phase` | `Doc #` | `Rev` | `Prepared by` | `Approved by` | `Rev Date`
+
+**B. References** — managed ordered list. Each entry shows:
+```
+[1]  Organization  [Gulfstream              ]
+     Doc Number    [GC514696308             ]
+     Title         [Supplementary Electrical Load Analysis     ]
+     Revision      [–        ]   Date  [September 20, 2006]
+     [↑] [↓] [✕]
+```
+- `+ Add Reference` button appends a blank entry
+- Numbers are display-only, derived from list position
+- Revision and Date fields are visually de-emphasized (optional)
+
+**C. General Notes** — managed ordered list of text inputs with `[↑] [↓] [✕]` controls.
+`+ Add Note` button. Notes are bulleted (not numbered) in the report.
+
+**D. Section Text** — two labeled textareas:
+- `Introduction` (maps to `introText`)
+- `Compliance Statement` (maps to `complianceText`)
+
+### 14.6 Per-row Notes & References in Edit Item dialog
+
+New collapsible section **"Notes & References"** added below numeric fields:
+
+**Row Notes:** `+ Add Note` list — each entry is a text input with a remove button.
+
+**Row References:** checklist of all entries in `meta.references`, shown as:
+```
+☑  [1] Gulfstream GC514696308 — Supplementary Electrical Load Analysis
+        Comment: [Load calculated using values from Table 3-2          ]
+☐  [2] Nextant NT0078-ELA0-0200 — ELA Supplement for SpaceX Starlink
+```
+- Comment field appears only when the checkbox is checked
+- If no references exist in `meta`, shows dimmed message:
+  *"No references defined — add them in the Document tab."*
+
+Same section added to the Add Item(s) dialog; comment/note fields are shared across all rows
+in a batch-add session (per-row differentiation deferred).
+
+### 14.7 Print report additions
+
+**Notes column:** if any node has `rowNotes` or `rowRefs`, a narrow rightmost column is added
+to the load table showing superscript-style markers (e.g., `¹` or `¹·³`).
+
+**Note numbering:** assigned by DFS tree-walk order across the entire report. Row notes are
+numbered sequentially (1, 2, 3…). Reference citations use the reference's display number from
+`meta.references`.
+
+**Sections added to the report** (between the report header and the load tables):
+
+1. **General Notes** — bulleted list from `meta.generalNotes`
+2. **References** — numbered list, each entry rendered as:
+   `N. Organization. DocNumber. Title. Revision. Date.`
+   (Revision and Date omitted if blank)
+
+**Notes section** appended after load tables — two parts:
+- Numbered list of row notes, number matching the superscript
+- Row reference comments, cited as: `¹ Ref. [1]: comment text.`
+
+### 14.8 Migration / backward compatibility
+
+Existing JSON files load normally. Missing fields default:
+- All new `meta` string fields → `''`
+- `generalNotes`, `references` → `[]`
+- Per-node `rowNotes` → `[]`, `rowRefs` → `[]`
+
+---
+
+## 15. Future Enhancements
+
+### 15.1 Planned — Revision 15: Word (.docx) Export
+
+- Generate a complete ELAA-format `.docx` from current state (cover page, TOC, intro,
+  general notes, references, compliance, Appendix load tables)
+- Embed full JSON state as a Word Custom XML Part inside the ZIP
+- Add "Open .docx Project" import that reads the embedded JSON
+- Prose sections (intro, compliance, general notes) wrapped in Word Content Controls for
+  round-trip editing; content controls hidden on print
+- See memory file `project_word_integration.md` for full design
+
+### 15.2 Deferred
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
