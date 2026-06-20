@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Watts Up — Aircraft Electrical Load Analysis</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root {
       --bg-primary:#0d1117;--bg-secondary:#161b22;--bg-elevated:#21262d;
@@ -258,6 +259,7 @@
       <input  id="file-input" type="file" accept=".json" hidden>
       <button id="btn-export" class="btn-default">Export JSON</button>
       <button id="btn-print"  class="btn-default">Print Report</button>
+      <button id="btn-word"   class="btn-default">Word Report</button>
     </div>
   </header>
 
@@ -2335,21 +2337,28 @@ function buildSectionRows(acDc,cols,cfg){
 }
 function buildAnnotationMap() {
   const refs=state.meta.references||[];
-  const refKeyToNum={};refs.forEach((r,i)=>refKeyToNum[r.key]=i+1);
+  const refKeyToNum={};const refKeyToDocNo={};
+  refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
   let noteCounter=0;
-  const annotMap={};  // nodeId → {marker, noteNums, refEntries}
-  const notesList=[];  // [{num, text}]
+  const annotMap={};  // nodeId → {marker}
+  const notesList=[];  // [{num, text}] — row notes and ref citations unified
   preOrder(state.rootIds,state.nodes).forEach(id=>{
     const n=state.nodes[id];if(!n)return;
     const rn=(n.rowNotes||[]).filter(t=>t.trim());
     const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
     if(!rn.length&&!rr.length)return;
-    const noteNums=rn.map(text=>{const num=++noteCounter;notesList.push({num,text});return num;});
-    const refNums=[...new Set(rr.map(r=>refKeyToNum[r.key]).filter(Boolean))];
-    const parts=[];
-    if(noteNums.length)parts.push(noteNums.join(','));
-    if(refNums.length)parts.push(refNums.map(n=>`[${n}]`).join(''));
-    annotMap[id]={marker:parts.join(' '),noteNums,refEntries:rr};
+    const nums=[];
+    // Plain row notes
+    rn.forEach(text=>{const num=++noteCounter;notesList.push({num,text});nums.push(num);});
+    // Reference citations merged in as numbered notes
+    rr.forEach(r=>{
+      const refNum=refKeyToNum[r.key];
+      const docNo=refKeyToDocNo[r.key];
+      const comment=(r.comment||'').trim();
+      const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
+      const num=++noteCounter;notesList.push({num,text});nums.push(num);
+    });
+    annotMap[id]={marker:nums.join(',')};
   });
   return{annotMap,notesList};
 }
@@ -2358,7 +2367,7 @@ function buildRptHeader(cols,hasAnnot){
   const runs=[];
   cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
   const annotTh=hasAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
-  return `<thead><tr><th class="rpt-left" rowspan="2"></th>${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}${annotTh}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
+  return `<thead><tr><th class="rpt-left" rowspan="2"></th>${annotTh}${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
 }
 
 function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
@@ -2403,7 +2412,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
   const annotCell=annotMap
     ?(annotMap[n.id]?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annotMap[n.id].marker)}</span></td>`:`<td class="rpt-notes-col"></td>`)
     :'';
-  return `<tr${rowCls} style="font-size:${fs}pt"><td style="padding-left:${depth*14+3}px">${ampSpan}${descWrap}</td>${cells.join('')}${annotCell}</tr>`;
+  return `<tr${rowCls} style="font-size:${fs}pt"><td style="padding-left:${depth*14+3}px">${ampSpan}${descWrap}</td>${annotCell}${cells.join('')}</tr>`;
 }
 
 function buildSectionRows(acDc,cols,cfg,annotMap){
@@ -2479,16 +2488,6 @@ function buildPrintR10(){
   // Row notes section
   const notesSec=notesList.length?`<div class="rpt-annot-section"><h3>Notes</h3><ol>${notesList.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol></div>`:'';
 
-  // Reference comments section (per-row comments on citations)
-  const commentItems=[];
-  Object.values(annotMap).forEach(a=>{
-    a.refEntries.filter(r=>r.comment?.trim()).forEach(r=>{
-      const refNum=(state.meta.references||[]).findIndex(x=>x.key===r.key)+1;
-      if(refNum>0)commentItems.push(`Ref. [${refNum}]: ${esc(r.comment.trim())}`);
-    });
-  });
-  const commentSec=commentItems.length?`<div class="rpt-annot-section"><h3>Reference Notes</h3><ul>${commentItems.map(t=>`<li>${t}</li>`).join('')}</ul></div>`:'';
-
   const ws=allWarnings();
   const warnSec=ws.length?`<div class="rpt-section-hdr">Warnings</div><ul class="rpt-warn-list">${ws.map(w=>`<li>${w.message}</li>`).join('')}</ul>`:'';
 
@@ -2503,7 +2502,333 @@ function buildPrintR10(){
         ${m.revisionLevel?`<span><b>Rev:</b> ${esc(m.revisionLevel)}</span>`:''}
         <span><b>Date:</b> ${new Date().toLocaleDateString()}</span>
       </div>
-    </div>${gnSec}${refSec}${acFirst?acSec+dcSec:dcSec+acSec}${notesSec}${commentSec}${warnSec}`;
+    </div>${gnSec}${refSec}${acFirst?acSec+dcSec:dcSec+acSec}${notesSec}${warnSec}`;
+}
+
+// ── WORD (.DOCX) EXPORT ──────────────────────────────────────────────────────
+
+function wxEsc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function wxHpt(pt){return String(Math.round(pt*2));}
+
+function wxRun(text,{b,i,sz,color}={}){
+  const rPr=[b?'<w:b/><w:bCs/>':'',i?'<w:i/><w:iCs/>':'',
+    sz?`<w:sz w:val="${wxHpt(sz)}"/><w:szCs w:val="${wxHpt(sz)}"/>`:'',
+    color?`<w:color w:val="${color}"/>`:''
+  ].join('');
+  return `<w:r>${rPr?`<w:rPr>${rPr}</w:rPr>`:''}<w:t xml:space="preserve">${wxEsc(text)}</w:t></w:r>`;
+}
+
+function wxPar(inner,{ind,before=40,after=40,jc}={}){
+  const pPr=[
+    `<w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>`,
+    ind!=null?`<w:ind w:left="${ind}"/>`:'',
+    jc?`<w:jc w:val="${jc}"/>`:'',
+  ].join('');
+  return `<w:p><w:pPr>${pPr}</w:pPr>${inner||''}</w:p>`;
+}
+
+function wxTc(inner,{w,span,vm,topBdr,leftBdr,shd}={}){
+  const bdrParts=[
+    topBdr?'<w:top w:val="single" w:sz="6" w:space="0" w:color="888888"/>':'',
+    leftBdr?'<w:left w:val="single" w:sz="12" w:space="0" w:color="777777"/>':'',
+  ].join('');
+  const tcPr=[
+    w!=null?`<w:tcW w:w="${w}" w:type="dxa"/>`:'',
+    span>1?`<w:gridSpan w:val="${span}"/>`:'',
+    vm==='start'?'<w:vMerge w:val="restart"/>':vm==='cont'?'<w:vMerge/>':'',
+    bdrParts?`<w:tcBorders>${bdrParts}</w:tcBorders>`:'',
+    shd?`<w:shd w:val="clear" w:color="auto" w:fill="${shd}"/>`:'',
+  ].join('');
+  return `<w:tc><w:tcPr>${tcPr}</w:tcPr>${inner}</w:tc>`;
+}
+
+function wxTr(inner,{h,exact,hdr}={}){
+  const trPr=[
+    h?`<w:trHeight w:val="${h}"${exact?' w:hRule="exact"':''}/>`:'',
+    hdr?'<w:tblHeader/>':'',
+  ].join('');
+  return `<w:tr>${trPr?`<w:trPr>${trPr}</w:trPr>`:''}${inner}</w:tr>`;
+}
+
+function buildWordTblHeader(cols,hasAnnot,{descW,notesW,numW}){
+  const HSZ=7.5;
+  const runs=[];
+  cols.forEach(c=>{
+    if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});
+    else runs[runs.length-1].count++;
+  });
+  // Row 1: description (vMerge start) | notes (vMerge start) | group headers
+  let r1='';
+  r1+=wxTc(wxPar('',{before:0,after:0}),{w:descW,vm:'start'});
+  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,vm:'start'});
+  runs.forEach(g=>{
+    r1+=wxTc(wxPar(wxRun(g.label,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),
+      {w:numW*g.count,span:g.count>1?g.count:undefined,leftBdr:true});
+  });
+  // Row 2: description (vMerge cont) | notes (vMerge cont) | sub-column labels
+  let r2='';
+  r2+=wxTc(wxPar('',{before:0,after:0}),{w:descW,vm:'cont'});
+  if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0}),{w:notesW,vm:'cont'});
+  cols.forEach(c=>{
+    r2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),
+      {w:numW,leftBdr:c.isGroupFirst});
+  });
+  return wxTr(r1,{h:300,hdr:true})+wxTr(r2,{h:260,hdr:true});
+}
+
+function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,numW,hasAnnot}){
+  const isProt=NT.PROTECTION.includes(n.type);
+  const isConvIn=n.convRole==='in';
+  const isLd=isLoad(n.type);const hasC=hasCap(n.type);
+  const removed=n.status==='removed';
+  const cfgSide=n.acDc==='ac'?cfg.ac:cfg.dc;
+  const mainDesc=(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'');
+  const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+  const sz=Math.max(6.5,8.5-depth*0.5);
+  const indDxa=depth*200;
+  const descRun=removed?wxRun(mainDesc,{i:true,sz}):n.status==='new'?wxRun(mainDesc,{b:true,sz}):wxRun(mainDesc,{sz});
+  const ampRun=ampInline?wxRun(`  (${ampInline} A)`,{sz:6.5,color:'555555'}):'';
+  const descCell=wxTc(wxPar(descRun+ampRun,{ind:indDxa,before:20,after:20}),{w:descW,topBdr});
+  let notesCell='';
+  if(hasAnnot){
+    const marker=am&&am[n.id]?am[n.id].marker:'';
+    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,topBdr});
+  }
+  let numCells='';
+  cols.forEach(col=>{
+    const{group,k,isPf,isGroupFirst}=col;
+    const lB=isGroupFirst;
+    const emDash=()=>{numCells+=wxTc(wxPar(wxRun('—',{sz}),{before:20,after:20,jc:'right'}),{w:numW,topBdr,leftBdr:lB});};
+    if(isConvIn&&cfg.convInNcOnly&&group!=='nc'){emDash();return;}
+    let val=null;let isNeg=false;
+    if(group==='cap'){if(!hasC||!n.capacity){emDash();return;}val=n.capacity[k];}
+    else if(group==='exload'){if(!hasC||n.status==='new'){emDash();return;}val=n.existingLoad?.[k];}
+    else if(group==='added'){
+      if(!isLd||n.status==='existing'){emDash();return;}
+      val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
+    }else if(group==='nc'){
+      if(isLd){emDash();return;}
+      val=n._netChange?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+    }else if(group==='newload'){
+      if(!hasC||removed){emDash();return;}
+      val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+    }else if(group==='rem'){
+      if(removed||n._remainingCapacity==null){emDash();return;}
+      val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+    }
+    if(val==null){emDash();return;}
+    const txt=isNeg?`(${fmtRpt(val,isPf)})`:fmtRpt(val,isPf);
+    numCells+=wxTc(wxPar(wxRun(txt,{sz}),{before:20,after:20,jc:'right'}),{w:numW,topBdr,leftBdr:lB});
+  });
+  return wxTr(descCell+notesCell+numCells);
+}
+
+function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,numW,hasAnnot}){
+  const nodes=state.nodes;
+  const statusOrd={existing:0,removed:1,new:2};
+  const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
+  const childrenOf={};
+  secSet.forEach(id=>{const pid=nodes[id].parentId;if(pid&&secSet.has(pid)){if(!childrenOf[pid])childrenOf[pid]=[];childrenOf[pid].push(id);}});
+  const secRoots=[...secSet].filter(id=>{const pid=nodes[id].parentId;return!pid||!secSet.has(pid);});
+  secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+  const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
+  const totalCols=1+(hasAnnot?1:0)+cols.length;
+  const totalW=descW+(hasAnnot?notesW:0)+numW*cols.length;
+  const emRem=new Set(),emAdd=new Set();
+  const rows=[];let prevDepth=-1;
+  function visit(id,depth,inRem,inAdd,topBdr){
+    const n=nodes[id];if(!n)return;
+    const pid=n.parentId??'__root__';
+    let nowInRem=inRem,nowInAdd=inAdd;
+    if(prevDepth>depth)
+      rows.push(wxTr(wxTc(wxPar('',{before:0,after:0}),{w:totalW,span:totalCols>1?totalCols:undefined}),{h:56,exact:true}));
+    prevDepth=depth;
+    if(!inRem&&!inAdd){
+      if(n.status==='removed'&&!emRem.has(pid)){
+        emRem.add(pid);
+        rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:6.5}),{ind:depth*200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+        nowInRem=true;
+      }else if(n.status==='new'&&!emAdd.has(pid)){
+        emAdd.add(pid);
+        rows.push(wxTr(wxTc(wxPar(wxRun('Added',{b:true,sz:6.5}),{ind:depth*200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+        nowInAdd=true;
+      }
+    }
+    rows.push(buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,numW,hasAnnot}));
+    const kids=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+    kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
+  }
+  secRoots.forEach(id=>visit(id,0,false,false,false));
+  return rows.join('');
+}
+
+function buildWordRptTable(acDc,cols,cfg,am,colOpts){
+  const{descW,notesW,numW,hasAnnot}=colOpts;
+  const gridCols=[descW,...(hasAnnot?[notesW]:[]),...cols.map(()=>numW)].map(w=>`<w:gridCol w:w="${w}"/>`).join('');
+  const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
+    `<w:top w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
+    `<w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
+    `<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
+    `<w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
+    `<w:insideH w:val="single" w:sz="4" w:space="0" w:color="dddddd"/>` +
+    `<w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
+    `</w:tblBorders><w:tblLayout w:type="fixed"/>` +
+    `<w:tblCellMar><w:top w:w="30" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>` +
+    `<w:bottom w:w="30" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
+  return `<w:tbl>${tblPr}<w:tblGrid>${gridCols}</w:tblGrid>`+
+    buildWordTblHeader(cols,hasAnnot,colOpts)+
+    buildWordSectionRows(acDc,cols,cfg,am,colOpts)+`</w:tbl>`;
+}
+
+function buildDocumentXml(){
+  if(!state)return'';
+  const cfg=defaultPrintCfg();
+  const m=state.meta;
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const acCols=activeCols(AC_GROUPS,cfg.ac);
+  const dcCols=activeCols(DC_GROUPS,cfg.dc);
+  const{annotMap,notesList}=buildAnnotationMap();
+  const hasAnnot=Object.keys(annotMap).length>0;
+  const am=hasAnnot?annotMap:null;
+  const vLbl=(acDc)=>{
+    const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??
+      Object.values(state.nodes).find(n=>n.acDc===acDc&&n.voltage!=null);
+    return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;
+  };
+  const TOTAL_W=9360,DESC_W=2880,NOTES_W=480;
+  const avail=TOTAL_W-DESC_W-(hasAnnot?NOTES_W:0);
+  const acNumW=Math.floor(avail/acCols.length);
+  const dcNumW=Math.floor(avail/dcCols.length);
+  const acOpts={descW:DESC_W,notesW:NOTES_W,numW:acNumW,hasAnnot};
+  const dcOpts={descW:DESC_W,notesW:NOTES_W,numW:dcNumW,hasAnnot};
+  const body=[];
+
+  // Title
+  body.push(wxPar(wxRun('Aircraft Electrical Load Analysis',{b:true,sz:16}),{before:0,after:80,jc:'center'}));
+  if(m.documentNumber)body.push(wxPar(wxRun(m.documentNumber,{sz:12}),{before:0,after:40,jc:'center'}));
+
+  // Identity table (2-column: label | value)
+  const idRows=[
+    ['Aircraft Make',m.make],['Model',m.model],['Designation',m.marketingDesignation],
+    ['Serial Number',m.serialNumber],['Flight Phase',m.flightPhase],
+    ['Revision',m.revisionLevel],['Prepared By',m.preparedBy],['Approved By',m.approvedBy],
+    ['Rev Date',m.revisionDate],['Report Date',new Date().toLocaleDateString()],
+  ].filter(([,v])=>v).map(([label,value])=>
+    wxTr(wxTc(wxPar(wxRun(label,{b:true,sz:9}),{before:20,after:20}),{w:1800})+
+         wxTc(wxPar(wxRun(value||'',{sz:9}),{before:20,after:20}),{w:3600}))
+  ).join('');
+  if(idRows)body.push(`<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
+    `<w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/>`+
+    `<w:insideH w:val="single" w:sz="2" w:space="0" w:color="dddddd"/><w:insideV w:val="none"/>` +
+    `</w:tblBorders><w:tblLayout w:type="fixed"/>` +
+    `<w:tblCellMar><w:top w:w="20" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>` +
+    `<w:bottom w:w="20" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr>`+
+    `<w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="3600"/></w:tblGrid>${idRows}</w:tbl>`);
+
+  // Intro
+  if(m.introText?.trim()){
+    body.push(wxPar(wxRun('1.0  Introduction',{b:true,sz:12}),{before:120,after:40}));
+    m.introText.split('\n').forEach(line=>body.push(wxPar(line?wxRun(line,{sz:10}):'',{before:0,after:40})));
+  }
+  // General Notes
+  const gn=m.generalNotes||[];
+  if(gn.length){
+    body.push(wxPar(wxRun('2.0  General Notes',{b:true,sz:12}),{before:120,after:40}));
+    gn.forEach(note=>body.push(wxPar(wxRun('•  '+note,{sz:10}),{ind:360,before:0,after:40})));
+  }
+  // References
+  const refs=m.references||[];
+  if(refs.length){
+    body.push(wxPar(wxRun('3.0  References',{b:true,sz:12}),{before:120,after:40}));
+    refs.forEach((r,i)=>{
+      const parts=[r.organization,r.docNumber,r.title||null,r.revision?`Rev. ${r.revision}`:null,r.date||null].filter(Boolean);
+      body.push(wxPar(wxRun(`${i+1}.  ${parts.join('. ')}.`,{sz:10}),{ind:360,before:0,after:40}));
+    });
+  }
+  // Compliance
+  if(m.complianceText?.trim()){
+    body.push(wxPar(wxRun('4.0  Compliance Statement',{b:true,sz:12}),{before:120,after:40}));
+    m.complianceText.split('\n').forEach(line=>body.push(wxPar(line?wxRun(line,{sz:10}):'',{before:0,after:40})));
+  }
+
+  // Appendix A
+  body.push(wxPar(wxRun('Appendix A — Load Analysis',{b:true,sz:14}),{before:160,after:80}));
+  const mkTbl=(acDc,cols,label,opts)=>{
+    if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
+    return wxPar(wxRun(label,{b:true,sz:11}),{before:80,after:40})+buildWordRptTable(acDc,cols,cfg,am,opts);
+  };
+  const al=vLbl('ac'),dl=vLbl('dc');
+  const acTbl=mkTbl('ac',acCols,al?`${al} Summary`:'AC Summary',acOpts);
+  const dcTbl=mkTbl('dc',dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts);
+  const spacerP=wxPar('',{before:120,after:0});
+  if(acFirst){body.push(acTbl);if(acTbl&&dcTbl)body.push(spacerP);body.push(dcTbl);}
+  else{body.push(dcTbl);if(acTbl&&dcTbl)body.push(spacerP);body.push(acTbl);}
+
+  // Notes
+  if(notesList.length){
+    body.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40}));
+    notesList.forEach(({num,text})=>body.push(wxPar(wxRun(`${num}.  ${text}`,{sz:9}),{ind:360,before:0,after:30})));
+  }
+
+  const sectPr=`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
+  const WNS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${WNS}><w:body>${body.join('')}${sectPr}</w:body></w:document>`;
+}
+
+async function generateDocx(){
+  if(typeof JSZip==='undefined'){alert('JSZip not loaded — Word export requires an internet connection.');return;}
+  if(!state)return;
+  const docXml=buildDocumentXml();
+  const RELS='http://schemas.openxmlformats.org/package/2006/relationships';
+  const ODR='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const WNS='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`+
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`+
+    `<Default Extension="xml" ContentType="application/xml"/>`+
+    `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`+
+    `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>`+
+    `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>`+
+    `</Types>`);
+  zip.file('_rels/.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<Relationships xmlns="${RELS}">`+
+    `<Relationship Id="rId1" Type="${ODR}/officeDocument" Target="word/document.xml"/>`+
+    `</Relationships>`);
+  zip.file('word/document.xml',docXml);
+  zip.file('word/_rels/document.xml.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<Relationships xmlns="${RELS}">`+
+    `<Relationship Id="rId1" Type="${ODR}/styles" Target="styles.xml"/>`+
+    `<Relationship Id="rId2" Type="${ODR}/settings" Target="settings.xml"/>`+
+    `</Relationships>`);
+  zip.file('word/styles.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<w:styles xmlns:w="${WNS}">`+
+    `<w:docDefaults><w:rPrDefault><w:rPr>`+
+    `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="20"/>`+
+    `</w:rPr></w:rPrDefault></w:docDefaults>`+
+    `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>`+
+    `<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/>`+
+    `<w:tblPr><w:tblBorders>`+
+    `<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
+    `<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
+    `<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
+    `<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
+    `<w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
+    `<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
+    `</w:tblBorders></w:tblPr></w:style></w:styles>`);
+  zip.file('word/settings.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<w:settings xmlns:w="${WNS}"><w:defaultTabStop w:val="720"/></w:settings>`);
+  const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const slug=s=>(s||'').replace(/\s+/g,'_').replace(/[^A-Za-z0-9_-]/g,'');
+  const mn=state.meta;
+  const fname=['WattsUp',slug(mn.make),slug(mn.model),slug(mn.serialNumber),new Date().toISOString().slice(0,10)].filter(Boolean).join('_')+'.docx';
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=fname;a.click();URL.revokeObjectURL(url);
 }
 
 // ── PRINT SETTINGS ───────────────────────────────────────────────────────────
@@ -2557,6 +2882,7 @@ function initEvents() {
   document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files[0])doImport(e.target.files[0]);e.target.value='';});
   document.getElementById('btn-export').addEventListener('click',doExport);
   document.getElementById('btn-print' ).addEventListener('click',openPrintOpts);
+  document.getElementById('btn-word'  ).addEventListener('click',generateDocx);
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-reset' ).addEventListener('click',()=>{printCfg=defaultPrintCfg();openPrintOpts();});

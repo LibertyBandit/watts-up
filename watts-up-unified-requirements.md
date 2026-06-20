@@ -553,19 +553,110 @@ Existing JSON files load normally. Missing fields default:
 
 ---
 
-## 15. Future Enhancements
+## 15. Revision 15 — Word (.docx) Export (Phase 1)
 
-### 15.1 Planned — Revision 15: Word (.docx) Export
+### 15.1 Overview
 
-- Generate a complete ELAA-format `.docx` from current state (cover page, TOC, intro,
-  general notes, references, compliance, Appendix load tables)
-- Embed full JSON state as a Word Custom XML Part inside the ZIP
-- Add "Open .docx Project" import that reads the embedded JSON
-- Prose sections (intro, compliance, general notes) wrapped in Word Content Controls for
-  round-trip editing; content controls hidden on print
-- See memory file `project_word_integration.md` for full design
+Add a **"Word Report"** button to the toolbar that generates and downloads a `.docx` file
+containing a complete ELAA-format report. This is a one-way export only; the JSON state is not
+embedded and the file cannot be re-imported. (Round-trip import is deferred to Revision 16.)
 
-### 15.2 Deferred
+The `.docx` is assembled in the browser using JSZip (bundled inline) by constructing the
+required OOXML XML parts and packaging them into a ZIP archive — no server required.
+
+### 15.2 Document layout
+
+The generated `.docx` follows the ELAA Word Version layout:
+
+| Section | Source |
+|---|---|
+| Report header | Make, Model, Designation, Serial #, Doc #, Rev, prepared/approved by, date |
+| §1 Introduction | `meta.introText` (skipped if blank) |
+| §2 General Notes | `meta.generalNotes[]` — bulleted list (skipped if empty) |
+| §3 References | `meta.references[]` — numbered list (skipped if empty) |
+| §4 Compliance | `meta.complianceText` (skipped if blank) |
+| Appendix A | Load tables — AC section and/or DC section (same order as print report) |
+
+Each Appendix section includes:
+- Section heading (e.g., "115 VAC Summary")
+- Load table matching the current print report column layout and default column selections
+- Notes section (same unified note numbering as print report) if any row annotations exist
+
+### 15.3 Load table format
+
+Tables use the same column groups, default column selections, and data rules as the print
+report (§13.2–13.6). The column structure matches `defaultPrintCfg()` defaults — no per-export
+column configuration dialog (print settings do not affect the Word export).
+
+**Column widths** (DXA, total usable width ≈ 9360 DXA on a letter page with 1-inch margins):
+
+| Column | DXA |
+|---|---|
+| Description (component) | 2880 |
+| Notes (if present) | 480 |
+| Each numeric sub-column | remaining / number of columns |
+
+**Row formatting:**
+- Removed items: italic text
+- New items: bold text
+- Depth-based font sizes matched to print report: `max(6.5, 8.5 − depth × 0.5)` pt
+- Removed / Added label rows: italic (Removed) or bold (Added), spanning full width
+- Branch-transition spacer rows: empty row, 4 pt height
+- Parent-child separator border: thin top border on first child when both parent and child
+  have non-zero net change
+
+**Header rows:** two-row header matching the print report group / sub-column structure.
+
+### 15.4 Notes and References in the Word document
+
+The unified note numbering from §14.7 applies unchanged. After each load table, if any rows
+have annotations, a "Notes" sub-section lists them in the same format as the print report:
+
+```
+Notes
+1. First row note text
+2. ref [2] GC514696308: Table 3-2
+```
+
+The References section (§3) and General Notes section (§2) are rendered before the Appendix.
+
+### 15.5 Toolbar button
+
+Label: **"Word Report"**. Positioned in the main toolbar alongside "Print Report". Disabled
+(grayed out) if JSZip failed to load (e.g., offline).
+
+### 15.6 File naming
+
+Downloaded file: `WattsUp_{make}_{model}_{serial}_{date}.docx`
+(same naming pattern as JSON export; spaces replaced with underscores)
+
+### 15.7 OOXML structure
+
+The `.docx` ZIP contains the minimum required parts:
+
+```
+[Content_Types].xml
+_rels/.rels
+word/document.xml
+word/_rels/document.xml.rels
+word/styles.xml
+word/settings.xml
+word/theme/theme1.xml   (minimal placeholder)
+```
+
+Styles defined: Normal, Heading1, Heading2, TableHeader, TableCell (body), Notes, Caption.
+
+### 15.8 Deferred to Revision 16
+
+- Embedding full JSON state as a Word Custom XML Part
+- "Open .docx Project" import reading the embedded JSON back
+- Word Content Controls for prose round-trip editing
+- Cover page and Log of Revisions table
+- Table of Contents
+
+---
+
+## 16. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
