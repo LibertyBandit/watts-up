@@ -256,7 +256,7 @@
     <div class="header-right">
       <button id="btn-new"    class="btn-default">New</button>
       <button id="btn-open"   class="btn-default">Open</button>
-      <input  id="file-input" type="file" accept=".json" hidden>
+      <input  id="file-input" type="file" accept=".json,.docx" hidden>
       <button id="btn-export" class="btn-default">Export JSON</button>
       <button id="btn-print"  class="btn-default">Print Report</button>
       <button id="btn-word"   class="btn-default">Word Report</button>
@@ -940,6 +940,51 @@ function doImport(file) {
     } catch(err){alert('Import failed: '+err.message);}
   };
   r.readAsText(file);
+}
+
+function extractSdtText(docXml,tag){
+  const idx=docXml.indexOf(`<w:tag w:val="${tag}"/>`);
+  if(idx<0)return null;
+  const cs=docXml.indexOf('<w:sdtContent>',idx);
+  const ce=docXml.indexOf('</w:sdtContent>',cs);
+  if(cs<0||ce<0)return null;
+  return docXml.slice(cs+14,ce)
+    .replace(/<\/w:p>/g,'\n')
+    .replace(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g,(_,t)=>t)
+    .replace(/<[^>]+>/g,'')
+    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
+    .split('\n').map(l=>l.trim()).join('\n').replace(/\n$/,'').trim();
+}
+
+async function importDocx(file){
+  if(typeof JSZip==='undefined'){
+    alert('JSZip not loaded — .docx import requires an internet connection.');return;
+  }
+  try{
+    const buf=await file.arrayBuffer();
+    const zip=await JSZip.loadAsync(buf);
+    const xmlFile=zip.file('customXml/item1.xml');
+    if(!xmlFile){alert('This file was not created by Watts Up — no project data found.');return;}
+    const xmlContent=await xmlFile.async('string');
+    const m=xmlContent.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+    if(!m){alert('Could not read project data from the Word file.');return;}
+    const parsed=JSON.parse(m[1]);
+    migrateLegacy(parsed);validateImport(parsed);
+    const docFile=zip.file('word/document.xml');
+    if(docFile){
+      const docXml=await docFile.async('string');
+      const intro=extractSdtText(docXml,'wu-intro');
+      if(intro!==null)parsed.meta.introText=intro;
+      const comp=extractSdtText(docXml,'wu-compliance');
+      if(comp!==null)parsed.meta.complianceText=comp;
+      const gnRaw=extractSdtText(docXml,'wu-general-notes');
+      if(gnRaw!==null){
+        parsed.meta.generalNotes=gnRaw.split('\n')
+          .map(l=>l.replace(/^[••]\s*/,'').trim()).filter(Boolean);
+      }
+    }
+    state=parsed;recalc();renderAll();persist();
+  }catch(err){alert('Import failed: '+err.message);}
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -2832,6 +2877,21 @@ async function generateDocx(){
   const ODR='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   const WNS='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const zip=new JSZip();
+  // Embed JSON state as Custom XML Part for round-trip import
+  const jsonStr=JSON.stringify(state).replace(/\]\]>/g,']]]]><![CDATA[>');
+  zip.file('customXml/item1.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<wuData xmlns="urn:watts-up:v1"><json><![CDATA[${jsonStr}]]></json></wuData>`);
+  zip.file('customXml/itemProps1.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<ds:datastoreItem ds:itemID="{00000000-0000-0000-0000-000000000001}" `+
+    `xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml">`+
+    `<ds:schemaRefs/></ds:datastoreItem>`);
+  zip.file('customXml/_rels/item1.xml.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<Relationships xmlns="${RELS}">`+
+    `<Relationship Id="rId1" Type="${ODR}/customXmlProps" Target="itemProps1.xml"/>`+
+    `</Relationships>`);
   zip.file('[Content_Types].xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
     `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`+
@@ -2840,6 +2900,8 @@ async function generateDocx(){
     `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`+
     `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>`+
     `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>`+
+    `<Override PartName="/customXml/item1.xml" ContentType="application/xml"/>`+
+    `<Override PartName="/customXml/itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/>`+
     `</Types>`);
   zip.file('_rels/.rels',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
@@ -2852,6 +2914,7 @@ async function generateDocx(){
     `<Relationships xmlns="${RELS}">`+
     `<Relationship Id="rId1" Type="${ODR}/styles" Target="styles.xml"/>`+
     `<Relationship Id="rId2" Type="${ODR}/settings" Target="settings.xml"/>`+
+    `<Relationship Id="rId3" Type="${ODR}/customXml" Target="../customXml/item1.xml"/>`+
     `</Relationships>`);
   zip.file('word/styles.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
@@ -2963,7 +3026,11 @@ function initEvents() {
     state=freshState();collapsed=new Set();recalc();renderAll();persist();
   });
   document.getElementById('btn-open').addEventListener('click',()=>document.getElementById('file-input').click());
-  document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files[0])doImport(e.target.files[0]);e.target.value='';});
+  document.getElementById('file-input').addEventListener('change',e=>{
+    const f=e.target.files[0];
+    if(f){f.name.toLowerCase().endsWith('.docx')?importDocx(f):doImport(f);}
+    e.target.value='';
+  });
   document.getElementById('btn-export').addEventListener('click',doExport);
   document.getElementById('btn-print' ).addEventListener('click',openPrintOpts);
   document.getElementById('btn-word'  ).addEventListener('click',generateDocx);

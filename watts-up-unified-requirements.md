@@ -691,32 +691,33 @@ word/settings.xml
 
 ---
 
-## 16. Revision 16 — Word Round-Trip (Phase 2) — Proposed
+## 16. Revision 16 — Word Round-Trip (Phase 2)
 
 ### 16.1 Overview
 
 Make the `.docx` file the primary project save format by embedding the full Watts Up JSON
-state as a Word Custom XML Part inside the ZIP. Adds "Open .docx Project" as an import path
-alongside the existing JSON import. On re-export, Watts Up reads the prose content controls
-back before overwriting — so edits made directly in Word to Introduction, General Notes,
-Compliance, and References survive the round-trip.
+state as a Word Custom XML Part inside the ZIP. The existing **Open** button now also accepts
+`.docx` files. On import, prose sections edited directly in Word (Introduction, General Notes,
+Compliance) override the JSON-embedded values, so Word edits survive the round-trip.
+References are not read back from Word; they are regenerated from JSON state.
 
 ### 16.2 Custom XML Part (JSON state)
 
-A new XML part is added to the `.docx` ZIP:
+Three new parts are added to the `.docx` ZIP at the **package root** (not inside `word/`):
 
 ```
-word/customXml/item1.xml          — the JSON state wrapped in a root element
-word/customXml/itemProps1.xml     — declares the part's URI/namespace
-word/_rels/document.xml.rels      — relationship: customXml/item1.xml
-[Content_Types].xml               — override for customXml/item1.xml
+customXml/item1.xml           — JSON state wrapped in a CDATA root element
+customXml/itemProps1.xml      — declares the part's URI/namespace
+customXml/_rels/item1.xml.rels — relationship from item1.xml to itemProps1.xml
+word/_rels/document.xml.rels  — rId3 relationship to ../customXml/item1.xml
+[Content_Types].xml           — overrides for item1.xml and itemProps1.xml
 ```
 
 Format of `item1.xml`:
 ```xml
-<wuState xmlns="urn:watts-up:state:v1">
-  <json>{ ... full JSON state ... }</json>
-</wuState>
+<wuData xmlns="urn:watts-up:v1">
+  <json><![CDATA[{ ... full JSON state ... }]]></json>
+</wuData>
 ```
 
 ### 16.3 Export flow (updated)
@@ -730,7 +731,7 @@ Format of `item1.xml`:
 
 1. User selects a `.docx` file via file picker
 2. JSZip opens the ZIP
-3. Read `word/customXml/item1.xml` → parse JSON → restore `state`
+3. Read `customXml/item1.xml` → extract CDATA → parse JSON → restore `state`
 4. Read each prose content control by tag from `word/document.xml`:
    - `wu-intro` → `state.meta.introText`
    - `wu-general-notes` → `state.meta.generalNotes[]` (split on paragraph boundaries)
@@ -743,9 +744,9 @@ References are not read back from Word (the numbered list is regenerated from JS
 
 ### 16.5 UI changes
 
-- "Open .docx Project" button added to toolbar (or file picker accepts both `.json` and `.docx`)
-- File picker `accept` attribute updated to `.json,.docx`
-- On import, detect file type by extension: `.docx` → Word import path; `.json` → existing path
+- Existing **"Open"** button and hidden file picker updated to accept both `.json` and `.docx`
+- File type detected by extension on change: `.docx` → Word import path; `.json` → existing path
+- No new toolbar button required
 
 ### 16.6 Constraints and edge cases
 
@@ -765,3 +766,7 @@ References are not read back from Word (the numbered list is regenerated from JS
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)
 - Print settings: user-defined rounding schedule
 - User-designed `.docx` template (base64-embedded; Watts Up fills tagged content controls)
+- Restrict Watts-Up-exclusive sections in the Word document so users can adjust formatting
+  but cannot overwrite generated content (references list, analysis tables). Mechanism:
+  `<w:lock w:val="sdtContentLocked"/>` on the relevant content controls, optionally combined
+  with `<w:documentProtection>` allowing formatting-only changes in those regions.
