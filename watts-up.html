@@ -2707,7 +2707,8 @@ function buildDocumentXml(){
       Object.values(state.nodes).find(n=>n.acDc===acDc&&n.voltage!=null);
     return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;
   };
-  const TOTAL_W=9360,DESC_W=2880,NOTES_W=480;
+  // Landscape section (Appendix): Letter landscape 15840×12240, 0.75in margins → 13680 usable
+  const TOTAL_W=13680,DESC_W=2880,NOTES_W=480;
   const avail=TOTAL_W-DESC_W-(hasAnnot?NOTES_W:0);
   const acNumW=Math.floor(avail/acCols.length);
   const dcNumW=Math.floor(avail/dcCols.length);
@@ -2792,7 +2793,13 @@ function buildDocumentXml(){
     :wxPar(wxRun('',{sz:10}),{style:'Normal',before:0,after:60});
   body.push(wxSdtBlock('wu-compliance',compContent));
 
-  // ─ Appendix A
+  // ─ Section break: portrait → landscape for Appendix A
+  body.push(`<w:p><w:pPr><w:sectPr>`+
+    `<w:pgSz w:w="12240" w:h="15840"/>`+
+    `<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`+
+    `</w:sectPr></w:pPr></w:p>`);
+
+  // ─ Appendix A (landscape)
   body.push(wxPar(wxRun('Appendix A — Load Analysis'),{style:'Heading1',before:280,after:80}));
   const mkTbl=(acDc,cols,label,opts)=>{
     if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
@@ -2812,7 +2819,7 @@ function buildDocumentXml(){
     notesList.forEach(({num,text})=>body.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
   }
 
-  const sectPr=`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
+  const sectPr=`<w:sectPr><w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
   const WNS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${WNS}><w:body>${body.join('')}${sectPr}</w:body></w:document>`;
 }
