@@ -555,84 +555,122 @@ Existing JSON files load normally. Missing fields default:
 
 ## 15. Revision 15 — Word (.docx) Export (Phase 1)
 
+*Last updated: 2026-06-20*
+
 ### 15.1 Overview
 
 Add a **"Word Report"** button to the toolbar that generates and downloads a `.docx` file
-containing a complete ELAA-format report. This is a one-way export only; the JSON state is not
-embedded and the file cannot be re-imported. (Round-trip import is deferred to Revision 16.)
+containing a complete ELAA-format report. One-way export only; no JSON state is embedded and
+the file cannot be re-imported in this revision. (Round-trip import deferred to Revision 16.)
 
-The `.docx` is assembled in the browser using JSZip (bundled inline) by constructing the
-required OOXML XML parts and packaging them into a ZIP archive — no server required.
+The `.docx` is assembled in the browser using JSZip (loaded from CDN at runtime) by
+constructing OOXML XML parts and packaging them into a ZIP archive — no server required.
+JSZip requires an internet connection; the button shows an alert if JSZip is unavailable.
 
-### 15.2 Document layout
+### 15.2 Document structure
 
-The generated `.docx` follows the ELAA Word Version layout:
+Two sections with different page orientations:
 
-| Section | Source |
+**Section 1 — Portrait** (Letter, 1-inch margins, 9360 DXA usable width):
+
+| Element | Content |
 |---|---|
-| Report header | Make, Model, Designation, Serial #, Doc #, Rev, prepared/approved by, date |
-| §1 Introduction | `meta.introText` (skipped if blank) |
-| §2 General Notes | `meta.generalNotes[]` — bulleted list (skipped if empty) |
-| §3 References | `meta.references[]` — numbered list (skipped if empty) |
-| §4 Compliance | `meta.complianceText` (skipped if blank) |
-| Appendix A | Load tables — AC section and/or DC section (same order as print report) |
+| Title | "Aircraft Electrical Load Analysis" — Heading 1 style, centered |
+| Identity table | 4-column, 3-row table; each field is an inline plain-text content control |
+| §1.0 Introduction | Heading 1 + block content control `wu-intro` |
+| §2.0 General Notes | Heading 1 + block content control `wu-general-notes` |
+| §3.0 References | Heading 1 + block content control `wu-references` |
+| §4.0 Compliance Statement | Heading 1 + block content control `wu-compliance` |
 
-Each Appendix section includes:
-- Section heading (e.g., "115 VAC Summary")
-- Load table matching the current print report column layout and default column selections
-- Notes section (same unified note numbering as print report) if any row annotations exist
+**Section 2 — Landscape** (Letter, 0.75-inch margins, 13680 DXA usable width):
 
-### 15.3 Load table format
+| Element | Content |
+|---|---|
+| Appendix A heading | Heading 1 |
+| AC Summary (if present) | Heading 2 + load table |
+| DC Summary (if present) | Heading 2 + load table |
+| Notes (if any annotations) | Heading 2 + numbered list |
 
-Tables use the same column groups, default column selections, and data rules as the print
-report (§13.2–13.6). The column structure matches `defaultPrintCfg()` defaults — no per-export
-column configuration dialog (print settings do not affect the Word export).
+A continuous section break between §4 and Appendix A triggers the orientation change.
 
-**Column widths** (DXA, total usable width ≈ 9360 DXA on a letter page with 1-inch margins):
+### 15.3 Identity header (content controls for field round-trip)
+
+A 4-column table (4 × 2340 DXA columns) with three rows:
+
+| Row | Fields |
+|---|---|
+| 1 | Make · Model · Designation · Serial # |
+| 2 | Doc # · Rev · Prepared By · Approved By |
+| 3 | Flight Phase · Rev Date · Report Date (spanning cols 3–4) |
+
+Each field is an inline plain-text content control (`<w:sdt><w:text/>`), tagged:
+`wu-make`, `wu-model`, `wu-designation`, `wu-serial`, `wu-docnumber`, `wu-revision`,
+`wu-preparedby`, `wu-approvedby`, `wu-flightphase`, `wu-revdate`, `wu-reportdate`.
+
+### 15.4 Prose sections (block content controls)
+
+Each prose section is wrapped in a block-level `<w:sdt>` content control tagged with a stable
+identifier. The tag enables Phase 2 (round-trip import) to locate and read back edits made
+in Word.
+
+| Section | Tag | Source data | When empty |
+|---|---|---|---|
+| Introduction | `wu-intro` | `meta.introText` | Empty paragraph placeholder |
+| General Notes | `wu-general-notes` | `meta.generalNotes[]` | Empty paragraph placeholder |
+| References | `wu-references` | `meta.references[]` | Empty paragraph placeholder |
+| Compliance | `wu-compliance` | `meta.complianceText` | Empty paragraph placeholder |
+
+Content controls are always present even when the source data is blank, so the document
+structure is consistent regardless of fill state.
+
+**References formatting:** each entry renders as:
+
+```
+N. Organization.  DocNumber.  Title (italic).  Rev. X.  Date.
+```
+
+Title is a separate italic run (`<w:i/>`); other fields are plain weight.
+
+### 15.5 Load table format
+
+Tables use `defaultPrintCfg()` column defaults (independent of the Print Settings dialog).
+
+**Column widths** (landscape section, 13680 DXA total usable):
 
 | Column | DXA |
 |---|---|
-| Description (component) | 2880 |
-| Notes (if present) | 480 |
-| Each numeric sub-column | remaining / number of columns |
+| Description | 2880 |
+| Notes (if any annotations exist) | 480 |
+| Each numeric sub-column | (13680 − 2880 − 480*) ÷ column count |
 
-**Row formatting:**
-- Removed items: italic text
-- New items: bold text
-- Depth-based font sizes matched to print report: `max(6.5, 8.5 − depth × 0.5)` pt
-- Removed / Added label rows: italic (Removed) or bold (Added), spanning full width
-- Branch-transition spacer rows: empty row, 4 pt height
-- Parent-child separator border: thin top border on first child when both parent and child
-  have non-zero net change
+*Notes column only present when at least one node has `rowNotes` or `rowRefs`.
 
-**Header rows:** two-row header matching the print report group / sub-column structure.
+**Row formatting** (identical rules to print report):
+- New items: bold description
+- Removed items: italic description
+- Depth-based font size: `max(6.5, 8.5 − depth × 0.5)` pt, applied per run
+- Removed / Added label rows: italic / bold text, single cell spanning full width
+- Branch-transition spacer rows: 56 DXA (≈ 4 pt) exact-height empty row
+- Parent-child separator: thin top border when both parent and first child have non-zero NC
 
-### 15.4 Notes and References in the Word document
+**Table header:** two-row header with vertical merge on Description and Notes columns;
+group labels span sub-columns horizontally; left border on first sub-column of each group.
 
-The unified note numbering from §14.7 applies unchanged. After each load table, if any rows
-have annotations, a "Notes" sub-section lists them in the same format as the print report:
+### 15.6 Word styles defined
 
-```
-Notes
-1. First row note text
-2. ref [2] GC514696308: Table 3-2
-```
+| Style ID | Name | Appearance |
+|---|---|---|
+| `Normal` | Normal | Calibri 10 pt, 0 pt before/after |
+| `Heading1` | heading 1 | Calibri 13 pt bold, #2E4057, bottom border rule, keep-with-next |
+| `Heading2` | heading 2 | Calibri 11 pt bold, #2E4057, keep-with-next |
+| `TableGrid` | Table Grid | Standard grid borders (used by load tables) |
 
-The References section (§3) and General Notes section (§2) are rendered before the Appendix.
+### 15.7 File naming
 
-### 15.5 Toolbar button
+`WattsUp_{make}_{model}_{serial}_{YYYY-MM-DD}.docx`
+(spaces replaced with underscores; special characters stripped)
 
-Label: **"Word Report"**. Positioned in the main toolbar alongside "Print Report". Disabled
-(grayed out) if JSZip failed to load (e.g., offline).
-
-### 15.6 File naming
-
-Downloaded file: `WattsUp_{make}_{model}_{serial}_{date}.docx`
-(same naming pattern as JSON export; spaces replaced with underscores)
-
-### 15.7 OOXML structure
-
-The `.docx` ZIP contains the minimum required parts:
+### 15.8 OOXML parts
 
 ```
 [Content_Types].xml
@@ -641,25 +679,89 @@ word/document.xml
 word/_rels/document.xml.rels
 word/styles.xml
 word/settings.xml
-word/theme/theme1.xml   (minimal placeholder)
 ```
 
-Styles defined: Normal, Heading1, Heading2, TableHeader, TableCell (body), Notes, Caption.
+### 15.9 Deferred to Revision 16
 
-### 15.8 Deferred to Revision 16
-
-- Embedding full JSON state as a Word Custom XML Part
-- "Open .docx Project" import reading the embedded JSON back
-- Word Content Controls for prose round-trip editing
-- Cover page and Log of Revisions table
-- Table of Contents
+- Embedding JSON state as a Custom XML Part for round-trip project save/open
+- "Open .docx Project" import
+- Round-trip reading of prose content controls on import
+- User-designed template support (base64-embedded template replacing generated structure)
+- Cover page, Log of Revisions table, Table of Contents
 
 ---
 
-## 16. Future Enhancements
+## 16. Revision 16 — Word Round-Trip (Phase 2) — Proposed
+
+### 16.1 Overview
+
+Make the `.docx` file the primary project save format by embedding the full Watts Up JSON
+state as a Word Custom XML Part inside the ZIP. Adds "Open .docx Project" as an import path
+alongside the existing JSON import. On re-export, Watts Up reads the prose content controls
+back before overwriting — so edits made directly in Word to Introduction, General Notes,
+Compliance, and References survive the round-trip.
+
+### 16.2 Custom XML Part (JSON state)
+
+A new XML part is added to the `.docx` ZIP:
+
+```
+word/customXml/item1.xml          — the JSON state wrapped in a root element
+word/customXml/itemProps1.xml     — declares the part's URI/namespace
+word/_rels/document.xml.rels      — relationship: customXml/item1.xml
+[Content_Types].xml               — override for customXml/item1.xml
+```
+
+Format of `item1.xml`:
+```xml
+<wuState xmlns="urn:watts-up:state:v1">
+  <json>{ ... full JSON state ... }</json>
+</wuState>
+```
+
+### 16.3 Export flow (updated)
+
+1. Build document XML (same as Revision 15)
+2. Serialize current `state` to JSON
+3. Write JSON into `word/customXml/item1.xml`
+4. Assemble ZIP and download
+
+### 16.4 Import flow ("Open .docx Project")
+
+1. User selects a `.docx` file via file picker
+2. JSZip opens the ZIP
+3. Read `word/customXml/item1.xml` → parse JSON → restore `state`
+4. Read each prose content control by tag from `word/document.xml`:
+   - `wu-intro` → `state.meta.introText`
+   - `wu-general-notes` → `state.meta.generalNotes[]` (split on paragraph boundaries)
+   - `wu-references` → ignored (references are authoritative in JSON state)
+   - `wu-compliance` → `state.meta.complianceText`
+5. Call `recalc()` and `renderAll()`
+
+Step 4 means prose edits made in Word override the JSON-embedded values on import.
+References are not read back from Word (the numbered list is regenerated from JSON state).
+
+### 16.5 UI changes
+
+- "Open .docx Project" button added to toolbar (or file picker accepts both `.json` and `.docx`)
+- File picker `accept` attribute updated to `.json,.docx`
+- On import, detect file type by extension: `.docx` → Word import path; `.json` → existing path
+
+### 16.6 Constraints and edge cases
+
+- If `customXml/item1.xml` is missing (file was created externally or is a plain Word doc),
+  import fails gracefully with a clear error message
+- JSON schema version mismatch handled by `migrateLegacy()` (same as JSON import)
+- Prose content-control extraction uses a lightweight XML text scan (not a full DOM parser);
+  handles single-paragraph and multi-paragraph controls; ignores nested SDTs
+
+---
+
+## 17. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)
 - Print settings: user-defined rounding schedule
+- User-designed `.docx` template (base64-embedded; Watts Up fills tagged content controls)
