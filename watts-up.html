@@ -2518,13 +2518,25 @@ function wxRun(text,{b,i,sz,color}={}){
   return `<w:r>${rPr?`<w:rPr>${rPr}</w:rPr>`:''}<w:t xml:space="preserve">${wxEsc(text)}</w:t></w:r>`;
 }
 
-function wxPar(inner,{ind,before=40,after=40,jc}={}){
+function wxPar(inner,{style,ind,before=40,after=40,jc,keepNext}={}){
   const pPr=[
+    style?`<w:pStyle w:val="${style}"/>`:'',
+    keepNext?'<w:keepNext/>':'',
     `<w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>`,
     ind!=null?`<w:ind w:left="${ind}"/>`:'',
     jc?`<w:jc w:val="${jc}"/>`:'',
   ].join('');
   return `<w:p><w:pPr>${pPr}</w:pPr>${inner||''}</w:p>`;
+}
+
+// Inline plain-text content control — placed inside a paragraph alongside other runs
+function wxSdtText(tag,runsXml){
+  return `<w:sdt><w:sdtPr><w:tag w:val="${tag}"/><w:text/></w:sdtPr><w:sdtContent>${runsXml}</w:sdtContent></w:sdt>`;
+}
+
+// Block content control — wraps complete paragraphs (placed at body level)
+function wxSdtBlock(tag,contentXml){
+  return `<w:sdt><w:sdtPr><w:tag w:val="${tag}"/></w:sdtPr><w:sdtContent>${contentXml}</w:sdtContent></w:sdt>`;
 }
 
 function wxTc(inner,{w,span,vm,topBdr,leftBdr,shd}={}){
@@ -2703,59 +2715,89 @@ function buildDocumentXml(){
   const dcOpts={descW:DESC_W,notesW:NOTES_W,numW:dcNumW,hasAnnot};
   const body=[];
 
-  // Title
-  body.push(wxPar(wxRun('Aircraft Electrical Load Analysis',{b:true,sz:16}),{before:0,after:80,jc:'center'}));
-  if(m.documentNumber)body.push(wxPar(wxRun(m.documentNumber,{sz:12}),{before:0,after:40,jc:'center'}));
+  // ─ Title (uses Heading1 style; center-aligned override)
+  body.push(wxPar(wxRun('Aircraft Electrical Load Analysis'),{style:'Heading1',before:0,after:80,jc:'center'}));
 
-  // Identity table (2-column: label | value)
-  const idRows=[
-    ['Aircraft Make',m.make],['Model',m.model],['Designation',m.marketingDesignation],
-    ['Serial Number',m.serialNumber],['Flight Phase',m.flightPhase],
-    ['Revision',m.revisionLevel],['Prepared By',m.preparedBy],['Approved By',m.approvedBy],
-    ['Rev Date',m.revisionDate],['Report Date',new Date().toLocaleDateString()],
-  ].filter(([,v])=>v).map(([label,value])=>
-    wxTr(wxTc(wxPar(wxRun(label,{b:true,sz:9}),{before:20,after:20}),{w:1800})+
-         wxTc(wxPar(wxRun(value||'',{sz:9}),{before:20,after:20}),{w:3600}))
-  ).join('');
-  if(idRows)body.push(`<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
-    `<w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/>`+
-    `<w:insideH w:val="single" w:sz="2" w:space="0" w:color="dddddd"/><w:insideV w:val="none"/>` +
+  // ─ Identity header table — 4 columns, inline content controls for each field
+  const iField=(label,tag,val)=>wxRun(label+':  ',{b:true,sz:9})+wxSdtText(tag,wxRun(val||'',{sz:9}));
+  const iCell=(label,tag,val,w,span)=>wxTc(wxPar(iField(label,tag,val),{before:30,after:30}),{w,span});
+  const iRows=[
+    wxTr(
+      iCell('Make','wu-make',m.make,2340)+
+      iCell('Model','wu-model',m.model,2340)+
+      iCell('Designation','wu-designation',m.marketingDesignation,2340)+
+      iCell('Serial #','wu-serial',m.serialNumber,2340)
+    ),
+    wxTr(
+      iCell('Doc #','wu-docnumber',m.documentNumber,2340)+
+      iCell('Rev','wu-revision',m.revisionLevel,2340)+
+      iCell('Prepared By','wu-preparedby',m.preparedBy,2340)+
+      iCell('Approved By','wu-approvedby',m.approvedBy,2340)
+    ),
+    wxTr(
+      iCell('Flight Phase','wu-flightphase',m.flightPhase,2340)+
+      iCell('Rev Date','wu-revdate',m.revisionDate,2340)+
+      iCell('Report Date','wu-reportdate',new Date().toLocaleDateString(),4680,2)
+    ),
+  ].join('');
+  body.push(
+    `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>`+
+    `<w:top w:val="single" w:sz="6" w:space="0" w:color="888888"/>` +
+    `<w:left w:val="none"/><w:bottom w:val="single" w:sz="6" w:space="0" w:color="888888"/>` +
+    `<w:right w:val="none"/>` +
+    `<w:insideH w:val="single" w:sz="2" w:space="0" w:color="cccccc"/>` +
+    `<w:insideV w:val="single" w:sz="2" w:space="0" w:color="cccccc"/>` +
     `</w:tblBorders><w:tblLayout w:type="fixed"/>` +
-    `<w:tblCellMar><w:top w:w="20" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>` +
-    `<w:bottom w:w="20" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr>`+
-    `<w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="3600"/></w:tblGrid>${idRows}</w:tbl>`);
+    `<w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/>` +
+    `<w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>`+
+    `<w:tblGrid><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/></w:tblGrid>`+
+    iRows+`</w:tbl>`
+  );
 
-  // Intro
-  if(m.introText?.trim()){
-    body.push(wxPar(wxRun('1.0  Introduction',{b:true,sz:12}),{before:120,after:40}));
-    m.introText.split('\n').forEach(line=>body.push(wxPar(line?wxRun(line,{sz:10}):'',{before:0,after:40})));
-  }
-  // General Notes
+  // ─ §1 Introduction
+  body.push(wxPar(wxRun('1.0  Introduction'),{style:'Heading1',before:240,after:60,keepNext:true}));
+  const introContent=m.introText?.trim()
+    ?m.introText.split('\n').map(l=>wxPar(l?wxRun(l,{sz:10}):'',{style:'Normal',before:0,after:60})).join('')
+    :wxPar(wxRun('',{sz:10}),{style:'Normal',before:0,after:60});
+  body.push(wxSdtBlock('wu-intro',introContent));
+
+  // ─ §2 General Notes
+  body.push(wxPar(wxRun('2.0  General Notes'),{style:'Heading1',before:240,after:60,keepNext:true}));
   const gn=m.generalNotes||[];
-  if(gn.length){
-    body.push(wxPar(wxRun('2.0  General Notes',{b:true,sz:12}),{before:120,after:40}));
-    gn.forEach(note=>body.push(wxPar(wxRun('•  '+note,{sz:10}),{ind:360,before:0,after:40})));
-  }
-  // References
-  const refs=m.references||[];
-  if(refs.length){
-    body.push(wxPar(wxRun('3.0  References',{b:true,sz:12}),{before:120,after:40}));
-    refs.forEach((r,i)=>{
-      const parts=[r.organization,r.docNumber,r.title||null,r.revision?`Rev. ${r.revision}`:null,r.date||null].filter(Boolean);
-      body.push(wxPar(wxRun(`${i+1}.  ${parts.join('. ')}.`,{sz:10}),{ind:360,before:0,after:40}));
-    });
-  }
-  // Compliance
-  if(m.complianceText?.trim()){
-    body.push(wxPar(wxRun('4.0  Compliance Statement',{b:true,sz:12}),{before:120,after:40}));
-    m.complianceText.split('\n').forEach(line=>body.push(wxPar(line?wxRun(line,{sz:10}):'',{before:0,after:40})));
-  }
+  const gnContent=gn.length
+    ?gn.map(note=>wxPar(wxRun('• '+note,{sz:10}),{style:'Normal',ind:360,before:0,after:40})).join('')
+    :wxPar(wxRun('',{sz:10}),{style:'Normal',before:0,after:40});
+  body.push(wxSdtBlock('wu-general-notes',gnContent));
 
-  // Appendix A
-  body.push(wxPar(wxRun('Appendix A — Load Analysis',{b:true,sz:14}),{before:160,after:80}));
+  // ─ §3 References
+  body.push(wxPar(wxRun('3.0  References'),{style:'Heading1',before:240,after:60,keepNext:true}));
+  const refs=m.references||[];
+  const refsContent=refs.length
+    ?refs.map((r,i)=>wxPar(
+        wxRun(`${i+1}. `,{sz:10})+
+        (r.organization?wxRun(r.organization+'.  ',{sz:10}):'')+
+        (r.docNumber?wxRun(r.docNumber+'.  ',{sz:10}):'')+
+        (r.title?wxRun(r.title,{sz:10,i:true})+wxRun('.  ',{sz:10}):'')+
+        (r.revision?wxRun(`Rev. ${r.revision}.  `,{sz:10}):'')+
+        (r.date?wxRun(r.date+'.',{sz:10}):''),
+        {style:'Normal',ind:360,before:0,after:40}
+      )).join('')
+    :wxPar(wxRun('',{sz:10}),{style:'Normal',before:0,after:40});
+  body.push(wxSdtBlock('wu-references',refsContent));
+
+  // ─ §4 Compliance
+  body.push(wxPar(wxRun('4.0  Compliance Statement'),{style:'Heading1',before:240,after:60,keepNext:true}));
+  const compContent=m.complianceText?.trim()
+    ?m.complianceText.split('\n').map(l=>wxPar(l?wxRun(l,{sz:10}):'',{style:'Normal',before:0,after:60})).join('')
+    :wxPar(wxRun('',{sz:10}),{style:'Normal',before:0,after:60});
+  body.push(wxSdtBlock('wu-compliance',compContent));
+
+  // ─ Appendix A
+  body.push(wxPar(wxRun('Appendix A — Load Analysis'),{style:'Heading1',before:280,after:80}));
   const mkTbl=(acDc,cols,label,opts)=>{
     if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
-    return wxPar(wxRun(label,{b:true,sz:11}),{before:80,after:40})+buildWordRptTable(acDc,cols,cfg,am,opts);
+    return wxPar(wxRun(label),{style:'Heading2',before:160,after:60,keepNext:true})+
+           buildWordRptTable(acDc,cols,cfg,am,opts);
   };
   const al=vLbl('ac'),dl=vLbl('dc');
   const acTbl=mkTbl('ac',acCols,al?`${al} Summary`:'AC Summary',acOpts);
@@ -2764,10 +2806,10 @@ function buildDocumentXml(){
   if(acFirst){body.push(acTbl);if(acTbl&&dcTbl)body.push(spacerP);body.push(dcTbl);}
   else{body.push(dcTbl);if(acTbl&&dcTbl)body.push(spacerP);body.push(acTbl);}
 
-  // Notes
+  // ─ Notes
   if(notesList.length){
-    body.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40}));
-    notesList.forEach(({num,text})=>body.push(wxPar(wxRun(`${num}.  ${text}`,{sz:9}),{ind:360,before:0,after:30})));
+    body.push(wxPar(wxRun('Notes'),{style:'Heading2',before:100,after:40}));
+    notesList.forEach(({num,text})=>body.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
   }
 
   const sectPr=`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
@@ -2806,12 +2848,45 @@ async function generateDocx(){
     `</Relationships>`);
   zip.file('word/styles.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
-    `<w:styles xmlns:w="${WNS}">`+
+    `<w:styles xmlns:w="${WNS}" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">`+
+    // Document defaults: Calibri 10pt
     `<w:docDefaults><w:rPrDefault><w:rPr>`+
-    `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="20"/>`+
+    `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>`+
+    `<w:sz w:val="20"/><w:szCs w:val="20"/>`+
     `</w:rPr></w:rPrDefault></w:docDefaults>`+
-    `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>`+
-    `<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/>`+
+    // Normal
+    `<w:style w:type="paragraph" w:default="1" w:styleId="Normal">`+
+    `<w:name w:val="Normal"/>`+
+    `<w:pPr><w:spacing w:before="0" w:after="80" w:line="276" w:lineRule="auto"/></w:pPr>`+
+    `</w:style>`+
+    // Heading 1 — bold, 13pt, dark blue, bottom border, keeps with next
+    `<w:style w:type="paragraph" w:styleId="Heading1">`+
+    `<w:name w:val="heading 1"/>`+
+    `<w:basedOn w:val="Normal"/><w:next w:val="Normal"/>`+
+    `<w:pPr><w:keepNext/>`+
+    `<w:spacing w:before="240" w:after="80" w:line="276" w:lineRule="auto"/>`+
+    `<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="4" w:color="2E4057"/></w:pBdr>`+
+    `</w:pPr>`+
+    `<w:rPr><w:b/><w:bCs/>`+
+    `<w:sz w:val="26"/><w:szCs w:val="26"/>`+
+    `<w:color w:val="2E4057"/>`+
+    `</w:rPr>`+
+    `</w:style>`+
+    // Heading 2 — bold, 11pt, dark blue
+    `<w:style w:type="paragraph" w:styleId="Heading2">`+
+    `<w:name w:val="heading 2"/>`+
+    `<w:basedOn w:val="Normal"/><w:next w:val="Normal"/>`+
+    `<w:pPr><w:keepNext/>`+
+    `<w:spacing w:before="160" w:after="60" w:line="276" w:lineRule="auto"/>`+
+    `</w:pPr>`+
+    `<w:rPr><w:b/><w:bCs/>`+
+    `<w:sz w:val="22"/><w:szCs w:val="22"/>`+
+    `<w:color w:val="2E4057"/>`+
+    `</w:rPr>`+
+    `</w:style>`+
+    // TableGrid
+    `<w:style w:type="table" w:styleId="TableGrid">`+
+    `<w:name w:val="Table Grid"/>`+
     `<w:tblPr><w:tblBorders>`+
     `<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
     `<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
@@ -2819,7 +2894,9 @@ async function generateDocx(){
     `<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
     `<w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
     `<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>`+
-    `</w:tblBorders></w:tblPr></w:style></w:styles>`);
+    `</w:tblBorders></w:tblPr>`+
+    `</w:style>`+
+    `</w:styles>`);
   zip.file('word/settings.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
     `<w:settings xmlns:w="${WNS}"><w:defaultTabStop w:val="720"/></w:settings>`);
