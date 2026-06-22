@@ -963,12 +963,15 @@ async function importDocx(file){
   try{
     const buf=await file.arrayBuffer();
     const zip=await JSZip.loadAsync(buf);
-    const xmlFile=zip.file('customXml/item1.xml');
+    console.log('[WattsUp] ZIP entries:', Object.keys(zip.files));
+    const xmlFile=zip.file('customXml/item1.xml')||zip.file('word/customXml/item1.xml');
     if(!xmlFile){alert('This file was not created by Watts Up — no project data found.');return;}
     const xmlContent=await xmlFile.async('string');
-    const m=xmlContent.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+    console.log('[WattsUp] item1.xml preview:', xmlContent.slice(0,200));
+    const m=xmlContent.match(/<json>([\s\S]*?)<\/json>/);
     if(!m){alert('Could not read project data from the Word file.');return;}
-    const parsed=JSON.parse(m[1]);
+    const jsonStr=m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&apos;/g,"'");
+    const parsed=JSON.parse(jsonStr);
     migrateLegacy(parsed);validateImport(parsed);
     const docFile=zip.file('word/document.xml');
     if(docFile){
@@ -2878,10 +2881,11 @@ async function generateDocx(){
   const WNS='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const zip=new JSZip();
   // Embed JSON state as Custom XML Part for round-trip import
-  const jsonStr=JSON.stringify(state).replace(/\]\]>/g,']]]]><![CDATA[>');
+  const jsonStr=JSON.stringify(state)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   zip.file('customXml/item1.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
-    `<wuData xmlns="urn:watts-up:v1"><json><![CDATA[${jsonStr}]]></json></wuData>`);
+    `<wuData xmlns="urn:watts-up:v1"><json>${jsonStr}</json></wuData>`);
   zip.file('customXml/itemProps1.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
     `<ds:datastoreItem ds:itemID="{00000000-0000-0000-0000-000000000001}" `+
