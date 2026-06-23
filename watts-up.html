@@ -2816,21 +2816,35 @@ async function generateDocx(){
   function fillSdtText(xml,tag,value){
     const sv=xe(value||'');
     const tXml=(sv.startsWith(' ')||sv.endsWith(' '))?`<w:t xml:space="preserve">${sv}</w:t>`:`<w:t>${sv}</w:t>`;
-    const idx=xml.indexOf(`<w:tag w:val="${tag}"/>`);
-    if(idx<0)return xml;
-    const s0=xml.lastIndexOf('<w:sdt>',idx);
-    const c0=xml.indexOf('<w:sdtContent>',s0);
-    const c1=xml.indexOf('</w:sdtContent>',c0)+15;
-    const chunk=xml.slice(c0,c1);
-    return xml.slice(0,c0)+chunk.replace(/<w:t(?:\s[^>]*)?>(?:[^<]*)<\/w:t>/,tXml)+xml.slice(c1);
+    const marker=`<w:tag w:val="${tag}"/>`;
+    let result=xml,searchFrom=0;
+    while(true){
+      const idx=result.indexOf(marker,searchFrom);
+      if(idx<0)break;
+      const s0=result.lastIndexOf('<w:sdt>',idx);
+      const c0=result.indexOf('<w:sdtContent>',s0);
+      const c1=result.indexOf('</w:sdtContent>',c0)+15;
+      const chunk=result.slice(c0,c1);
+      const newChunk=chunk.replace(/<w:t(?:\s[^>]*)?>(?:[^<]*)<\/w:t>/,tXml);
+      result=result.slice(0,c0)+newChunk+result.slice(c1);
+      searchFrom=c0+newChunk.length;
+    }
+    return result;
   }
   function fillSdtBlock(xml,tag,contentXml){
-    const idx=xml.indexOf(`<w:tag w:val="${tag}"/>`);
-    if(idx<0)return xml;
-    const s0=xml.lastIndexOf('<w:sdt>',idx);
-    const c0=xml.indexOf('<w:sdtContent>',s0);
-    const c1=xml.indexOf('</w:sdtContent>',c0)+15;
-    return xml.slice(0,c0)+'<w:sdtContent>'+contentXml+'</w:sdtContent>'+xml.slice(c1);
+    const marker=`<w:tag w:val="${tag}"/>`;
+    let result=xml,searchFrom=0;
+    while(true){
+      const idx=result.indexOf(marker,searchFrom);
+      if(idx<0)break;
+      const s0=result.lastIndexOf('<w:sdt>',idx);
+      const c0=result.indexOf('<w:sdtContent>',s0);
+      const c1=result.indexOf('</w:sdtContent>',c0)+15;
+      const newChunk='<w:sdtContent>'+contentXml+'</w:sdtContent>';
+      result=result.slice(0,c0)+newChunk+result.slice(c1);
+      searchFrom=c0+newChunk.length;
+    }
+    return result;
   }
   function updateDocProp(xml,name,value){
     const en=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
