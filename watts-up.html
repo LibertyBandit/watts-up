@@ -2613,33 +2613,33 @@ function wxTr(inner,{h,exact,hdr}={}){
   return `<w:tr>${trPr?`<w:trPr>${trPr}</w:trPr>`:''}${inner}</w:tr>`;
 }
 
-function buildWordTblHeader(cols,hasAnnot,{descW,notesW,numW}){
+function buildWordTblHeader(cols,hasAnnot,{descW,notesW,colWidths}){
   const HSZ=7.5;
   const runs=[];
-  cols.forEach(c=>{
-    if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});
-    else runs[runs.length-1].count++;
+  cols.forEach((c,i)=>{
+    if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1,w:colWidths[i]});
+    else{runs[runs.length-1].count++;runs[runs.length-1].w+=colWidths[i];}
   });
   // Row 1: description (vMerge start) | notes (vMerge start) | group headers
   let r1='';
   r1+=wxTc(wxPar('',{before:0,after:0}),{w:descW,vm:'start'});
-  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,vm:'start'});
+  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,vm:'start',leftBdr:true});
   runs.forEach(g=>{
     r1+=wxTc(wxPar(wxRun(g.label,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),
-      {w:numW*g.count,span:g.count>1?g.count:undefined,leftBdr:true});
+      {w:g.w,span:g.count>1?g.count:undefined,leftBdr:true});
   });
   // Row 2: description (vMerge cont) | notes (vMerge cont) | sub-column labels
   let r2='';
   r2+=wxTc(wxPar('',{before:0,after:0}),{w:descW,vm:'cont'});
-  if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0}),{w:notesW,vm:'cont'});
-  cols.forEach(c=>{
+  if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0}),{w:notesW,vm:'cont',leftBdr:true});
+  cols.forEach((c,i)=>{
     r2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),
-      {w:numW,leftBdr:c.isGroupFirst});
+      {w:colWidths[i],leftBdr:c.isGroupFirst});
   });
   return wxTr(r1,{h:300,hdr:true})+wxTr(r2,{h:260,hdr:true});
 }
 
-function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,numW,hasAnnot}){
+function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,colWidths,hasAnnot}){
   const isProt=NT.PROTECTION.includes(n.type);
   const isConvIn=n.convRole==='in';
   const isLd=isLoad(n.type);const hasC=hasCap(n.type);
@@ -2655,13 +2655,14 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,numW,hasAnnot
   let notesCell='';
   if(hasAnnot){
     const marker=am&&am[n.id]?am[n.id].marker:'';
-    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,topBdr});
+    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,topBdr,leftBdr:true});
   }
   let numCells='';
-  cols.forEach(col=>{
+  cols.forEach((col,i)=>{
     const{group,k,isPf,isGroupFirst}=col;
     const lB=isGroupFirst;
-    const emDash=()=>{numCells+=wxTc(wxPar(wxRun('—',{sz}),{before:20,after:20,jc:'right'}),{w:numW,topBdr,leftBdr:lB});};
+    const w=colWidths[i];
+    const emDash=()=>{numCells+=wxTc(wxPar(wxRun('—',{sz}),{before:20,after:20,jc:'right'}),{w,topBdr,leftBdr:lB});};
     if(isConvIn&&cfg.convInNcOnly&&group!=='nc'){emDash();return;}
     let val=null;let isNeg=false;
     if(group==='cap'){if(!hasC||!n.capacity){emDash();return;}val=n.capacity[k];}
@@ -2680,13 +2681,15 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,numW,hasAnnot
       val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }
     if(val==null){emDash();return;}
-    const txt=isNeg?`(${fmtRpt(val,isPf)})`:fmtRpt(val,isPf);
-    numCells+=wxTc(wxPar(wxRun(txt,{sz}),{before:20,after:20,jc:'right'}),{w:numW,topBdr,leftBdr:lB});
+    const fmtd=isPf?fmtPfRpt(val):fmtRpt(val);
+    if(fmtd==null){emDash();return;}
+    const txt=isNeg?`(${fmtd})`:fmtd;
+    numCells+=wxTc(wxPar(wxRun(txt,{sz}),{before:20,after:20,jc:'right'}),{w,topBdr,leftBdr:lB});
   });
   return wxTr(descCell+notesCell+numCells);
 }
 
-function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,numW,hasAnnot}){
+function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,colWidths,hasAnnot}){
   const nodes=state.nodes;
   const statusOrd={existing:0,removed:1,new:2};
   const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
@@ -2696,7 +2699,7 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,numW,hasAnnot}){
   secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
   const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
   const totalCols=1+(hasAnnot?1:0)+cols.length;
-  const totalW=descW+(hasAnnot?notesW:0)+numW*cols.length;
+  const totalW=descW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
   const emRem=new Set(),emAdd=new Set();
   const rows=[];let prevDepth=-1;
   function visit(id,depth,inRem,inAdd,topBdr){
@@ -2717,7 +2720,7 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,numW,hasAnnot}){
         nowInAdd=true;
       }
     }
-    rows.push(buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,numW,hasAnnot}));
+    rows.push(buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,colWidths,hasAnnot}));
     const kids=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
     kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
   }
@@ -2726,8 +2729,8 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,numW,hasAnnot}){
 }
 
 function buildWordRptTable(acDc,cols,cfg,am,colOpts){
-  const{descW,notesW,numW,hasAnnot}=colOpts;
-  const gridCols=[descW,...(hasAnnot?[notesW]:[]),...cols.map(()=>numW)].map(w=>`<w:gridCol w:w="${w}"/>`).join('');
+  const{descW,notesW,colWidths,hasAnnot}=colOpts;
+  const gridCols=[descW,...(hasAnnot?[notesW]:[]),...colWidths].map(w=>`<w:gridCol w:w="${w}"/>`).join('');
   const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
     `<w:top w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
@@ -2772,6 +2775,23 @@ function buildRefsParas(){
     `</w:p>`
   ).join('');
 }
+// Per-column widths: each column starts at an even share of the available width, but is
+// widened if needed so its group's longest unbreakable word (e.g. "Remaining") still fits
+// on one line — multi-word labels may still wrap between words, which is acceptable.
+function computeColWidths(groups,cols,avail,pt){
+  const naive=Math.floor(avail/cols.length);
+  const counts={};
+  cols.forEach(c=>{counts[c.group]=(counts[c.group]||0)+1;});
+  const groupMinPerCol={};
+  Object.keys(counts).forEach(gid=>{
+    const g=groups.find(g=>g.id===gid);
+    if(!g)return;
+    const longest=g.label.split(/\s+/).reduce((m,w)=>Math.max(m,w.length),0);
+    const groupW=Math.ceil(longest*pt*9.5)+160; // ~9.5 DXA/char/pt (bold) + cell padding
+    groupMinPerCol[gid]=Math.ceil(groupW/counts[gid]);
+  });
+  return cols.map(c=>Math.max(naive,groupMinPerCol[c.group]||0));
+}
 function buildTablesContent(){
   const cfg=wordCfg||defaultPrintCfg();
   const acCols=activeCols(AC_GROUPS,cfg.ac);
@@ -2782,10 +2802,11 @@ function buildTablesContent(){
   // Letter landscape (Rev 1 template): 15840 wide, margins L=1440 R=1008 -> 13392 usable
   const TOTAL_W=13392,DESC_W=3600,NOTES_W=600;
   const avail=TOTAL_W-DESC_W-(hasAnnot?NOTES_W:0);
-  const acNumW=Math.floor(avail/acCols.length);
-  const dcNumW=Math.floor(avail/dcCols.length);
-  const acOpts={descW:DESC_W,notesW:NOTES_W,numW:acNumW,hasAnnot};
-  const dcOpts={descW:DESC_W,notesW:NOTES_W,numW:dcNumW,hasAnnot};
+  const HSZ=7.5;
+  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
+  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
+  const acOpts={descW:DESC_W,notesW:NOTES_W,colWidths:acColWidths,hasAnnot};
+  const dcOpts={descW:DESC_W,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot};
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const vLbl=acDc=>{
     const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??
@@ -2805,7 +2826,7 @@ function buildTablesContent(){
   if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
   else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
   if(notesList.length){
-    out.push(wxPar(wxRun('Notes'),{style:'Heading2',before:100,after:40}));
+    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40}));
     notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
   }
   return out.join('');
