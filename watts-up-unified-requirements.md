@@ -713,25 +713,28 @@ word/_rels/document.xml.rels  — rId3 relationship to ../customXml/item1.xml
 [Content_Types].xml           — overrides for item1.xml and itemProps1.xml
 ```
 
-Format of `item1.xml`:
+Format of `item1.xml` (as-built — XML entity encoding, not CDATA; CDATA was found to
+truncate JSON containing `]]>` sequences and was replaced in the Revision 16 bugfix):
 ```xml
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <wuData xmlns="urn:watts-up:v1">
-  <json><![CDATA[{ ... full JSON state ... }]]></json>
+  <json>{ ... full JSON state, &amp;/&lt;/&gt; entity-escaped ... }</json>
 </wuData>
 ```
 
 ### 16.3 Export flow (updated)
 
 1. Build document XML (same as Revision 15)
-2. Serialize current `state` to JSON
-3. Write JSON into `word/customXml/item1.xml`
+2. Serialize current `state` to JSON, escaping `&`, `<`, `>` as XML entities
+3. Write JSON into `customXml/item1.xml` (package root, not `word/customXml/`)
 4. Assemble ZIP and download
 
 ### 16.4 Import flow ("Open .docx Project")
 
 1. User selects a `.docx` file via file picker
 2. JSZip opens the ZIP
-3. Read `customXml/item1.xml` → extract CDATA → parse JSON → restore `state`
+3. Read `customXml/item1.xml` → extract text between `<json>...</json>` → decode XML
+   entities → parse JSON → restore `state`
 4. Read each prose content control by tag from `word/document.xml`:
    - `wu-intro` → `state.meta.introText`
    - `wu-general-notes` → `state.meta.generalNotes[]` (split on paragraph boundaries)
@@ -758,14 +761,120 @@ References are not read back from Word (the numbered list is regenerated from JS
 
 ---
 
-## 17. Future Enhancements
+## 17. Revision 17 — Template-Based Word Export
+
+*Last updated: 2026-06-22*
+
+### 17.1 Overview
+
+Replace the generated-from-scratch document XML (Revisions 15–16) with a user-designed
+Word template. `generateDocx()` no longer builds OOXML structure, styles, headers, footers,
+TOC, or page numbering programmatically — it loads a template `.docx` (embedded in
+`watts-up.html` as a base64 constant, `DOCX_TEMPLATE_B64`) and fills tagged content
+controls with data from `state`. The template, not Watts Up code, controls layout,
+typography, headers/footers, table of contents, and page numbering.
+
+The template file is `Watts Up ELA Template.docx`, designed by the user in Word and
+committed to the project root. It is expected to be revised iteratively; each new
+template version must be re-embedded as the base64 constant.
+
+### 17.2 Template structure
+
+Three document sections, each its own page setup:
+
+| Section | Orientation | Page size | Contents |
+|---|---|---|---|
+| Cover page | Portrait | Letter | Title block, identity fields, vertically centered |
+| Body | Portrait | Letter | Header (`header2.xml`), intro/notes/references/compliance prose, log of revisions |
+| Appendix | Landscape | Ledger/Tabloid (24480 × 15840 DXA) | Load tables, 22032 DXA usable width |
+
+Footers use Word native field codes (`{ PAGE }`, `{ PAGEREF end }`) and are never modified
+by Watts Up — page numbering is managed entirely in Word.
+
+### 17.3 Content control tags
+
+| Tag | Fill method | Source | Notes |
+|---|---|---|---|
+| `wu-docnumber` | inline | `meta.documentNumber` | Appears multiple times (cover + log of revisions) |
+| `wu-revision` | inline | `meta.revisionNumber` / `revisionLevel` | Appears multiple times |
+| `wu-make` | inline | `meta.make` | |
+| `wu-model` | inline | `meta.model` | |
+| `wu-designation` | inline | `meta.marketingDesignation` / `designation` | |
+| `wu-serial` | inline | `meta.serialNumber` | |
+| `wu-flightphase` | inline | `meta.flightPhase` | Nested SDT (inner SDT inside an untagged outer SDT) |
+| `wu-preparedby` | inline | `meta.preparedBy` | |
+| `wu-revdate` | block | `meta.revisionDate` | Multi-run paragraph (Word spellcheck splits text); filled via explicit replacement paragraph, not inline text substitution |
+| `wu-intro` | block | `meta.introText` | One paragraph per newline |
+| `wu-general-notes` | block | `meta.generalNotes[]` | Bulleted |
+| `wu-references` | block | `meta.references[]` | Numbered, italic titles — added by user, not in original Revision 15/16 tag list |
+| `wu-compliance` | block | `meta.complianceText` | One paragraph per newline |
+| `wu-tables` | block | node tree | Ledger-width OOXML tables |
+
+`wu-approvedby` and `wu-reportdate` are defined in the tag vocabulary but unused in the
+current template.
+
+`header2.xml` (body section header) independently carries `wu-docnumber`, `wu-revision`,
+`wu-make`, `wu-model`, `wu-serial` and is filled separately from `word/document.xml`.
+
+### 17.4 Fill mechanics
+
+- `fillSdtText(xml, tag, value)` — locates `<w:tag w:val="...">`, walks back to the
+  enclosing `<w:sdt>`, and replaces the first `<w:t>` run inside `<w:sdtContent>`.
+  **Loops over every occurrence of the tag in the XML** (fixed in 17.1 — see below),
+  so a tag repeated on the cover page and in the log of revisions is filled consistently.
+- `fillSdtBlock(xml, tag, contentXml)` — same lookup, but replaces the entire
+  `<w:sdtContent>...</w:sdtContent>` with caller-supplied XML. Also loops over every
+  occurrence.
+- `updateDocProp(xml, name, value)` — updates `docProps/custom.xml` custom document
+  properties (`ReportNo`, `ReportRev`, `Make`, `Model`, `S/N`, `Flight Phase`) by name.
+
+### 17.5 Export flow
+
+1. Decode `DOCX_TEMPLATE_B64` into a JSZip instance
+2. Fill identity fields and prose blocks in `word/document.xml`
+3. Fill identity fields in `word/header2.xml`
+4. Write `customXml/item1.xml` with full JSON state (same format as Revision 16)
+5. Update `docProps/custom.xml` custom properties
+6. Assemble ZIP and download as `WattsUp_{make}_{model}_{serial}_{YYYY-MM-DD}.docx`
+
+### 17.6 Revision 17.1 — fill-all-occurrences fix
+
+**Bug:** `fillSdtText` and `fillSdtBlock` used `indexOf`, which finds only the first
+match. Tags appearing more than once in the same XML part (e.g. `wu-docnumber` on both
+the cover page and the log of revisions) were only filled at their first occurrence;
+later occurrences were left as template placeholder text.
+
+**Fix:** both functions now loop, advancing a `searchFrom` cursor past each replaced
+`<w:sdtContent>` block, until no further instances of the tag's `<w:tag w:val="...">`
+marker remain in the XML string.
+
+### 17.7 Superseded from Revisions 15–16
+
+- Programmatic OOXML assembly (`buildDocumentXml` and related per-section builders) is
+  replaced by template loading; helper functions retained are `buildBodyTextParas`,
+  `buildGeneralNotesParas`, `buildRefsParas`, `buildTablesContent`, now used to produce
+  *content* for `fillSdtBlock` rather than full document XML
+- Letter landscape (13680 DXA usable) superseded by Ledger landscape (22032 DXA usable)
+  for the Appendix, per the user's template design
+- Generated cover page / log of revisions / TOC (deferred items from §15.9) are now
+  provided by the template itself, not generated by Watts Up
+
+### 17.8 Open items
+
+- Template is expected to undergo further iteration; each revision requires
+  re-embedding `DOCX_TEMPLATE_B64`
+- Content-control locking (see §18) not yet implemented — currently nothing prevents a
+  user from manually editing or deleting Watts-Up-managed content controls in Word
+
+---
+
+## 18. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)
 - Print settings: user-defined rounding schedule
-- User-designed `.docx` template (base64-embedded; Watts Up fills tagged content controls)
 - Restrict Watts-Up-exclusive sections in the Word document so users can adjust formatting
   but cannot overwrite generated content (references list, analysis tables). Mechanism:
   `<w:lock w:val="sdtContentLocked"/>` on the relevant content controls, optionally combined
