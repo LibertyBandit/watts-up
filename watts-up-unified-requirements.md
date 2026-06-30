@@ -916,10 +916,32 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 "Export Word" in the dialog.
 
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
-`fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
-`buildWordRptTable` (Word), so print and Word output are already numerically
-consistent without a dedicated rounding-plan setting. A user-configurable rounding
-schedule remains a future enhancement (§19).
+`fmtPfRpt()` are intended to be shared by `buildRptRow` (print), `buildWordSectionRows`,
+and `buildWordRptTable` (Word). **As of Revision 18 this is not fully correct for power
+factor** — see §18.4. A user-configurable rounding schedule remains a future enhancement
+(§19).
+
+### 18.4 Known issues (reported 2026-06-29, not yet fixed)
+
+User testing of the Revision 18 Word export surfaced four defects, located but not yet
+corrected:
+
+1. **Power factor (pf) not rounded to 2 decimals in the Word report.** The Word
+   data-row builder calls `fmtRpt(val, isPf)`, but `fmtRpt()` takes a single argument
+   and ignores `isPf` — pf values get the generic magnitude-based rounding instead of
+   the fixed 2-decimal pf format used in the print path's `rptTxt()`.
+2. **Column header text can wrap mid-word** (no hyphen/break point) when a column
+   group's selected sub-columns leave too little width for its group label (e.g.
+   "Remaining" with only "VA" selected). `buildTablesContent()` divides available width
+   evenly by column count with no minimum tied to label length. Word-boundary or
+   hyphen breaks are acceptable; a raw mid-word break is not.
+3. **No left border divider on the Notes column** in the Appendix tables — every
+   numeric column group gets a left border between groups, but the per-row annotation
+   Notes column (header and data cells) does not, making it visually blend into the
+   Description column.
+4. **The "Notes" sub-heading inside the Appendix tables block uses the `Heading2`
+   paragraph style.** It should not use a Heading style at all — Normal paragraph,
+   bold run, 11 pt.
 
 ---
 
