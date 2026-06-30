@@ -916,36 +916,72 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 "Export Word" in the dialog.
 
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
-`fmtPfRpt()` are intended to be shared by `buildRptRow` (print), `buildWordSectionRows`,
-and `buildWordRptTable` (Word). **As of Revision 18 this is not fully correct for power
-factor** — see §18.4. A user-configurable rounding schedule remains a future enhancement
-(§19).
-
-### 18.4 Known issues (reported 2026-06-29, not yet fixed)
-
-User testing of the Revision 18 Word export surfaced four defects, located but not yet
-corrected:
-
-1. **Power factor (pf) not rounded to 2 decimals in the Word report.** The Word
-   data-row builder calls `fmtRpt(val, isPf)`, but `fmtRpt()` takes a single argument
-   and ignores `isPf` — pf values get the generic magnitude-based rounding instead of
-   the fixed 2-decimal pf format used in the print path's `rptTxt()`.
-2. **Column header text can wrap mid-word** (no hyphen/break point) when a column
-   group's selected sub-columns leave too little width for its group label (e.g.
-   "Remaining" with only "VA" selected). `buildTablesContent()` divides available width
-   evenly by column count with no minimum tied to label length. Word-boundary or
-   hyphen breaks are acceptable; a raw mid-word break is not.
-3. **No left border divider on the Notes column** in the Appendix tables — every
-   numeric column group gets a left border between groups, but the per-row annotation
-   Notes column (header and data cells) does not, making it visually blend into the
-   Description column.
-4. **The "Notes" sub-heading inside the Appendix tables block uses the `Heading2`
-   paragraph style.** It should not use a Heading style at all — Normal paragraph,
-   bold run, 11 pt.
+`fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
+`buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
+enhancement (§20).
 
 ---
 
-## 19. Future Enhancements
+## 19. Revision 19 — Word Export Fixes (pf rounding, header wrap, Notes column)
+
+*Last updated: 2026-06-30*
+
+Four defects reported after Revision 18 testing, all fixed:
+
+### 19.1 Power factor rounding
+
+`buildWordDataRow()`'s numeric-cell loop previously called `fmtRpt(val, isPf)` —
+`fmtRpt()` takes a single argument and silently ignored `isPf`, so pf values got
+generic magnitude-based rounding instead of the fixed 2-decimal pf format. Fixed by
+branching explicitly: `isPf ? fmtPfRpt(val) : fmtRpt(val)`, matching the print path's
+`rptTxt()`. pf values now render as e.g. `0.87`, `0.93`.
+
+### 19.2 Column header word-wrap
+
+Replaced the single uniform `numW` (one width applied to every numeric column) with a
+**per-column `colWidths` array**, threaded through `buildWordTblHeader`,
+`buildWordDataRow`, `buildWordSectionRows`, and `buildWordRptTable` in place of `numW`.
+
+`computeColWidths(groups, cols, avail, pt)`:
+1. Computes an even-share baseline width: `Math.floor(avail / cols.length)`.
+2. For each column group present in `cols`, estimates the DXA width needed for the
+   group label's **longest single unbreakable word** (split on whitespace only — e.g.
+   "Rating / Capacity" → "Capacity", "Added (Removed)" → "(Removed)", "Remaining" →
+   "Remaining" itself) at the header font size (7.5pt bold), divided across however many
+   sub-columns that group has selected.
+3. Each column's width is `Math.max(baseline, thatGroup'sMinPerCol)`.
+
+Only groups whose selected-column count is too small to absorb their longest word get
+widened; other columns stay at the even-share baseline. This avoids the bloat of
+widening *every* column to satisfy the narrowest one (an earlier draft of this fix did
+that and pushed total table width well past the page's usable width — rejected).
+Multi-word labels may still wrap between words/hyphens (acceptable per spec); only a
+hard mid-word break is treated as a defect.
+
+The word-width heuristic (`Math.ceil(longestWordChars * pt * 9.5) + 160`) is an
+approximation (~9.5 DXA per character per point for bold text, plus ~160 DXA for cell
+padding) — not exact font metrics. Verified against a default-config AC table: total
+width came to 13520 DXA (target usable width 13392), with only the `cap` (Rating /
+Capacity, 1 selected column) and `rem` (Remaining, 1 selected column) groups widened
+above the 699 DXA baseline, to 730 and 802 DXA respectively.
+
+### 19.3 Notes column left divider
+
+`buildWordTblHeader()`'s Notes header cells (row 1 and row 2) and
+`buildWordDataRow()`'s Notes data cell now pass `leftBdr:true` to `wxTc()`, matching the
+left border (`<w:left w:val="single" w:sz="12" w:color="777777"/>`) already used between
+numeric column groups.
+
+### 19.4 "Notes" sub-heading style
+
+`buildTablesContent()`'s annotation-list heading (distinct from the per-column Notes
+header in §19.3 and from the `wu-general-notes` content control) no longer sets
+`style:'Heading2'`. It now renders as a Normal paragraph with a bold, 11pt run
+(`wxRun('Notes',{b:true,sz:11})`), with no `w:pStyle` element.
+
+---
+
+## 20. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
