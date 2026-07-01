@@ -1,6 +1,6 @@
 # Watts Up — Unified Requirements
 Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-9-requirements.txt
-Last updated: 2026-06-16 (through Revision 13)
+Last updated: 2026-06-30 (through Revision 19)
 
 ---
 
