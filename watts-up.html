@@ -60,19 +60,23 @@
     .tree-children.collapsed{display:none}
     .tree-node-row{display:flex;align-items:center;gap:.3rem;padding:2px 6px;border-radius:4px}
     .tree-node-row:hover{background:var(--bg-hover)}
+    .tree-node-row.row-dc{background:rgba(88,166,255,.10);box-shadow:inset 2px 0 0 var(--accent-blue)}
+    .tree-node-row.row-dc:hover{background:rgba(88,166,255,.18)}
+    .btn-node[disabled]{opacity:.35;cursor:default;pointer-events:none}
     .toggle-btn{width:16px;height:16px;flex-shrink:0;background:none;color:var(--text-muted);
       font-size:.6rem;display:flex;align-items:center;justify-content:center;padding:0;border-radius:3px;transition:transform .12s}
     .toggle-btn:hover{background:var(--bg-elevated);color:var(--text-primary)}
     .toggle-btn.is-collapsed{transform:rotate(-90deg)}
     .toggle-btn.leaf{visibility:hidden;pointer-events:none}
-    .node-desc{flex:1;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+    .node-desc{flex:1;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:36px}
     .node-desc.removed-text{text-decoration:line-through;color:var(--text-muted)}
     .node-refdes{font-size:.72rem;color:var(--text-muted);font-family:monospace;flex-shrink:0}
     .node-nc{font-size:.75rem;font-weight:600;min-width:76px;text-align:right;flex-shrink:0}
     .nc-pos{color:var(--accent-orange)}.nc-neg{color:var(--accent-green)}.nc-zero{color:var(--text-muted)}
-    .node-actions{display:flex;gap:.2rem;flex-shrink:0}
+    .node-actions{display:flex;gap:.15rem;flex-shrink:0}
     .btn-node{padding:.12rem .38rem;font-size:.7rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
+    .btn-up,.btn-down{padding:.12rem .28rem}
     .btn-node:hover{color:var(--text-primary);background:var(--bg-hover)}
     .type-badge{font-size:.65rem;padding:1px 5px;border-radius:10px;font-weight:700;flex-shrink:0;white-space:nowrap}
     .bg-generation{background:#3a2f00;color:#d29922}
@@ -182,6 +186,31 @@
       .rpt-parent-sep td{border-top:0.75pt solid #888 !important}
       .rpt-warn-list{padding-left:1.2rem;margin:.2rem 0;font-size:8pt;color:#700}
     }
+    /* ── ON-SCREEN REPORT TABS (Power Dist Summary / Load Analysis Detail) ── */
+    /* Reuses the same rpt-* markup the Print Report builds, styled here for normal (non-print) viewing. */
+    .rpt-onscreen{flex:1;overflow:auto;padding:.9rem 1rem}
+    .rpt-onscreen .rpt-detail-block{margin-bottom:1.1rem}
+    .rpt-onscreen .rpt-detail-path{font-size:.74rem;font-style:italic;color:var(--text-muted);margin-bottom:.2rem}
+    .rpt-onscreen .rpt-section-hdr{font-size:.8rem;font-weight:700;margin:.9rem 0 .3rem;border-bottom:2px solid var(--border);
+      padding-bottom:.22rem;color:var(--accent-blue);text-transform:uppercase;letter-spacing:.4px}
+    .rpt-onscreen .rpt-table{width:100%;border-collapse:collapse;font-size:.72rem;white-space:nowrap;margin-bottom:1rem}
+    .rpt-onscreen .rpt-table thead{background:var(--bg-secondary);position:sticky;top:0}
+    .rpt-onscreen .rpt-table th{border:1px solid var(--border);padding:.22rem .35rem;font-weight:700;color:var(--text-secondary)}
+    .rpt-onscreen .rpt-left{text-align:left}
+    .rpt-onscreen .rpt-grp{text-align:center;font-size:.68rem;border-left:2px solid var(--text-muted) !important}
+    .rpt-onscreen .rpt-sub{text-align:right;font-size:.68rem}
+    .rpt-onscreen .rpt-table tbody tr:nth-child(even){background:rgba(255,255,255,.03)}
+    .rpt-onscreen .rpt-table td{border:1px solid var(--border);padding:.18rem .35rem;color:var(--text-secondary)}
+    .rpt-onscreen .rpt-num{text-align:right;font-family:'Courier New',monospace}
+    .rpt-onscreen .rpt-over td{background:rgba(248,81,73,.14) !important}
+    .rpt-onscreen .rpt-warn td{background:rgba(210,153,34,.14) !important}
+    .rpt-onscreen .rpt-over-val{font-weight:700;color:var(--accent-red)}
+    .rpt-onscreen .rpt-grp-first{border-left:2px solid var(--text-muted) !important}
+    .rpt-onscreen .rpt-lbl-removed td{font-style:italic;font-size:.66rem;padding-top:.2rem;padding-bottom:.05rem;border:none;background:transparent !important}
+    .rpt-onscreen .rpt-lbl-added td{font-weight:700;font-size:.66rem;padding-top:.2rem;padding-bottom:.05rem;border:none;background:transparent !important}
+    .rpt-onscreen .rpt-parent-sep td{border-top:2px solid var(--text-muted) !important}
+    .rpt-onscreen .rpt-notes-col{width:28px;text-align:center !important;padding:.15rem .1rem !important}
+    .rpt-onscreen .rpt-note-marker{font-size:.62rem;color:var(--text-muted)}
     .hidden{display:none !important}
     .empty-state{padding:2rem;text-align:center;color:var(--text-muted);font-size:.82rem}
     /* ── TABS ── */
@@ -266,6 +295,8 @@
   <div id="tab-bar">
     <button id="tab-analysis" class="tab-btn active">Analysis</button>
     <button id="tab-document" class="tab-btn">Document</button>
+    <button id="tab-pds" class="tab-btn">Power Distribution Summary</button>
+    <button id="tab-lad" class="tab-btn">Load Analysis Detail</button>
   </div>
 
   <div id="warning-banner" class="hidden">
@@ -315,6 +346,14 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="pds-panel" class="hidden rpt-onscreen">
+    <div id="pds-container"><div class="empty-state">No data to display.</div></div>
+  </div>
+
+  <div id="lad-panel" class="hidden rpt-onscreen">
+    <div id="lad-container"><div class="empty-state">No data to display.</div></div>
   </div>
 
   <main id="main-layout">
@@ -676,7 +715,42 @@ function evalFormula(raw) {
   try { const r=Function('"use strict";return('+expr+')')(); if (typeof r==='number'&&isFinite(r)) return String(Math.round(r*1e9)/1e9); } catch(e) {}
   return raw;
 }
-function children(pid, nodes) { return Object.values(nodes).filter(n=>n.parentId===pid); }
+const STATUS_ORDER={existing:0,removed:1,new:2};
+function children(pid, nodes) {
+  const p=nodes[pid];
+  const ids=(p&&Array.isArray(p.childIds))?p.childIds:[];
+  const kids=ids.map(id=>nodes[id]).filter(Boolean);
+  return [0,1,2].flatMap(g=>kids.filter(k=>(STATUS_ORDER[k.status]??0)===g));
+}
+function siblingArray(node) {
+  if (!node.parentId) return state.rootIds;
+  const p=state.nodes[node.parentId];
+  if (!p) return null;
+  if (!Array.isArray(p.childIds)) p.childIds=[];
+  return p.childIds;
+}
+function attachChild(id,parentId) {
+  if (!parentId) { state.rootIds.push(id); return; }
+  const p=state.nodes[parentId]; if (!p) return;
+  if (!Array.isArray(p.childIds)) p.childIds=[];
+  p.childIds.push(id);
+}
+function detachChild(id,parentId) {
+  if (!parentId) { state.rootIds=state.rootIds.filter(r=>r!==id); return; }
+  const p=state.nodes[parentId]; if (!p||!Array.isArray(p.childIds)) return;
+  p.childIds=p.childIds.filter(c=>c!==id);
+}
+function moveSibling(id,dir) {
+  const n=state.nodes[id]; if (!n) return;
+  const arr=siblingArray(n); if (!arr) return;
+  const sameStatus=arr.filter(cid=>state.nodes[cid]?.status===n.status);
+  const pos=sameStatus.indexOf(id);
+  const swapId=sameStatus[pos+dir];
+  if (swapId===undefined) return;
+  const i1=arr.indexOf(id),i2=arr.indexOf(swapId);
+  [arr[i1],arr[i2]]=[arr[i2],arr[i1]];
+  renderAll();persist();
+}
 function postOrder(rootIds, nodes) {
   const out=[]; const rids=Array.isArray(rootIds)?rootIds:[rootIds];
   function visit(id) { children(id,nodes).forEach(c=>visit(c.id)); out.push(id); }
@@ -748,7 +822,7 @@ let state=null;
 
 function makeNode(type,parentId,overrides={}) {
   const node={id:uid(),type,description:'',refDes:'',status:'existing',parentId,convRole:null,
-    voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],_netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
+    voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],childIds:[],_netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
   if (hasCap(type)) {node.capacity=null;node.existingLoad=mkPow(0,0,0,0,1);node.netChangeOverride=null;}
   if (isConv(type)) {node.efficiency=0.85;node.convPf=(type==='TRU'?0.95:1.0);}
   if (isLoad(type)) {node.loadValue=mkPow();}
@@ -781,6 +855,14 @@ function migrateLegacy(p) {
   if (!m.complianceText)  m.complianceText='';
   if (!Array.isArray(m.generalNotes)) m.generalNotes=[];
   if (!Array.isArray(m.references))   m.references=[];
+  // Backfill childIds for saves predating explicit sibling ordering: derive from
+  // parentId (preserving the object's existing key order) for any node missing it.
+  const needsChildBackfill=Object.values(p.nodes||{}).some(n=>!Array.isArray(n.childIds));
+  if (needsChildBackfill) {
+    const byParent={};
+    Object.values(p.nodes||{}).forEach(n=>{ if (n.parentId) (byParent[n.parentId]=byParent[n.parentId]||[]).push(n.id); });
+    Object.values(p.nodes||{}).forEach(n=>{ if (!Array.isArray(n.childIds)) n.childIds=byParent[n.id]||[]; });
+  }
   Object.values(p.nodes||{}).forEach(n=>{
     if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
     if (!Array.isArray(n.rowRefs))  n.rowRefs=[];
@@ -993,16 +1075,19 @@ async function importDocx(file){
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 function addNode(parentId,data) {
   const node=makeNode(data.type,parentId,data); node.id=uid();
-  state.nodes[node.id]=node; return node.id;
+  state.nodes[node.id]=node;
+  attachChild(node.id,parentId);
+  return node.id;
 }
 function batchCommit(){recalc();renderAll();persist();}
 function updateNode(id,data) { if (!state.nodes[id]) return; Object.assign(state.nodes[id],data); recalc();renderAll();persist(); }
 function delNode(id) {
-  if (!state.nodes[id]) return;
+  const n=state.nodes[id]; if (!n) return;
   const isRoot=state.rootIds.includes(id);
   if (isRoot&&state.rootIds.length<=1) return;
+  const parentId=n.parentId;
   subtree(id,state.nodes).forEach(x=>delete state.nodes[x]);
-  if (isRoot) state.rootIds=state.rootIds.filter(r=>r!==id);
+  detachChild(id,parentId);
   recalc();renderAll();persist();
 }
 
@@ -1040,13 +1125,20 @@ function buildTreeLi(node,nodes) {
   const ncDisplay=isLoad(node.type)?'':ncHtml(node._netChange,node.acDc);
   const isTerminal=isLoad(node.type)||node.status==='removed';
   const addBtn=isTerminal?'':`<button class="btn-node btn-add" data-pid="${node.id}">+ Child</button>`;
-  const row=document.createElement('div'); row.className='tree-node-row';
+  const sibArr=node.parentId?(nodes[node.parentId]?.childIds||[]):(state.rootIds||[]);
+  const sameStatusSibs=sibArr.filter(cid=>nodes[cid]?.status===node.status);
+  const sibPos=sameStatusSibs.indexOf(node.id);
+  const canUp=sibPos>0, canDown=sibPos>=0&&sibPos<sameStatusSibs.length-1;
+  const row=document.createElement('div');
+  row.className='tree-node-row'+(node.acDc==='ac'?'':' row-dc');
   row.innerHTML=`<button class="${toggleCls}" data-id="${node.id}">▼</button>
     ${badgeHtml(node)}
     <span class="${descCls}" title="${esc(descTitle)}">${descLabel}</span>
     <span class="status-badge s-${node.status}">${node.status}</span>
     ${ncDisplay}
     <div class="node-actions">
+      <button class="btn-node btn-up" data-id="${node.id}" title="Move up within ${node.status} siblings" ${canUp?'':'disabled'}>&uarr;</button>
+      <button class="btn-node btn-down" data-id="${node.id}" title="Move down within ${node.status} siblings" ${canDown?'':'disabled'}>&darr;</button>
       <button class="btn-node btn-edit" data-id="${node.id}">Edit</button>
       ${addBtn}
     </div>`;
@@ -1079,6 +1171,8 @@ function renderTree() {
   });
   el.querySelectorAll('.btn-edit').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.id)));
   el.querySelectorAll('.btn-add' ).forEach(b=>b.addEventListener('click',()=>openAdd(b.dataset.pid)));
+  el.querySelectorAll('.btn-up'  ).forEach(b=>b.addEventListener('click',()=>moveSibling(b.dataset.id,-1)));
+  el.querySelectorAll('.btn-down').forEach(b=>b.addEventListener('click',()=>moveSibling(b.dataset.id,1)));
 }
 
 function naTd() { return `<td class="v-na">—</td>`; }
@@ -1233,6 +1327,160 @@ function renderTable() {
   const acSection=acIds.length?`<div class="table-section-heading">AC Summary</div><table class="summary-table">${acThead}<tbody>${acRows(acIds)}</tbody></table>`:'';
   html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No data.</div>';
+  el.innerHTML=html;
+}
+
+// ── POWER DISTRIBUTION SUMMARY (Total Aircraft Load / Generation / Conversion / Distribution only) ──
+const PDS_TYPES=new Set([...NT.ROOT,...NT.GENERATION,...NT.CONVERSION,...NT.DISTRIBUTION]);
+function renderPowerDistSummary() {
+  const el=document.getElementById('pds-container');
+  if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
+  const allIds=preOrder(state.rootIds,state.nodes).filter(id=>PDS_TYPES.has(state.nodes[id]?.type));
+  const dm={};
+  preOrder(state.rootIds,state.nodes).forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
+  const acIds=allIds.filter(id=>state.nodes[id]?.acDc==='ac');
+
+  function rowMeta(n) {
+    const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3');
+    const wn=ws.length>0&&!ov;
+    const rCls=ov?'row-warn-r':(wn?'row-warn-y':'');
+    const dCls=n.status==='removed'?' style="text-decoration:line-through;opacity:.55"':'';
+    const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
+    const dl=(esc(n.description)||'<em>unnamed</em>')+rdHtml;
+    return {rCls,dCls,dl,ov};
+  }
+
+  function dcRows(ids) {
+    return ids.map(id=>{
+      const n=state.nodes[id]; if (!n) return '';
+      const {rCls,dCls,dl,ov}=rowMeta(n);
+      const d=dm[id]||0;
+      const cap=hasCap(n.type)&&n.capacity;
+      const capA=cap?powTd(n.capacity,'a'):naTd();
+      const capW=cap?powTd(n.capacity,'w'):naTd();
+      const ncA=valPow(n._netChange,'a',false);
+      const ncW=valPow(n._netChange,'w',false);
+      const nlA=n.status!=='removed'?valPow(n._newLoad,'a',ov):naTd();
+      const nlW=n.status!=='removed'?valPow(n._newLoad,'w',ov):naTd();
+      const remA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'a',false):naTd();
+      const remW=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'w',false):naTd();
+      return `<tr class="${rCls}">
+        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
+        ${capA}${capW}${ncA}${ncW}${nlA}${nlW}${remA}${remW}</tr>`;
+    }).join('');
+  }
+
+  function acRows(ids) {
+    return ids.map(id=>{
+      const n=state.nodes[id]; if (!n) return '';
+      const {rCls,dCls,dl,ov}=rowMeta(n);
+      const d=dm[id]||0;
+      const cap=hasCap(n.type)&&n.capacity;
+      const capA=cap?powTd(n.capacity,'a'):naTd();
+      const capVA=cap?powTd(n.capacity,'va'):naTd();
+      const ncA=valPow(n._netChange,'a',false);
+      const ncVA=valPow(n._netChange,'va',false);
+      const ncW=valPow(n._netChange,'w',false);
+      const ncVAR=valPow(n._netChange,'var',false);
+      const ncPF=powTd(n._netChange,'pf');
+      const nlA=n.status!=='removed'?valPow(n._newLoad,'a',ov):naTd();
+      const nlVA=n.status!=='removed'?valPow(n._newLoad,'va',ov):naTd();
+      const nlW=n.status!=='removed'?valPow(n._newLoad,'w',ov):naTd();
+      const nlVAR=n.status!=='removed'?valPow(n._newLoad,'var',ov):naTd();
+      const nlPF=n.status!=='removed'?powTd(n._newLoad,'pf'):naTd();
+      const remA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'a',false):naTd();
+      const remVA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'va',false):naTd();
+      return `<tr class="${rCls}">
+        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
+        ${capA}${capVA}${ncA}${ncVA}${ncW}${ncVAR}${ncPF}${nlA}${nlVA}${nlW}${nlVAR}${nlPF}${remA}${remVA}</tr>`;
+    }).join('');
+  }
+
+  const dcThead=`<thead><tr>
+      <th class="left" rowspan="2">Component</th>
+      <th class="group-hdr" colspan="2">Capacity</th>
+      <th class="group-hdr" colspan="2">Net Chg</th>
+      <th class="group-hdr" colspan="2">New Load</th>
+      <th class="group-hdr" colspan="2">Remaining</th>
+    </tr><tr>
+      <th class="sub-hdr">A</th><th class="sub-hdr">W</th>
+      <th class="sub-hdr">A</th><th class="sub-hdr">W</th>
+      <th class="sub-hdr">A</th><th class="sub-hdr">W</th>
+      <th class="sub-hdr">A</th><th class="sub-hdr">W</th>
+    </tr></thead>`;
+  const acThead=`<thead><tr>
+      <th class="left" rowspan="2">Component</th>
+      <th class="group-hdr" colspan="2">Capacity</th>
+      <th class="group-hdr" colspan="5">Net Chg</th>
+      <th class="group-hdr" colspan="5">New Load</th>
+      <th class="group-hdr" colspan="2">Remaining</th>
+    </tr><tr>
+      <th class="sub-hdr">A</th><th class="sub-hdr">VA</th>
+      <th class="sub-hdr">A</th><th class="sub-hdr">VA</th><th class="sub-hdr">W</th><th class="sub-hdr">VAR</th><th class="sub-hdr">pf</th>
+      <th class="sub-hdr">A</th><th class="sub-hdr">VA</th><th class="sub-hdr">W</th><th class="sub-hdr">VAR</th><th class="sub-hdr">pf</th>
+      <th class="sub-hdr">A</th><th class="sub-hdr">VA</th>
+    </tr></thead>`;
+
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const dcSection=dcIds.length?`<div class="table-section-heading">DC Summary</div><table class="summary-table">${dcThead}<tbody>${dcRows(dcIds)}</tbody></table>`:'';
+  const acSection=acIds.length?`<div class="table-section-heading">AC Summary</div><table class="summary-table">${acThead}<tbody>${acRows(acIds)}</tbody></table>`:'';
+  let html=acFirst?acSection+dcSection:dcSection+acSection;
+  if (!html) html='<div class="empty-state">No Generation, Conversion, or Distribution items to summarize.</div>';
+  el.innerHTML=html;
+}
+
+// ── LOAD ANALYSIS DETAIL (one table per non-Load node: itself + immediate children) ──
+function renderLoadAnalysisDetail() {
+  const el=document.getElementById('lad-container');
+  if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
+  if (!printCfg) printCfg=defaultPrintCfg();
+  const cfg=printCfg;
+  const nodes=state.nodes;
+  const acCols=activeCols(AC_GROUPS,cfg.ac);
+  const dcCols=activeCols(DC_GROUPS,cfg.dc);
+  const {annotMap}=buildAnnotationMap();
+  const hasAnnot=Object.keys(annotMap).length>0;
+  const am=hasAnnot?annotMap:null;
+
+  const allOrdered=preOrder(state.rootIds,nodes);
+  function eligibleIds(acDc) {
+    return allOrdered.filter(id=>{
+      const n=nodes[id]; if (!n||n.acDc!==acDc||isLoad(n.type)) return false;
+      return children(id,nodes).length>0;
+    });
+  }
+
+  function pathFor(n) {
+    if (!n.parentId) return null; // n is a root: no path
+    const parent=nodes[n.parentId];
+    // parent is itself root, or n is the entry point of its AC/DC system: no path
+    if (!parent||parent.parentId===null||parent.acDc!==n.acDc) return null;
+    const chain=[]; let cur=parent;
+    while (cur) {
+      chain.unshift(esc(cur.description||'unnamed'));
+      const curParent=cur.parentId?nodes[cur.parentId]:null;
+      if (!curParent||curParent.parentId===null||curParent.acDc!==cur.acDc) break;
+      cur=curParent;
+    }
+    return chain.length?chain.join(' &gt; ')+' &gt;':null;
+  }
+
+  function detailBlock(id,cols) {
+    const n=nodes[id];
+    const kids=children(id,nodes);
+    const path=pathFor(n);
+    const pathHtml=path?`<div class="rpt-detail-path">${path}</div>`:'';
+    const rows=[buildRptRow(n,0,cols,cfg,false,am),...kids.map(k=>buildRptRow(k,1,cols,cfg,false,am))].join('');
+    return `<div class="rpt-detail-block">${pathHtml}<table class="rpt-table">${buildRptHeader(cols,hasAnnot)}<tbody>${rows}</tbody></table></div>`;
+  }
+
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
+  const acBlocks=acIds.length?`<div class="rpt-section-hdr">AC Detail</div>${acIds.map(id=>detailBlock(id,acCols)).join('')}`:'';
+  const dcBlocks=dcIds.length?`<div class="rpt-section-hdr">DC Detail</div>${dcIds.map(id=>detailBlock(id,dcCols)).join('')}`:'';
+  let html=acFirst?acBlocks+dcBlocks:dcBlocks+acBlocks;
+  if (!html) html='<div class="empty-state">No items to detail.</div>';
   el.innerHTML=html;
 }
 
@@ -1486,17 +1734,20 @@ function duplicateNode() {
   const n=state.nodes[mNode];if (!n) return;
   const copy=JSON.parse(JSON.stringify(n));
   copy.id=uid();
+  copy.childIds=[];
   copy.description=(copy.description||'')+' (copy)';
   state.nodes[copy.id]=copy;
-  if (state.rootIds.includes(mNode)) state.rootIds.push(copy.id);
+  attachChild(copy.id,copy.parentId);
   if (n.convRole==='in') {
     const paired=findPairedNode(n);
     if (paired) {
       const outCopy=JSON.parse(JSON.stringify(paired));
       outCopy.id=uid();
+      outCopy.childIds=[];
       outCopy.parentId=copy.id;
       outCopy.description=(paired.description||'')+' (copy)';
       state.nodes[outCopy.id]=outCopy;
+      attachChild(outCopy.id,copy.id);
     }
   }
   batchCommit();closeModal();
@@ -1833,11 +2084,13 @@ function doEditSave() {
   data.description=document.getElementById('ef-desc').value.trim();
   data.refDes=document.getElementById('ef-refdes').value.trim();
 
-  // rootIds management
+  // parent/sibling-order management
   const newParentId=document.getElementById('ef-parent').value||null;
-  const wasRoot=state.rootIds.includes(mNode);
-  if (!newParentId&&!wasRoot) state.rootIds.push(mNode);
-  if (newParentId&&wasRoot)   state.rootIds=state.rootIds.filter(r=>r!==mNode);
+  const oldParentId=n.parentId;
+  if (newParentId!==oldParentId) {
+    detachChild(mNode,oldParentId);
+    attachChild(mNode,newParentId);
+  }
   data.parentId=newParentId;
 
   if (n.convRole) {
@@ -2144,15 +2397,13 @@ function doAddSave() {
         capacity:mkC(inCapV,inAcDc,v),existingLoad:mkL(inLdV,inAcDc,v,inAcDc==='ac'?cpf:1.0),
         efficiency:eff,convPf:cpf,netChangeOverride:null};
       const inId=addNode(pid,inData);
-      if (!pid) state.rootIds.push(inId);
       addNode(inId,{type,status,convRole:'out',description:desc+' (OUT)',refDes,voltage:outVoltage,acDc:outAcDc,
         capacity:mkC(outCapV,outAcDc,outV2),existingLoad:mkL(outLdV,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null});
     } else if (isLoad(type)) {
       let lv;
       if (acDc==='ac') lv=autoAc(getN('load_w'),getN('load_var'),getN('load_va'),getN('load_a'),getN('load_pf'),v);
       else lv=autoDc(getN('load_a'),getN('load_w'),v);
-      const id=addNode(pid,{type,status,description:desc,refDes,voltage,acDc,loadValue:lv});
-      if (!pid) state.rootIds.push(id);
+      addNode(pid,{type,status,description:desc,refDes,voltage,acDc,loadValue:lv});
     } else {
       let cap=null;
       if (acDc==='ac') {const cva=getN('cap_va'),ca=getN('cap_a');cap=cva!==null?{w:null,var:null,va:cva,a:v>0?cva/v:ca,pf:null}:(ca!==null?{w:null,var:null,va:v>0?ca*v:null,a:ca,pf:null}:null);}
@@ -2163,8 +2414,7 @@ function doAddSave() {
       let ncOv=null;
       if (acDc==='ac') {const lva=getN('load_va'),lw=getN('load_w'),lvar=getN('load_var');if (lw!==null) ncOv={w:lw}; else if (lva!==null) ncOv={w:lva};}
       else {const lw=getN('load_w');if (lw!==null) ncOv={w:lw};}
-      const id=addNode(pid,{type,status,description:desc,refDes,voltage,acDc,capacity:cap,existingLoad:exLd,netChangeOverride:ncOv});
-      if (!pid) state.rootIds.push(id);
+      addNode(pid,{type,status,description:desc,refDes,voltage,acDc,capacity:cap,existingLoad:exLd,netChangeOverride:ncOv});
     }
   });
   afLastType=type;afLastStatus=status;
@@ -2467,15 +2717,14 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
 
 function buildSectionRows(acDc,cols,cfg,annotMap){
   const nodes=state.nodes;
-  const statusOrd={existing:0,removed:1,new:2};
   const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
   const childrenOf={};
-  secSet.forEach(id=>{
-    const pid=nodes[id].parentId;
-    if(pid&&secSet.has(pid)){if(!childrenOf[pid])childrenOf[pid]=[];childrenOf[pid].push(id);}
+  secSet.forEach(pid=>{
+    const kids=children(pid,nodes).map(k=>k.id).filter(cid=>secSet.has(cid));
+    if(kids.length) childrenOf[pid]=kids;
   });
-  const secRoots=[...secSet].filter(id=>{const pid=nodes[id].parentId;return!pid||!secSet.has(pid);});
-  secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+  const orderedAll=preOrder(state.rootIds,nodes);
+  const secRoots=orderedAll.filter(id=>secSet.has(id)&&(!nodes[id].parentId||!secSet.has(nodes[id].parentId)));
   const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
   const emRem=new Set(),emAdd=new Set();
   const rows=[];
@@ -2496,7 +2745,7 @@ function buildSectionRows(acDc,cols,cfg,annotMap){
       else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
     }
     rows.push(buildRptRow(n,depth,cols,cfg,topBorder,annotMap));
-    const kids=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+    const kids=childrenOf[id]||[];
     kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
   }
   secRoots.forEach(id=>visit(id,0,false,false,false));
@@ -2691,12 +2940,14 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,colWidths,has
 
 function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,colWidths,hasAnnot}){
   const nodes=state.nodes;
-  const statusOrd={existing:0,removed:1,new:2};
   const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
   const childrenOf={};
-  secSet.forEach(id=>{const pid=nodes[id].parentId;if(pid&&secSet.has(pid)){if(!childrenOf[pid])childrenOf[pid]=[];childrenOf[pid].push(id);}});
-  const secRoots=[...secSet].filter(id=>{const pid=nodes[id].parentId;return!pid||!secSet.has(pid);});
-  secRoots.sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+  secSet.forEach(pid=>{
+    const kids=children(pid,nodes).map(k=>k.id).filter(cid=>secSet.has(cid));
+    if(kids.length) childrenOf[pid]=kids;
+  });
+  const orderedAll=preOrder(state.rootIds,nodes);
+  const secRoots=orderedAll.filter(id=>secSet.has(id)&&(!nodes[id].parentId||!secSet.has(nodes[id].parentId)));
   const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
   const totalCols=1+(hasAnnot?1:0)+cols.length;
   const totalW=descW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
@@ -2721,7 +2972,7 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,colWidths,hasAnnot}
       }
     }
     rows.push(buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,notesW,colWidths,hasAnnot}));
-    const kids=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
+    const kids=childrenOf[id]||[];
     kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
   }
   secRoots.forEach(id=>visit(id,0,false,false,false));
@@ -2999,18 +3250,21 @@ function initEvents() {
     document.querySelectorAll('.toggle-btn:not(.leaf)').forEach(b=>b.classList.add('is-collapsed'));
   });
   // Tab switching
-  document.getElementById('tab-analysis').addEventListener('click',()=>{
-    document.getElementById('tab-analysis').classList.add('active');
-    document.getElementById('tab-document').classList.remove('active');
-    document.getElementById('main-layout').classList.remove('hidden');
-    document.getElementById('doc-panel').classList.add('hidden');
-  });
-  document.getElementById('tab-document').addEventListener('click',()=>{
-    document.getElementById('tab-document').classList.add('active');
-    document.getElementById('tab-analysis').classList.remove('active');
-    document.getElementById('doc-panel').classList.remove('hidden');
-    document.getElementById('main-layout').classList.add('hidden');
-    renderDocPanel();
+  const TAB_PANELS={
+    'tab-analysis':{panel:'main-layout',render:null},
+    'tab-document':{panel:'doc-panel',render:renderDocPanel},
+    'tab-pds':{panel:'pds-panel',render:renderPowerDistSummary},
+    'tab-lad':{panel:'lad-panel',render:renderLoadAnalysisDetail},
+  };
+  Object.keys(TAB_PANELS).forEach(tabId=>{
+    document.getElementById(tabId).addEventListener('click',()=>{
+      Object.entries(TAB_PANELS).forEach(([tid,cfg])=>{
+        document.getElementById(tid).classList.toggle('active',tid===tabId);
+        document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
+      });
+      const cfg=TAB_PANELS[tabId];
+      if (cfg.render) cfg.render();
+    });
   });
 
   // Document identity form
