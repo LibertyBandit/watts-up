@@ -49,6 +49,13 @@
     .panel-header{flex-shrink:0;background:var(--bg-secondary);border-bottom:1px solid var(--border);
       padding:.35rem .75rem;display:flex;align-items:center;justify-content:space-between;
       font-size:.72rem;font-weight:700;color:var(--text-secondary);letter-spacing:.5px;text-transform:uppercase}
+    #rh-subtabs{display:flex;gap:.9rem}
+    .rh-subtab-btn{background:none;border:none;padding:0 0 .3rem;font-size:.72rem;font-weight:700;letter-spacing:.5px;
+      text-transform:uppercase;color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent}
+    .rh-subtab-btn:hover{color:var(--text-primary)}
+    .rh-subtab-btn.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue)}
+    .rh-subtab-existing.active{color:var(--accent-yellow);border-bottom-color:var(--accent-yellow)}
+    .rh-subtab-new.active{color:var(--accent-green);border-bottom-color:var(--accent-green)}
     .panel-controls{display:flex;gap:.3rem}
     .panel-controls button{padding:.15rem .45rem;font-size:.7rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border)}
@@ -211,6 +218,37 @@
     .rpt-onscreen .rpt-parent-sep td{border-top:2px solid var(--text-muted) !important}
     .rpt-onscreen .rpt-notes-col{width:28px;text-align:center !important;padding:.15rem .1rem !important}
     .rpt-onscreen .rpt-note-marker{font-size:.62rem;color:var(--text-muted)}
+    /* ── DATA ENTRY GRIDS (Existing/Removed, New) ── */
+    .grid-container{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    .grid-scroll{flex:1;overflow:auto}
+    .grid-footer{flex-shrink:0;padding:.5rem .75rem;border-top:1px solid var(--border);
+      display:flex;align-items:center;gap:.6rem;justify-content:flex-end;background:var(--bg-secondary)}
+    .grid-footer .grid-footer-msg{margin-right:auto;font-size:.74rem;color:var(--text-muted)}
+    .data-grid{width:100%;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
+    .data-grid thead{position:sticky;top:0;z-index:5;background:var(--bg-secondary)}
+    .data-grid th{padding:.3rem .4rem;text-align:center;font-weight:700;color:var(--text-secondary);
+      border-bottom:1px solid var(--border);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
+    .data-grid th.left{text-align:left}
+    .data-grid th.group-hdr{border-left:1px solid var(--border)}
+    .data-grid td{padding:.18rem .3rem;border-bottom:1px solid var(--border);vertical-align:middle}
+    .data-grid td.grp-first{border-left:1px solid var(--border)}
+    .data-grid td.num{text-align:right}
+    .data-grid tbody tr:hover{background:var(--bg-hover)}
+    .data-grid tr.row-dc{background:rgba(88,166,255,.10);box-shadow:inset 2px 0 0 var(--accent-blue)}
+    .data-grid tr.row-dc:hover{background:rgba(88,166,255,.18)}
+    .data-grid tr.row-readonly{opacity:.6}
+    .data-grid input,.data-grid select{width:100%;min-width:0;background:transparent;border:1px solid transparent;
+      color:var(--text-primary);border-radius:3px;padding:.16rem .3rem;font-size:.74rem;font-family:inherit;text-align:inherit}
+    .data-grid input:hover,.data-grid select:hover{border-color:var(--border)}
+    .data-grid input:focus,.data-grid select:focus{outline:none;border-color:var(--accent-blue);background:var(--bg-primary)}
+    .data-grid input:disabled,.data-grid select:disabled{opacity:.3;pointer-events:none;border-color:transparent;background:transparent}
+    .data-grid .grid-desc-cell{display:flex;align-items:center;gap:.3rem}
+    .data-grid .grid-desc-cell input{flex:2;min-width:60px}
+    .data-grid .grid-desc-cell input.grid-refdes{flex:1;min-width:40px;font-family:monospace;font-size:.68rem}
+    .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
+    .data-grid .grid-actions button{padding:.1rem .32rem;font-size:.68rem;background:var(--bg-elevated);
+      color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
+    .data-grid .grid-actions button:hover{color:var(--text-primary);background:var(--bg-hover)}
     .hidden{display:none !important}
     .empty-state{padding:2rem;text-align:center;color:var(--text-muted);font-size:.82rem}
     /* ── TABS ── */
@@ -369,8 +407,16 @@
       <div id="tree-container"><div class="empty-state">Click <strong>New</strong> to start an analysis.</div></div>
     </section>
     <section id="table-panel">
-      <div class="panel-header"><span>Load Analysis Summary</span></div>
+      <div class="panel-header">
+        <div id="rh-subtabs">
+          <button id="rh-subtab-las" class="rh-subtab-btn active">Load Analysis Summary</button>
+          <button id="rh-subtab-exrem" class="rh-subtab-btn rh-subtab-existing">Existing / Removed</button>
+          <button id="rh-subtab-new" class="rh-subtab-btn rh-subtab-new">New</button>
+        </div>
+      </div>
       <div id="table-container"><div class="empty-state">No data to display.</div></div>
+      <div id="exrem-container" class="hidden grid-container"><div class="empty-state">No data to display.</div></div>
+      <div id="new-container" class="hidden grid-container"><div class="empty-state">No data to display.</div></div>
     </section>
   </main>
 
@@ -1484,6 +1530,260 @@ function renderLoadAnalysisDetail() {
   el.innerHTML=html;
 }
 
+// ── DATA ENTRY GRIDS (Existing/Removed, New) ──────────────────────────────────
+let gridSnapshot=null;
+const SAME_SHAPE_GROUPS=[NT.GENERATION,NT.DISTRIBUTION,NT.PROTECTION];
+function sameShapeTypes(type){ for (const g of SAME_SHAPE_GROUPS) if (g.includes(type)) return g; return [type]; }
+
+function computeCapacity(acDc,aStr,vawStr,v){
+  const a=parseF(evalFormula(String(aStr??'').trim()));
+  const vaw=parseF(evalFormula(String(vawStr??'').trim()));
+  if (acDc==='ac'){
+    if (vaw!==null) return {w:null,var:null,va:vaw,a:v>0?vaw/v:a,pf:null};
+    if (a!==null)   return {w:null,var:null,va:v>0?a*v:null,a,pf:null};
+    return null;
+  }
+  if (vaw!==null) return {w:vaw,var:null,va:null,a:v>0?vaw/v:a,pf:null};
+  if (a!==null)   return deriveDcFromA(a,v);
+  return null;
+}
+function gridCellVal(row,field,key){
+  const el=row.querySelector(`[data-field="${field}"][data-key="${key}"]`);
+  return el?el.value.trim():'';
+}
+function gridCommitPowerGroup(n,field){
+  const row=document.querySelector(`tr[data-nid="${n.id}"]`); if (!row) return;
+  const v=n.voltage||0;
+  if (n.acDc==='ac') n[field]=autoAc(gridCellVal(row,field,'w'),gridCellVal(row,field,'var'),gridCellVal(row,field,'va'),gridCellVal(row,field,'a'),gridCellVal(row,field,'pf'),v);
+  else n[field]=autoDc(gridCellVal(row,field,'a'),gridCellVal(row,field,'w'),v);
+}
+function gridCommitCapacity(n){
+  const row=document.querySelector(`tr[data-nid="${n.id}"]`); if (!row) return;
+  const v=n.voltage||0;
+  const vawKey=n.acDc==='ac'?'va':'w';
+  n.capacity=computeCapacity(n.acDc,gridCellVal(row,'capacity','a'),gridCellVal(row,'capacity',vawKey),v);
+}
+function siblingOrderInfoForNode(n){
+  const arr=n.parentId?(state.nodes[n.parentId]?.childIds||[]):(state.rootIds||[]);
+  const sameStatus=arr.filter(cid=>state.nodes[cid]?.status===n.status);
+  const idx=sameStatus.indexOf(n.id);
+  return {canUp:idx>0,canDown:idx>=0&&idx<sameStatus.length-1};
+}
+
+function gridDescCell(n,depth,editable=true){
+  if (!editable) {
+    return `<div class="grid-desc-cell" style="padding-left:${depth*14}px">
+      ${badgeHtml(n)}
+      <span style="flex:2;overflow:hidden;text-overflow:ellipsis">${esc(n.description||'unnamed')}</span>
+      <span class="grid-refdes" style="flex:1">${esc(n.refDes||'')}</span>
+    </div>`;
+  }
+  const shapes=sameShapeTypes(n.type);
+  const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(t)}</option>`).join('');
+  return `<div class="grid-desc-cell" style="padding-left:${depth*14}px">
+    ${badgeHtml(n)}
+    <select data-field="type"${shapes.length<=1?' disabled':''}>${typeOpts}</select>
+    <input data-field="description" value="${esc(n.description||'')}" placeholder="Description">
+    <input data-field="refDes" class="grid-refdes" value="${esc(n.refDes||'')}" placeholder="Ref Des">
+  </div>`;
+}
+function gridEffCell(n,forceDisabled){
+  const showVal=isConv(n.type)&&n.convRole!=='out';
+  const editable=showVal&&!forceDisabled;
+  return `<td class="num"><input data-field="efficiency" value="${showVal?fmtPField(n.efficiency):''}"${editable?'':' disabled'}></td>`;
+}
+function gridPfCell(n,forceDisabled){
+  const showCpf=['TRU','Inverter','Frequency Converter'].includes(n.type);
+  const showVal=showCpf&&n.convRole!=='out';
+  const editable=showVal&&!forceDisabled;
+  return `<td class="num"><input data-field="convPf" value="${showVal?fmtPField(n.convPf):''}"${editable?'':' disabled'}></td>`;
+}
+function gridCapCells(n,forceDisabled){
+  if (!hasCap(n.type)) return `<td class="num grp-first"><input disabled></td><td class="num"><input disabled></td>`;
+  const vawKey=n.acDc==='ac'?'va':'w';
+  const aVal=fmtPField(n.capacity?.a), vawVal=fmtPField(n.capacity?.[vawKey]);
+  if (forceDisabled) return `<td class="num grp-first"><input disabled value="${aVal}"></td><td class="num"><input disabled value="${vawVal}"></td>`;
+  return `<td class="num grp-first"><input data-field="capacity" data-key="a" value="${aVal}"></td>
+    <td class="num"><input data-field="capacity" data-key="${vawKey}" value="${vawVal}"></td>`;
+}
+function gridPowerGroupCells(n,field,applicable,forceDisabled){
+  const keys=['a','va','w','var','pf'];
+  return keys.map((k,i)=>{
+    const cls=`num${i===0?' grp-first':''}`;
+    const activeForAcDc=n.acDc==='ac'?true:(k==='a'||k==='w');
+    if (!applicable||!activeForAcDc) return `<td class="${cls}"><input disabled></td>`;
+    if (forceDisabled) return `<td class="${cls}"><input disabled value="${fmtPField(n[field]?.[k])}"></td>`;
+    return `<td class="${cls}"><input data-field="${field}" data-key="${k}" value="${fmtPField(n[field]?.[k])}"></td>`;
+  }).join('');
+}
+function gridDisplayCells(n,field,applicable){
+  const keys=['a','va','w','var','pf'];
+  return keys.map((k,i)=>{
+    const cls=`num${i===0?' grp-first':''}`;
+    const activeForAcDc=n.acDc==='ac'?true:(k==='a'||k==='w');
+    if (!applicable||!activeForAcDc) return `<td class="${cls}"><input disabled></td>`;
+    const val=n[field]?.[k];
+    return `<td class="${cls}"><input disabled value="${val!=null?fmtN(val):''}"></td>`;
+  }).join('');
+}
+function gridActionsCell(n,readOnly){
+  const {canUp,canDown}=siblingOrderInfoForNode(n);
+  const canAddChild=!(isLoad(n.type)||n.status==='removed');
+  const editBtn=`<button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>`;
+  if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}${editBtn}</div></td>`;
+  return `<td><div class="grid-actions">
+    <button data-act="up" title="Move up"${canUp?'':' disabled'}>&uarr;</button>
+    <button data-act="down" title="Move down"${canDown?'':' disabled'}>&darr;</button>
+    <button data-act="dup" title="Duplicate">Dup</button>
+    ${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}
+    ${editBtn}
+    <button data-act="del" title="Delete">Del</button>
+  </div></td>`;
+}
+function gridWarnClass(n){
+  const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3');
+  if (ov) return ' row-warn-r'; if (ws.length) return ' row-warn-y'; return '';
+}
+
+function buildExRemRow(n,depth){
+  const statusOpts=['existing','removed'].map(s=>`<option value="${s}"${s===n.status?' selected':''}>${s[0].toUpperCase()+s.slice(1)}</option>`).join('');
+  return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
+    <td>${gridDescCell(n,depth)}</td>
+    <td><select data-field="status">${statusOpts}</select></td>
+    ${gridEffCell(n)}${gridPfCell(n)}
+    ${gridCapCells(n)}
+    ${gridPowerGroupCells(n,'existingLoad',hasCap(n.type))}
+    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type))}
+    ${gridActionsCell(n,false)}
+  </tr>`;
+}
+function gridHeader(group2Label,group3Label){
+  return `<thead><tr>
+    <th class="left" rowspan="2">Item</th><th rowspan="2">Status</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
+    <th class="group-hdr" colspan="2">Capacity</th>
+    <th class="group-hdr" colspan="5">${group2Label}</th>
+    <th class="group-hdr" colspan="5">${group3Label}</th>
+    <th rowspan="2"></th>
+  </tr><tr>
+    <th class="grp-first">A</th><th>VA/W</th>
+    <th class="grp-first">A</th><th>VA</th><th>W</th><th>VAR</th><th>PF</th>
+    <th class="grp-first">A</th><th>VA</th><th>W</th><th>VAR</th><th>PF</th>
+  </tr></thead>`;
+}
+function buildNewRow(n,depth){
+  const isExistingCtx=n.status==='existing';
+  const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
+  return `<tr data-nid="${n.id}" class="${rowCls}">
+    <td>${gridDescCell(n,depth,!isExistingCtx)}</td>
+    <td>${isExistingCtx?'Existing':'New'}</td>
+    ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
+    ${gridCapCells(n,isExistingCtx)}
+    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}
+    ${gridDisplayCells(n,'_netChange',!isLoad(n.type))}
+    ${gridActionsCell(n,isExistingCtx)}
+  </tr>`;
+}
+
+function gridFieldChanged(e,renderFn){
+  const el=e.target; const row=el.closest('tr[data-nid]'); if (!row) return;
+  const id=row.dataset.nid; const n=state.nodes[id]; if (!n) return;
+  const field=el.dataset.field;
+  if (field==='description') n.description=el.value;
+  else if (field==='refDes') n.refDes=el.value;
+  else if (field==='status') n.status=el.value;
+  else if (field==='type') n.type=el.value;
+  else if (field==='efficiency') { const eff=parseF(evalFormula(el.value.trim())); if (eff!==null&&eff>0&&eff<=1) n.efficiency=eff; }
+  else if (field==='convPf') { const pf=parseF(evalFormula(el.value.trim())); if (pf!==null) n.convPf=pf; }
+  else if (field==='capacity') gridCommitCapacity(n);
+  else if (field==='existingLoad') gridCommitPowerGroup(n,'existingLoad');
+  else if (field==='loadValue') gridCommitPowerGroup(n,'loadValue');
+  recalc();persist();
+  const fKey=el.dataset.field, kKey=el.dataset.key;
+  renderFn();
+  const newRow=document.querySelector(`tr[data-nid="${id}"]`);
+  if (newRow) {
+    const sel=kKey?`[data-field="${fKey}"][data-key="${kKey}"]`:`[data-field="${fKey}"]`;
+    const newEl=newRow.querySelector(sel);
+    if (newEl) { newEl.focus(); if (newEl.select) newEl.select(); }
+  }
+}
+function gridDeleteRow(id,renderFn){
+  const n=state.nodes[id]; if (!n) return;
+  const kidCount=children(id,state.nodes).length;
+  if (kidCount>0 && !confirm(`Delete "${n.description||'this item'}" and its ${kidCount} child item(s)? This can only be undone via Cancel.`)) return;
+  delNode(id);
+  renderFn();
+}
+function gridDuplicateRow(id,renderFn){
+  const n=state.nodes[id]; if (!n) return;
+  const kidCount=children(id,state.nodes).length;
+  if (kidCount>0) {
+    if (!confirm(`"${n.description||'This item'}" has ${kidCount} child item(s). Duplicate this item and all its descendants?`)) return;
+    duplicateBranch(id);
+  } else {
+    duplicateNodeById(id);
+  }
+  batchCommit();
+  renderFn();
+}
+function wireGridEvents(el,renderFn){
+  el.querySelectorAll('input[data-field],select[data-field]').forEach(inp=>{
+    inp.addEventListener('change',e=>gridFieldChanged(e,renderFn));
+  });
+  el.querySelectorAll('button[data-act]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const row=btn.closest('tr[data-nid]'); const id=row.dataset.nid; const act=btn.dataset.act;
+      if (act==='up') { moveSibling(id,-1); renderFn(); }
+      else if (act==='down') { moveSibling(id,1); renderFn(); }
+      else if (act==='child') openAdd(id);
+      else if (act==='edit') openEdit(id);
+      else if (act==='del') gridDeleteRow(id,renderFn);
+      else if (act==='dup') gridDuplicateRow(id,renderFn);
+    });
+  });
+  const cancelBtn=el.querySelector('[data-grid-cancel]'), saveBtn=el.querySelector('[data-grid-save]');
+  if (cancelBtn) cancelBtn.addEventListener('click',()=>{
+    if (!gridSnapshot) return;
+    state=JSON.parse(JSON.stringify(gridSnapshot));
+    recalc();renderAll();
+  });
+  if (saveBtn) saveBtn.addEventListener('click',()=>{
+    gridSnapshot=JSON.parse(JSON.stringify(state));
+    persist();
+  });
+}
+function gridFooter(gridKey){
+  return `<div class="grid-footer">
+    <span class="grid-footer-msg">Edits apply immediately. Cancel reverts everything changed since you opened this tab.</span>
+    <button data-grid-cancel class="btn-default">Cancel</button>
+    <button data-grid-save class="btn-primary">Save</button>
+  </div>`;
+}
+
+function renderExRemGrid(){
+  const el=document.getElementById('exrem-container'); if (!el) return;
+  if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
+  const allIds=preOrder(state.rootIds,state.nodes);
+  const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='removed'); });
+  const rows=ids.map(id=>buildExRemRow(state.nodes[id],dm[id]||0)).join('');
+  const table=`<table class="data-grid">${gridHeader('Existing Load','Load')}<tbody>${rows}</tbody></table>`;
+  el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No Existing or Removed items.</div>'}</div>${gridFooter('exrem')}`;
+  wireGridEvents(el,renderExRemGrid);
+}
+
+function renderNewGrid(){
+  const el=document.getElementById('new-container'); if (!el) return;
+  if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
+  const allIds=preOrder(state.rootIds,state.nodes);
+  const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
+  const rows=ids.map(id=>buildNewRow(state.nodes[id],dm[id]||0)).join('');
+  const table=`<table class="data-grid">${gridHeader('Load','Net Change')}<tbody>${rows}</tbody></table>`;
+  el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No items to display.</div>'}</div>${gridFooter('new')}`;
+  wireGridEvents(el,renderNewGrid);
+}
+
 function renderWarnings() {
   const banner=document.getElementById('warning-banner'); const ws=allWarnings();
   if (!ws.length){banner.classList.add('hidden');return;}
@@ -1581,7 +1881,7 @@ function updateSaveEl() {
   if (!state?.lastSaved){el.textContent='';return;}
   el.textContent=`Saved ${new Date(state.lastSaved).toLocaleTimeString()}`;
 }
-function renderAll(){renderDocPanel();renderTree();renderTable();renderWarnings();updateSaveEl();}
+function renderAll(){renderDocPanel();renderTree();renderTable();renderPowerDistSummary();renderLoadAnalysisDetail();renderExRemGrid();renderNewGrid();renderWarnings();updateSaveEl();}
 // ── NOTES & REFS MODAL HELPERS ───────────────────────────────────────────────
 function renderEfNotesRefs(n) {
   const notesEl=document.getElementById('ef-row-notes');
@@ -1730,8 +2030,8 @@ function closeModal() {
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
-function duplicateNode() {
-  const n=state.nodes[mNode];if (!n) return;
+function duplicateNodeById(id) {
+  const n=state.nodes[id];if (!n) return null;
   const copy=JSON.parse(JSON.stringify(n));
   copy.id=uid();
   copy.childIds=[];
@@ -1750,7 +2050,29 @@ function duplicateNode() {
       attachChild(outCopy.id,copy.id);
     }
   }
-  batchCommit();closeModal();
+  return copy.id;
+}
+function duplicateBranch(rootId) {
+  const ids=subtree(rootId,state.nodes);
+  const idMap={};
+  ids.forEach(id=>idMap[id]=uid());
+  const rootN=state.nodes[rootId];
+  const originalParentId=rootN.parentId;
+  ids.forEach(id=>{
+    const orig=state.nodes[id];
+    const copy=JSON.parse(JSON.stringify(orig));
+    copy.id=idMap[id];
+    copy.parentId=id===rootId?originalParentId:idMap[orig.parentId];
+    copy.childIds=(orig.childIds||[]).filter(cid=>idMap[cid]).map(cid=>idMap[cid]);
+    if (id===rootId) copy.description=(copy.description||'')+' (copy)';
+    state.nodes[copy.id]=copy;
+  });
+  attachChild(idMap[rootId],originalParentId);
+  return idMap[rootId];
+}
+function duplicateNode() {
+  const id=duplicateNodeById(mNode);
+  if (id) {batchCommit();closeModal();}
 }
 
 function applyVoltageAcdcLock(node,parentId) {
@@ -3263,6 +3585,24 @@ function initEvents() {
         document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
       });
       const cfg=TAB_PANELS[tabId];
+      if (cfg.render) cfg.render();
+    });
+  });
+
+  // RH pane sub-tab switching (Load Analysis Summary / Existing-Removed / New)
+  const RH_SUBTABS={
+    'rh-subtab-las':{panel:'table-container',render:renderTable},
+    'rh-subtab-exrem':{panel:'exrem-container',render:renderExRemGrid},
+    'rh-subtab-new':{panel:'new-container',render:renderNewGrid},
+  };
+  Object.keys(RH_SUBTABS).forEach(tabId=>{
+    document.getElementById(tabId).addEventListener('click',()=>{
+      Object.entries(RH_SUBTABS).forEach(([tid,cfg])=>{
+        document.getElementById(tid).classList.toggle('active',tid===tabId);
+        document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
+      });
+      if (tabId!=='rh-subtab-las'&&state) gridSnapshot=JSON.parse(JSON.stringify(state));
+      const cfg=RH_SUBTABS[tabId];
       if (cfg.render) cfg.render();
     });
   });
