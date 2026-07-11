@@ -1,6 +1,6 @@
 # Watts Up — Unified Requirements
 Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-9-requirements.txt
-Last updated: 2026-06-30 (through Revision 19)
+Last updated: 2026-07-11 (through Revision 22)
 
 ---
 
@@ -918,7 +918,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§20).
+enhancement (§23).
 
 ---
 
@@ -981,7 +981,166 @@ header in §19.3 and from the `wu-general-notes` content control) no longer sets
 
 ---
 
-## 20. Future Enhancements
+## 20. Revision 20 — Sibling Reordering, Status Grouping, and New Report Tabs
+
+*Last updated: 2026-07-08*
+
+### 20.1 Sibling ordering and status grouping
+
+Each node now carries an explicit ordered list of its children, rather than relying on
+whatever order the nodes happened to be saved in. Within a given parent, siblings are
+grouped in a fixed macro order — **Existing, then Removed, then New** — while preserving
+the user's own custom order within each status group.
+
+Up/down reorder controls appear on each tree row, letting the user move an item earlier
+or later among its same-status siblings. The controls are disabled at the top/bottom of
+that status group (an item cannot be reordered past a sibling with a different status).
+
+This ordering is the single source of truth for sibling sequence everywhere in the
+app — the tree, the Load Analysis Summary table (§6), Print Report (§13), and Word
+export (§15–19) all reflect the same order and the same Existing → Removed → New
+grouping.
+
+Legacy save files (predating this revision) have their sibling order backfilled on load
+from whatever order the nodes were previously stored in, so existing projects open with
+their visual order unchanged.
+
+### 20.2 AC/DC visual differentiation in the tree
+
+DC-flagged tree rows are visually distinguished from AC rows with a background tint and
+a left accent bar. This is a styling-only change — the tree is **not** structurally split
+by AC/DC, since a conversion item's DC output can sit several levels beneath an AC
+ancestor (e.g. a TRU's DC side under an AC bus); splitting the tree would break that
+parent/child nesting and the "+ Child" workflow.
+
+### 20.3 Power Distribution Summary (new tab)
+
+A new read-only report, filtered to **Total Aircraft Load, Generation, Conversion, and
+Distribution** items only — Circuit Breakers, Fuses, and terminal Loads are excluded.
+
+Columns: **Capacity, Net Change, New Load, Remaining** (Existing Load and Load are
+dropped from this report, since those columns are specific to Load-status rows).
+Otherwise organized the same way as the Load Analysis Summary table (§6): AC/DC split
+into separate sections, same indentation and section ordering rules.
+
+### 20.4 Load Analysis Detail (new tab)
+
+A new read-only report: one small table per non-Load item that has children, showing
+just that item plus its immediate children, in the same column format as the current
+Print Report configuration (§13).
+
+Each table is preceded by a breadcrumb line showing the distribution path from the top
+of that item's AC/DC system down to its immediate parent — e.g. `RH Main > Galley AC >`
+for an item two levels under an AC bus, or `RH Main TRU > RH ACC #1 >` for an item past
+a TRU conversion boundary onto a DC bus. The breadcrumb is omitted for root items and for
+the entry point of each AC/DC system (an item whose immediate parent is on the other side
+of a conversion boundary), since there is no useful same-system path to show for those.
+
+Tables are presented in the same order the items appear in the Load Analysis Summary
+table, grouped AC then DC (or DC then AC, matching whichever comes first at the root).
+
+---
+
+## 21. Revision 21 — Inline-Editable Existing/Removed and New Grids
+
+*Last updated: 2026-07-09*
+
+### 21.1 Overview
+
+Two new tabs provide spreadsheet-style inline editing as an alternative to the Edit Item
+(§7) and Add Item(s) (§8) dialogs for routine data entry — adding, editing, reordering,
+duplicating, and deleting items without opening a modal for every change.
+
+### 21.2 Existing/Removed tab
+
+One row per item with status Existing or Removed, in the same hierarchical order as the
+tree (§20.1).
+
+**Editable columns:** Item Type, Description, Ref Des, Status, Efficiency, Power Factor,
+then Capacity / Existing Load / Load column groups (same units per AC/DC as §6.1/§6.2).
+
+Item Type changes are restricted to **same-shape swaps** — e.g. Bus ↔ Feeder, Generator
+↔ Alternator ↔ Battery, Circuit Breaker ↔ Fuse. Type changes that would require
+restructuring an item's capacity/load fields (switching into or out of a Load type or a
+conversion role) are not offered in the grid.
+
+Cells that don't apply to a given row (e.g. VA/VAR/pf for a DC item, or the Load columns
+for a non-Load item) are shown disabled/dashed rather than hidden, so the column layout
+stays consistent across rows.
+
+**Row actions:** reorder (same up/down mechanism as the tree), **Duplicate**, **Delete**,
+**+ Child** (opens the Add Item(s) dialog), and **Edit** (opens the full Edit Item
+dialog, for Net Change Override and Notes/References — the two things this grid doesn't
+expose inline). Duplicate and Delete prompt for confirmation when the item has children,
+since both actions then apply to the entire branch — Duplicate deep-copies the item and
+every descendant (with fresh internal identities); declining the prompt cancels the
+action rather than falling back to a shallow copy.
+
+### 21.3 New tab
+
+Shows both **Existing**-status items (read-only, for context — so the user can see where
+in the tree to attach a new item) and **New**-status items (fully editable). Status
+cannot be changed from this grid in either direction.
+
+**Editable columns for New rows:** Item Type (same restriction as §21.2), Description,
+Ref Des, Efficiency, Power Factor, then Capacity / Load / Net Change column groups. Net
+Change is a read-only computed display here (matching how it's shown in the Load
+Analysis Summary table, §6), not a directly editable field.
+
+### 21.4 Editing model
+
+Edits commit immediately — changing a cell recalculates and re-renders right away, using
+the same underlying calculation logic as the dialogs (no separate "apply"/"calculate"
+step). A **Cancel** button reverts every change made since the tab was last opened (a
+snapshot is taken each time the tab is entered); a **Save** button re-baselines that
+snapshot.
+
+### 21.5 AC/DC visual differentiation
+
+Same tint/accent-bar treatment as the tree (§20.2), applied per grid row.
+
+---
+
+## 22. Revision 22 — Tab Reorganization, Voltage/AC-DC Grid Columns, DC Tint Intensity
+
+*Last updated: 2026-07-11*
+
+### 22.1 Tab reorganization
+
+- **Power Distribution Summary** and **Load Analysis Detail** (§20.3–20.4) moved from
+  top-level tabs to sub-tabs of the right-hand pane, positioned after Load Analysis
+  Summary — alongside the Power Distribution Tree, which stays visible while viewing
+  either report.
+- **Existing/Removed** and **New** (§21) moved from right-hand-pane sub-tabs to
+  top-level tabs, positioned next to Document. Full width; the Power Distribution Tree
+  is hidden while either is active, matching the Document tab's existing layout.
+
+### 22.2 Voltage and AC/DC columns in the Existing/Removed and New grids
+
+Added immediately after the Status column, matching the Load Analysis Summary table's
+column order (§6). Editability follows the same locking rules as the Edit Item and Add
+Item(s) dialogs (§7.2/§8.4) exactly:
+
+| Scenario | Volts | AC/DC |
+|---|---|---|
+| Parent exists; regular (non-conv) node | Locked to parent value | Locked to parent value |
+| Conv IN node; parent exists | Locked to parent value | Locked to device type |
+| Conv IN node; no parent | Editable | Locked to device type |
+| Conv OUT node | Editable | Locked to device type |
+| No parent (root); regular node | Editable | Editable |
+
+In the New tab, Existing-status context rows force both columns read-only regardless of
+the table above, consistent with every other column on those rows (§21.3).
+
+### 22.3 DC row highlight intensity
+
+Background tint opacity and accent-bar width increased in the Existing/Removed and New
+grids specifically, to improve AC/DC differentiation. The tree's DC-row styling (§20.2)
+is unchanged.
+
+---
+
+## 23. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
@@ -992,3 +1151,5 @@ header in §19.3 and from the `wu-general-notes` content control) no longer sets
   but cannot overwrite generated content (references list, analysis tables). Mechanism:
   `<w:lock w:val="sdtContentLocked"/>` on the relevant content controls, optionally combined
   with `<w:documentProtection>` allowing formatting-only changes in those regions.
+- Incorporate the Power Distribution Summary and Load Analysis Detail reports (§20.3–20.4)
+  into the Word document export.
