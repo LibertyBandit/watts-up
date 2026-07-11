@@ -234,8 +234,8 @@
     .data-grid td.grp-first{border-left:1px solid var(--border)}
     .data-grid td.num{text-align:right}
     .data-grid tbody tr:hover{background:var(--bg-hover)}
-    .data-grid tr.row-dc{background:rgba(88,166,255,.10);box-shadow:inset 2px 0 0 var(--accent-blue)}
-    .data-grid tr.row-dc:hover{background:rgba(88,166,255,.18)}
+    .data-grid tr.row-dc{background:rgba(88,166,255,.22);box-shadow:inset 4px 0 0 var(--accent-blue)}
+    .data-grid tr.row-dc:hover{background:rgba(88,166,255,.32)}
     .data-grid tr.row-readonly{opacity:.6}
     .data-grid input,.data-grid select{width:100%;min-width:0;background:transparent;border:1px solid transparent;
       color:var(--text-primary);border-radius:3px;padding:.16rem .3rem;font-size:.74rem;font-family:inherit;text-align:inherit}
@@ -333,8 +333,8 @@
   <div id="tab-bar">
     <button id="tab-analysis" class="tab-btn active">Analysis</button>
     <button id="tab-document" class="tab-btn">Document</button>
-    <button id="tab-pds" class="tab-btn">Power Distribution Summary</button>
-    <button id="tab-lad" class="tab-btn">Load Analysis Detail</button>
+    <button id="tab-exrem" class="tab-btn rh-subtab-existing">Existing / Removed</button>
+    <button id="tab-new" class="tab-btn rh-subtab-new">New</button>
   </div>
 
   <div id="warning-banner" class="hidden">
@@ -386,13 +386,9 @@
     </div>
   </div>
 
-  <div id="pds-panel" class="hidden rpt-onscreen">
-    <div id="pds-container"><div class="empty-state">No data to display.</div></div>
-  </div>
+  <div id="exrem-container" class="hidden grid-container"><div class="empty-state">No data to display.</div></div>
 
-  <div id="lad-panel" class="hidden rpt-onscreen">
-    <div id="lad-container"><div class="empty-state">No data to display.</div></div>
-  </div>
+  <div id="new-container" class="hidden grid-container"><div class="empty-state">No data to display.</div></div>
 
   <main id="main-layout">
     <section id="tree-panel">
@@ -410,13 +406,13 @@
       <div class="panel-header">
         <div id="rh-subtabs">
           <button id="rh-subtab-las" class="rh-subtab-btn active">Load Analysis Summary</button>
-          <button id="rh-subtab-exrem" class="rh-subtab-btn rh-subtab-existing">Existing / Removed</button>
-          <button id="rh-subtab-new" class="rh-subtab-btn rh-subtab-new">New</button>
+          <button id="rh-subtab-pds" class="rh-subtab-btn">Power Distribution Summary</button>
+          <button id="rh-subtab-lad" class="rh-subtab-btn">Load Analysis Detail</button>
         </div>
       </div>
       <div id="table-container"><div class="empty-state">No data to display.</div></div>
-      <div id="exrem-container" class="hidden grid-container"><div class="empty-state">No data to display.</div></div>
-      <div id="new-container" class="hidden grid-container"><div class="empty-state">No data to display.</div></div>
+      <div id="pds-container" class="hidden rpt-onscreen"><div class="empty-state">No data to display.</div></div>
+      <div id="lad-container" class="hidden rpt-onscreen"><div class="empty-state">No data to display.</div></div>
     </section>
   </main>
 
@@ -1644,12 +1640,37 @@ function gridWarnClass(n){
   const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3');
   if (ov) return ' row-warn-r'; if (ws.length) return ' row-warn-y'; return '';
 }
+// Mirrors applyVoltageAcdcLock's rules from the Edit Item modal: voltage/acDc are only
+// freely editable on roots, on a conversion "out" node's voltage, and on an "in" node's
+// voltage when it has no parent; everything else inherits/derives and is locked.
+function gridVoltAcdcInfo(n){
+  const parentNode=n.parentId?state.nodes[n.parentId]:null;
+  if (n.convRole==='out') return {vEditable:true,vVal:n.voltage,acEditable:false,acVal:CONV_OUT_ACDC[n.type]||'dc'};
+  if (n.convRole==='in') {
+    const acVal=CONV_IN_ACDC[n.type]||'ac';
+    if (parentNode) return {vEditable:false,vVal:parentNode.voltage,acEditable:false,acVal};
+    return {vEditable:true,vVal:n.voltage,acEditable:false,acVal};
+  }
+  if (parentNode) return {vEditable:false,vVal:parentNode.voltage,acEditable:false,acVal:parentNode.acDc||'dc'};
+  return {vEditable:true,vVal:n.voltage,acEditable:true,acVal:n.acDc||'dc'};
+}
+function gridVoltAcdcCells(n,forceDisabled){
+  const {vEditable,vVal,acEditable,acVal}=gridVoltAcdcInfo(n);
+  const vCell=(vEditable&&!forceDisabled)
+    ? `<td class="num"><input data-field="voltage" value="${fmtPField(vVal)}"></td>`
+    : `<td class="num"><input disabled value="${fmtPField(vVal)}"></td>`;
+  const acCell=(acEditable&&!forceDisabled)
+    ? `<td><select data-field="acdc"><option value="dc"${acVal==='dc'?' selected':''}>DC</option><option value="ac"${acVal==='ac'?' selected':''}>AC</option></select></td>`
+    : `<td><input disabled value="${acVal==='ac'?'AC':'DC'}"></td>`;
+  return vCell+acCell;
+}
 
 function buildExRemRow(n,depth){
   const statusOpts=['existing','removed'].map(s=>`<option value="${s}"${s===n.status?' selected':''}>${s[0].toUpperCase()+s.slice(1)}</option>`).join('');
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
     <td>${gridDescCell(n,depth)}</td>
     <td><select data-field="status">${statusOpts}</select></td>
+    ${gridVoltAcdcCells(n)}
     ${gridEffCell(n)}${gridPfCell(n)}
     ${gridCapCells(n)}
     ${gridPowerGroupCells(n,'existingLoad',hasCap(n.type))}
@@ -1659,7 +1680,7 @@ function buildExRemRow(n,depth){
 }
 function gridHeader(group2Label,group3Label){
   return `<thead><tr>
-    <th class="left" rowspan="2">Item</th><th rowspan="2">Status</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
+    <th class="left" rowspan="2">Item</th><th rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
     <th class="group-hdr" colspan="2">Capacity</th>
     <th class="group-hdr" colspan="5">${group2Label}</th>
     <th class="group-hdr" colspan="5">${group3Label}</th>
@@ -1676,6 +1697,7 @@ function buildNewRow(n,depth){
   return `<tr data-nid="${n.id}" class="${rowCls}">
     <td>${gridDescCell(n,depth,!isExistingCtx)}</td>
     <td>${isExistingCtx?'Existing':'New'}</td>
+    ${gridVoltAcdcCells(n,isExistingCtx)}
     ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
     ${gridCapCells(n,isExistingCtx)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}
@@ -1692,6 +1714,8 @@ function gridFieldChanged(e,renderFn){
   else if (field==='refDes') n.refDes=el.value;
   else if (field==='status') n.status=el.value;
   else if (field==='type') n.type=el.value;
+  else if (field==='voltage') n.voltage=parseF(evalFormula(el.value.trim()));
+  else if (field==='acdc') n.acDc=el.value;
   else if (field==='efficiency') { const eff=parseF(evalFormula(el.value.trim())); if (eff!==null&&eff>0&&eff<=1) n.efficiency=eff; }
   else if (field==='convPf') { const pf=parseF(evalFormula(el.value.trim())); if (pf!==null) n.convPf=pf; }
   else if (field==='capacity') gridCommitCapacity(n);
@@ -3575,8 +3599,8 @@ function initEvents() {
   const TAB_PANELS={
     'tab-analysis':{panel:'main-layout',render:null},
     'tab-document':{panel:'doc-panel',render:renderDocPanel},
-    'tab-pds':{panel:'pds-panel',render:renderPowerDistSummary},
-    'tab-lad':{panel:'lad-panel',render:renderLoadAnalysisDetail},
+    'tab-exrem':{panel:'exrem-container',render:renderExRemGrid},
+    'tab-new':{panel:'new-container',render:renderNewGrid},
   };
   Object.keys(TAB_PANELS).forEach(tabId=>{
     document.getElementById(tabId).addEventListener('click',()=>{
@@ -3584,16 +3608,17 @@ function initEvents() {
         document.getElementById(tid).classList.toggle('active',tid===tabId);
         document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
       });
+      if ((tabId==='tab-exrem'||tabId==='tab-new')&&state) gridSnapshot=JSON.parse(JSON.stringify(state));
       const cfg=TAB_PANELS[tabId];
       if (cfg.render) cfg.render();
     });
   });
 
-  // RH pane sub-tab switching (Load Analysis Summary / Existing-Removed / New)
+  // RH pane sub-tab switching (Load Analysis Summary / Power Distribution Summary / Load Analysis Detail)
   const RH_SUBTABS={
     'rh-subtab-las':{panel:'table-container',render:renderTable},
-    'rh-subtab-exrem':{panel:'exrem-container',render:renderExRemGrid},
-    'rh-subtab-new':{panel:'new-container',render:renderNewGrid},
+    'rh-subtab-pds':{panel:'pds-container',render:renderPowerDistSummary},
+    'rh-subtab-lad':{panel:'lad-container',render:renderLoadAnalysisDetail},
   };
   Object.keys(RH_SUBTABS).forEach(tabId=>{
     document.getElementById(tabId).addEventListener('click',()=>{
@@ -3601,7 +3626,6 @@ function initEvents() {
         document.getElementById(tid).classList.toggle('active',tid===tabId);
         document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
       });
-      if (tabId!=='rh-subtab-las'&&state) gridSnapshot=JSON.parse(JSON.stringify(state));
       const cfg=RH_SUBTABS[tabId];
       if (cfg.render) cfg.render();
     });
