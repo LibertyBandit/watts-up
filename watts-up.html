@@ -95,6 +95,8 @@
     .s-existing{background:#21262d;color:#8b949e;border:1px solid #30363d}
     .s-new{background:#0c3a1e;color:#3fb950}
     .s-removed{background:#3a0c0c;color:#f85149}
+    button.grid-status-toggle{font-family:inherit;cursor:pointer;transition:filter .1s}
+    button.grid-status-toggle:hover{filter:brightness(1.35)}
     .summary-table{width:100%;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
     .summary-table thead{position:sticky;top:0;z-index:5;background:var(--bg-secondary)}
     .summary-table th{padding:.32rem .45rem;text-align:right;font-weight:700;color:var(--text-secondary);
@@ -198,12 +200,17 @@
     .rpt-onscreen{flex:1;overflow:auto;padding:.9rem 1rem}
     .rpt-onscreen .rpt-detail-block{margin-bottom:1.1rem}
     .rpt-onscreen .rpt-detail-path{font-size:.74rem;font-style:italic;color:var(--text-muted);margin-bottom:.2rem}
+    .rpt-onscreen .rpt-detail-path-inline{display:block;font-style:italic;font-weight:400;text-transform:none;
+      letter-spacing:normal;color:var(--text-muted);font-size:.66rem;white-space:normal}
+    .rpt-onscreen .rpt-detail-notes{margin:.15rem 0 0;padding-left:1.2rem;font-size:.7rem;color:var(--text-secondary)}
+    .rpt-onscreen .rpt-detail-notes li{margin-bottom:.1rem}
     .rpt-onscreen .rpt-section-hdr{font-size:.8rem;font-weight:700;margin:.9rem 0 .3rem;border-bottom:2px solid var(--border);
       padding-bottom:.22rem;color:var(--accent-blue);text-transform:uppercase;letter-spacing:.4px}
-    .rpt-onscreen .rpt-table{width:100%;border-collapse:collapse;font-size:.72rem;white-space:nowrap;margin-bottom:1rem}
+    .rpt-onscreen .rpt-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.72rem;white-space:nowrap;margin-bottom:.35rem}
+    .rpt-onscreen .rpt-table td:first-child{white-space:normal;overflow-wrap:break-word}
     .rpt-onscreen .rpt-table thead{background:var(--bg-secondary);position:sticky;top:0}
     .rpt-onscreen .rpt-table th{border:1px solid var(--border);padding:.22rem .35rem;font-weight:700;color:var(--text-secondary)}
-    .rpt-onscreen .rpt-left{text-align:left}
+    .rpt-onscreen .rpt-left{text-align:left;white-space:normal}
     .rpt-onscreen .rpt-grp{text-align:center;font-size:.68rem;border-left:2px solid var(--text-muted) !important}
     .rpt-onscreen .rpt-sub{text-align:right;font-size:.68rem}
     .rpt-onscreen .rpt-table tbody tr:nth-child(even){background:rgba(255,255,255,.03)}
@@ -224,7 +231,7 @@
     .grid-footer{flex-shrink:0;padding:.5rem .75rem;border-top:1px solid var(--border);
       display:flex;align-items:center;gap:.6rem;justify-content:flex-end;background:var(--bg-secondary)}
     .grid-footer .grid-footer-msg{margin-right:auto;font-size:.74rem;color:var(--text-muted)}
-    .data-grid{width:100%;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
+    .data-grid{width:auto;min-width:100%;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
     .data-grid thead{position:sticky;top:0;z-index:5;background:var(--bg-secondary)}
     .data-grid th{padding:.3rem .4rem;text-align:center;font-weight:700;color:var(--text-secondary);
       border-bottom:1px solid var(--border);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
@@ -243,12 +250,26 @@
     .data-grid input:focus,.data-grid select:focus{outline:none;border-color:var(--accent-blue);background:var(--bg-primary)}
     .data-grid input:disabled,.data-grid select:disabled{opacity:.3;pointer-events:none;border-color:transparent;background:transparent}
     .data-grid .grid-desc-cell{display:flex;align-items:center;gap:.3rem}
-    .data-grid .grid-desc-cell input{flex:2;min-width:60px}
-    .data-grid .grid-desc-cell input.grid-refdes{flex:1;min-width:40px;font-family:monospace;font-size:.68rem}
+    .data-grid .grid-desc-cell input{flex:2;min-width:110px}
+    .data-grid .grid-desc-cell input.grid-refdes{flex:1;min-width:64px;font-family:monospace;font-size:.68rem}
+    .data-grid .grid-desc-cell span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* Frozen (sticky) Item + Status columns, so they stay put while numeric columns scroll */
+    .data-grid th:nth-child(1),.data-grid td:nth-child(1){position:sticky;left:0;z-index:3;width:300px;min-width:300px;max-width:300px;white-space:normal}
+    .data-grid th:nth-child(2),.data-grid td:nth-child(2){position:sticky;left:300px;z-index:3;width:100px;min-width:100px;max-width:100px}
+    .data-grid thead th:nth-child(1),.data-grid thead th:nth-child(2){z-index:6}
+    .data-grid tbody td:nth-child(1),.data-grid tbody td:nth-child(2){background:var(--bg-primary)}
+    .data-grid tbody tr:hover td:nth-child(1),.data-grid tbody tr:hover td:nth-child(2){background:var(--bg-hover)}
+    .data-grid tbody tr.row-dc td:nth-child(1),.data-grid tbody tr.row-dc td:nth-child(2){background:#16243a}
+    .data-grid tbody tr.row-dc:hover td:nth-child(1),.data-grid tbody tr.row-dc:hover td:nth-child(2){background:#1c2d47}
     .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
     .data-grid .grid-actions button{padding:.1rem .32rem;font-size:.68rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
     .data-grid .grid-actions button:hover{color:var(--text-primary);background:var(--bg-hover)}
+    .data-grid th.reset-hdr{border-left:none}
+    .data-grid td.grid-reset-cell{padding:.18rem .1rem;text-align:center;border-left:none}
+    .data-grid .grid-reset-cell button{padding:.05rem .28rem;font-size:.72rem;background:transparent;
+      color:var(--text-muted);border:1px solid var(--border);border-radius:4px;line-height:1.3}
+    .data-grid .grid-reset-cell button:hover{color:var(--accent-red);border-color:var(--accent-red)}
     .hidden{display:none !important}
     .empty-state{padding:2rem;text-align:center;color:var(--text-muted);font-size:.82rem}
     /* ── TABS ── */
@@ -1165,7 +1186,7 @@ function buildTreeLi(node,nodes) {
   const descLabel=descText+refDesSpan;
   const descTitle=(node.description||'unnamed')+(node.refDes?' ['+node.refDes+']':'');
   const ncDisplay=isLoad(node.type)?'':ncHtml(node._netChange,node.acDc);
-  const isTerminal=isLoad(node.type)||node.status==='removed';
+  const isTerminal=isLoad(node.type)||node.status==='removed'||node.convRole==='in';
   const addBtn=isTerminal?'':`<button class="btn-node btn-add" data-pid="${node.id}">+ Child</button>`;
   const sibArr=node.parentId?(nodes[node.parentId]?.childIds||[]):(state.rootIds||[]);
   const sameStatusSibs=sibArr.filter(cid=>nodes[cid]?.status===node.status);
@@ -1377,7 +1398,9 @@ const PDS_TYPES=new Set([...NT.ROOT,...NT.GENERATION,...NT.CONVERSION,...NT.DIST
 function renderPowerDistSummary() {
   const el=document.getElementById('pds-container');
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
-  const allIds=preOrder(state.rootIds,state.nodes).filter(id=>PDS_TYPES.has(state.nodes[id]?.type));
+  const allIds=preOrder(state.rootIds,state.nodes).filter(id=>{
+    const n=state.nodes[id]; return n&&PDS_TYPES.has(n.type)&&n.convRole!=='in';
+  });
   const dm={};
   preOrder(state.rootIds,state.nodes).forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
@@ -1465,14 +1488,19 @@ function renderPowerDistSummary() {
     </tr></thead>`;
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
-  const dcSection=dcIds.length?`<div class="table-section-heading">DC Summary</div><table class="summary-table">${dcThead}<tbody>${dcRows(dcIds)}</tbody></table>`:'';
-  const acSection=acIds.length?`<div class="table-section-heading">AC Summary</div><table class="summary-table">${acThead}<tbody>${acRows(acIds)}</tbody></table>`:'';
+  const dcLbl=acDcVoltageLabel('dc'), acLbl=acDcVoltageLabel('ac');
+  const dcSection=dcIds.length?`<div class="table-section-heading">${dcLbl?`${dcLbl} Summary`:'DC Summary'}</div><table class="summary-table">${dcThead}<tbody>${dcRows(dcIds)}</tbody></table>`:'';
+  const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${acThead}<tbody>${acRows(acIds)}</tbody></table>`:'';
   let html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No Generation, Conversion, or Distribution items to summarize.</div>';
   el.innerHTML=html;
 }
 
 // ── LOAD ANALYSIS DETAIL (one table per non-Load node: itself + immediate children) ──
+function acDcVoltageLabel(acDc){
+  const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??Object.values(state.nodes).find(nn=>nn.acDc===acDc&&nn.voltage!=null);
+  return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;
+}
 function renderLoadAnalysisDetail() {
   const el=document.getElementById('lad-container');
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
@@ -1481,14 +1509,32 @@ function renderLoadAnalysisDetail() {
   const nodes=state.nodes;
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
-  const {annotMap}=buildAnnotationMap();
-  const hasAnnot=Object.keys(annotMap).length>0;
-  const am=hasAnnot?annotMap:null;
+
+  // Local note/reference numbering, restarted and assigned in this report's own top-to-bottom
+  // presentation order (rather than reusing the global buildAnnotationMap's full-tree order).
+  const refs=state.meta.references||[];
+  const refKeyToNum={},refKeyToDocNo={};
+  refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
+  let noteCounter=0;
+  function annotateNode(n) {
+    const rn=(n.rowNotes||[]).filter(t=>t.trim());
+    const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
+    if (!rn.length&&!rr.length) return null;
+    const nums=[]; const notes=[];
+    rn.forEach(text=>{const num=++noteCounter;notes.push({num,text});nums.push(num);});
+    rr.forEach(r=>{
+      const refNum=refKeyToNum[r.key],docNo=refKeyToDocNo[r.key],comment=(r.comment||'').trim();
+      const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
+      const num=++noteCounter;notes.push({num,text});nums.push(num);
+    });
+    return {marker:nums.join(','),notes};
+  }
+  const hasAnyAnnot=Object.values(nodes).some(n=>(n.rowNotes||[]).some(t=>t.trim())||(n.rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined));
 
   const allOrdered=preOrder(state.rootIds,nodes);
   function eligibleIds(acDc) {
     return allOrdered.filter(id=>{
-      const n=nodes[id]; if (!n||n.acDc!==acDc||isLoad(n.type)) return false;
+      const n=nodes[id]; if (!n||n.acDc!==acDc||isLoad(n.type)||n.convRole==='in') return false;
       return children(id,nodes).length>0;
     });
   }
@@ -1508,19 +1554,46 @@ function renderLoadAnalysisDetail() {
     return chain.length?chain.join(' &gt; ')+' &gt;':null;
   }
 
-  function detailBlock(id,cols) {
+  function buildColgroup(colsCount,hasAnnot) {
+    const descPct=22, notesPct=hasAnnot?4:0;
+    const numPct=(100-descPct-notesPct)/colsCount;
+    let html=`<colgroup><col style="width:${descPct}%">`;
+    if (hasAnnot) html+=`<col style="width:${notesPct}%">`;
+    for (let i=0;i<colsCount;i++) html+=`<col style="width:${numPct}%">`;
+    return html+`</colgroup>`;
+  }
+
+  function detailBlock(id,cols,colgroupHtml) {
     const n=nodes[id];
     const kids=children(id,nodes);
     const path=pathFor(n);
-    const pathHtml=path?`<div class="rpt-detail-path">${path}</div>`:'';
-    const rows=[buildRptRow(n,0,cols,cfg,false,am),...kids.map(k=>buildRptRow(k,1,cols,cfg,false,am))].join('');
-    return `<div class="rpt-detail-block">${pathHtml}<table class="rpt-table">${buildRptHeader(cols,hasAnnot)}<tbody>${rows}</tbody></table></div>`;
+    const pathHtml=path?`<span class="rpt-detail-path-inline">${path}</span>`:'';
+    const ncols=cols.length+1+(hasAnyAnnot?1:0);
+
+    const am={}; const blockNotes=[];
+    const selfAnnot=annotateNode(n); if (selfAnnot) { am[n.id]={marker:selfAnnot.marker}; blockNotes.push(...selfAnnot.notes); }
+    kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker}; blockNotes.push(...a.notes); } });
+
+    const rows=[];
+    if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Added</td></tr>`);
+    rows.push(buildRptRow(n,0,cols,cfg,false,am));
+    let seenRemoved=false,seenAdded=false;
+    kids.forEach(k=>{
+      if (k.status==='removed'&&!seenRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:14px">Removed</td></tr>`); seenRemoved=true; }
+      else if (k.status==='new'&&!seenAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:14px">Added</td></tr>`); seenAdded=true; }
+      rows.push(buildRptRow(k,1,cols,cfg,false,am));
+    });
+
+    const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
+    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${buildRptHeader(cols,hasAnyAnnot,pathHtml)}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
   }
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
-  const acBlocks=acIds.length?`<div class="rpt-section-hdr">AC Detail</div>${acIds.map(id=>detailBlock(id,acCols)).join('')}`:'';
-  const dcBlocks=dcIds.length?`<div class="rpt-section-hdr">DC Detail</div>${dcIds.map(id=>detailBlock(id,dcCols)).join('')}`:'';
+  const acLbl=acDcVoltageLabel('ac'), dcLbl=acDcVoltageLabel('dc');
+  const acColgroup=buildColgroup(acCols.length,hasAnyAnnot), dcColgroup=buildColgroup(dcCols.length,hasAnyAnnot);
+  const acBlocks=acIds.length?`<div class="rpt-section-hdr">${acLbl?`${acLbl} Detail`:'AC Detail'}</div>${acIds.map(id=>detailBlock(id,acCols,acColgroup)).join('')}`:'';
+  const dcBlocks=dcIds.length?`<div class="rpt-section-hdr">${dcLbl?`${dcLbl} Detail`:'DC Detail'}</div>${dcIds.map(id=>detailBlock(id,dcCols,dcColgroup)).join('')}`:'';
   let html=acFirst?acBlocks+dcBlocks:dcBlocks+acBlocks;
   if (!html) html='<div class="empty-state">No items to detail.</div>';
   el.innerHTML=html;
@@ -1531,33 +1604,66 @@ let gridSnapshot=null;
 const SAME_SHAPE_GROUPS=[NT.GENERATION,NT.DISTRIBUTION,NT.PROTECTION];
 function sameShapeTypes(type){ for (const g of SAME_SHAPE_GROUPS) if (g.includes(type)) return g; return [type]; }
 
-function computeCapacity(acDc,aStr,vawStr,v){
-  const a=parseF(evalFormula(String(aStr??'').trim()));
-  const vaw=parseF(evalFormula(String(vawStr??'').trim()));
-  if (acDc==='ac'){
-    if (vaw!==null) return {w:null,var:null,va:vaw,a:v>0?vaw/v:a,pf:null};
-    if (a!==null)   return {w:null,var:null,va:v>0?a*v:null,a,pf:null};
-    return null;
-  }
-  if (vaw!==null) return {w:vaw,var:null,va:null,a:v>0?vaw/v:a,pf:null};
-  if (a!==null)   return deriveDcFromA(a,v);
-  return null;
-}
 function gridCellVal(row,field,key){
   const el=row.querySelector(`[data-field="${field}"][data-key="${key}"]`);
-  return el?el.value.trim():'';
+  return el?parseF(evalFormula(el.value.trim())):null;
 }
-function gridCommitPowerGroup(n,field){
+// Recompute an AC 5-key power group, prioritizing whichever key the user just edited: a
+// legitimate two-field pair (W+VAR, VA+W, VA+PF) is honored if the edited key is part of a
+// pair whose other member also has a value; otherwise the edited key alone is authoritative.
+// This replaces the old approach of always recomputing from a fixed a<va<w-priority order,
+// which silently discarded edits to lower-priority fields once a higher one had any value.
+function computeAcGroupValue(editedKey,vals,v){
+  const {w,var:var_,va,a,pf}=vals; const has=x=>x!==null;
+  if ((editedKey==='w'||editedKey==='var')&&has(w)&&has(var_)) return deriveAcFromWVar(w,var_,v);
+  if ((editedKey==='va'||editedKey==='w')&&has(va)&&has(w)) { const vr=Math.sqrt(Math.max(0,va*va-w*w)); return deriveAcFromWVar(w,vr,v); }
+  if ((editedKey==='va'||editedKey==='pf')&&has(va)&&has(pf)) { const w2=va*pf; return deriveAcFromWVar(w2,Math.sqrt(Math.max(0,va*va-w2*w2)),v); }
+  if (editedKey==='w'&&has(w))     return deriveAcFromWVar(w,0,v);
+  if (editedKey==='va'&&has(va))   return deriveAcFromWVar(va,0,v);
+  if (editedKey==='var'&&has(var_))return deriveAcFromWVar(0,var_,v);
+  if (editedKey==='a'&&has(a)&&v>0)return deriveAcFromWVar(a*v,0,v);
+  return mkPow(0,0,0,0,1);
+}
+function computeDcGroupValue(editedKey,vals,v){
+  const {a,w}=vals;
+  if (editedKey==='a'&&a!==null) return deriveDcFromA(a,v);
+  if (editedKey==='w'&&w!==null&&v>0) return deriveDcFromA(w/v,v);
+  return mkPow(0,null,null,0,null);
+}
+function computeCapacity(acDc,editedKey,aVal,vawVal,v){
+  if (editedKey==='a') {
+    if (aVal===null) return null;
+    return acDc==='ac' ? {w:null,var:null,va:v>0?aVal*v:null,a:aVal,pf:null} : deriveDcFromA(aVal,v);
+  }
+  if (vawVal===null) return null;
+  return acDc==='ac' ? {w:null,var:null,va:vawVal,a:v>0?vawVal/v:null,pf:null} : {w:vawVal,var:null,va:null,a:v>0?vawVal/v:null,pf:null};
+}
+function gridCommitPowerGroup(n,field,editedKey){
   const row=document.querySelector(`tr[data-nid="${n.id}"]`); if (!row) return;
   const v=n.voltage||0;
-  if (n.acDc==='ac') n[field]=autoAc(gridCellVal(row,field,'w'),gridCellVal(row,field,'var'),gridCellVal(row,field,'va'),gridCellVal(row,field,'a'),gridCellVal(row,field,'pf'),v);
-  else n[field]=autoDc(gridCellVal(row,field,'a'),gridCellVal(row,field,'w'),v);
+  if (n.acDc==='ac') n[field]=computeAcGroupValue(editedKey,{w:gridCellVal(row,field,'w'),var:gridCellVal(row,field,'var'),va:gridCellVal(row,field,'va'),a:gridCellVal(row,field,'a'),pf:gridCellVal(row,field,'pf')},v);
+  else n[field]=computeDcGroupValue(editedKey,{a:gridCellVal(row,field,'a'),w:gridCellVal(row,field,'w')},v);
 }
-function gridCommitCapacity(n){
+function gridCommitCapacity(n,editedKey){
   const row=document.querySelector(`tr[data-nid="${n.id}"]`); if (!row) return;
   const v=n.voltage||0;
   const vawKey=n.acDc==='ac'?'va':'w';
-  n.capacity=computeCapacity(n.acDc,gridCellVal(row,'capacity','a'),gridCellVal(row,'capacity',vawKey),v);
+  n.capacity=computeCapacity(n.acDc,editedKey,gridCellVal(row,'capacity','a'),gridCellVal(row,'capacity',vawKey),v);
+}
+function gridResetGroup(id,field,renderFn){
+  const n=state.nodes[id]; if (!n) return;
+  if (field==='capacity') n.capacity=null;
+  else if (field==='existingLoad') n.existingLoad=mkPow(0,0,0,0,1);
+  else if (field==='loadValue') n.loadValue=mkPow();
+  recalc();persist();renderFn();
+}
+// Inserts a blank, immediately-editable child row instead of opening the Add Item(s) modal.
+function gridAddChildRow(parentId,defaultStatus,renderFn){
+  const parent=state.nodes[parentId]; if (!parent) return;
+  const type=ALL_TYPES.includes('Load')?'Load':ALL_TYPES[0];
+  addNode(parentId,{type,status:defaultStatus,acDc:parent.acDc||'dc',voltage:parent.voltage??null,description:'',refDes:''});
+  batchCommit();
+  renderFn();
 }
 function siblingOrderInfoForNode(n){
   const arr=n.parentId?(state.nodes[n.parentId]?.childIds||[]):(state.rootIds||[]);
@@ -1584,57 +1690,60 @@ function gridDescCell(n,depth,editable=true){
   </div>`;
 }
 function gridEffCell(n,forceDisabled){
-  const showVal=isConv(n.type)&&n.convRole!=='out';
-  const editable=showVal&&!forceDisabled;
-  return `<td class="num"><input data-field="efficiency" value="${showVal?fmtPField(n.efficiency):''}"${editable?'':' disabled'}></td>`;
+  const showVal=isConv(n.type)&&n.convRole!=='out'&&!forceDisabled;
+  return `<td class="num"><input data-field="efficiency" value="${showVal?fmtPField(n.efficiency):''}"${showVal?'':' disabled'}></td>`;
 }
 function gridPfCell(n,forceDisabled){
   const showCpf=['TRU','Inverter','Frequency Converter'].includes(n.type);
-  const showVal=showCpf&&n.convRole!=='out';
-  const editable=showVal&&!forceDisabled;
-  return `<td class="num"><input data-field="convPf" value="${showVal?fmtPField(n.convPf):''}"${editable?'':' disabled'}></td>`;
+  const showVal=showCpf&&n.convRole!=='out'&&!forceDisabled;
+  return `<td class="num"><input data-field="convPf" value="${showVal?fmtPField(n.convPf):''}"${showVal?'':' disabled'}></td>`;
 }
+// Capacity is split into three always-present columns (A, VA (AC), W (DC)) rather than one
+// dynamic column, so AC and DC rows show the same column set with the inapplicable one inhibited.
 function gridCapCells(n,forceDisabled){
-  if (!hasCap(n.type)) return `<td class="num grp-first"><input disabled></td><td class="num"><input disabled></td>`;
-  const vawKey=n.acDc==='ac'?'va':'w';
-  const aVal=fmtPField(n.capacity?.a), vawVal=fmtPField(n.capacity?.[vawKey]);
-  if (forceDisabled) return `<td class="num grp-first"><input disabled value="${aVal}"></td><td class="num"><input disabled value="${vawVal}"></td>`;
-  return `<td class="num grp-first"><input data-field="capacity" data-key="a" value="${aVal}"></td>
-    <td class="num"><input data-field="capacity" data-key="${vawKey}" value="${vawVal}"></td>`;
+  if (!hasCap(n.type)) return `<td class="num grp-first"><input disabled></td><td class="num"><input disabled></td><td class="num"><input disabled></td>`;
+  const isAc=n.acDc==='ac';
+  const aVal=fmtPField(n.capacity?.a), vaVal=fmtPField(n.capacity?.va), wVal=fmtPField(n.capacity?.w);
+  const aCell=forceDisabled?`<td class="num grp-first"><input disabled></td>`:`<td class="num grp-first"><input data-field="capacity" data-key="a" value="${aVal}"></td>`;
+  const vaCell=(!isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num"><input disabled></td>`:`<td class="num"><input data-field="capacity" data-key="va" value="${vaVal}"></td>`);
+  const wCell=(isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num"><input disabled></td>`:`<td class="num"><input data-field="capacity" data-key="w" value="${wVal}"></td>`);
+  return aCell+vaCell+wCell;
 }
 function gridPowerGroupCells(n,field,applicable,forceDisabled){
   const keys=['a','va','w','var','pf'];
   return keys.map((k,i)=>{
     const cls=`num${i===0?' grp-first':''}`;
     const activeForAcDc=n.acDc==='ac'?true:(k==='a'||k==='w');
-    if (!applicable||!activeForAcDc) return `<td class="${cls}"><input disabled></td>`;
-    if (forceDisabled) return `<td class="${cls}"><input disabled value="${fmtPField(n[field]?.[k])}"></td>`;
+    if (!applicable||!activeForAcDc||forceDisabled) return `<td class="${cls}"><input disabled></td>`;
     return `<td class="${cls}"><input data-field="${field}" data-key="${k}" value="${fmtPField(n[field]?.[k])}"></td>`;
   }).join('');
 }
-function gridDisplayCells(n,field,applicable){
+function gridDisplayCells(n,field,applicable,forceDisabled){
   const keys=['a','va','w','var','pf'];
   return keys.map((k,i)=>{
     const cls=`num${i===0?' grp-first':''}`;
     const activeForAcDc=n.acDc==='ac'?true:(k==='a'||k==='w');
-    if (!applicable||!activeForAcDc) return `<td class="${cls}"><input disabled></td>`;
+    if (!applicable||!activeForAcDc||forceDisabled) return `<td class="${cls}"><input disabled></td>`;
     const val=n[field]?.[k];
     return `<td class="${cls}"><input disabled value="${val!=null?fmtN(val):''}"></td>`;
   }).join('');
 }
 function gridActionsCell(n,readOnly){
   const {canUp,canDown}=siblingOrderInfoForNode(n);
-  const canAddChild=!(isLoad(n.type)||n.status==='removed');
-  const editBtn=`<button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>`;
-  if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}${editBtn}</div></td>`;
+  const canAddChild=!(isLoad(n.type)||n.status==='removed'||n.convRole==='in');
+  if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}</div></td>`;
   return `<td><div class="grid-actions">
     <button data-act="up" title="Move up"${canUp?'':' disabled'}>&uarr;</button>
     <button data-act="down" title="Move down"${canDown?'':' disabled'}>&darr;</button>
     <button data-act="dup" title="Duplicate">Dup</button>
     ${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}
-    ${editBtn}
+    <button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>
     <button data-act="del" title="Delete">Del</button>
   </div></td>`;
+}
+function gridGroupResetCell(field,editable){
+  if (!editable) return `<td class="grid-reset-cell"></td>`;
+  return `<td class="grid-reset-cell"><button type="button" data-act="reset-group" data-reset-field="${field}" title="Reset this group">&#8635;</button></td>`;
 }
 function gridWarnClass(n){
   const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3');
@@ -1665,28 +1774,36 @@ function gridVoltAcdcCells(n,forceDisabled){
   return vCell+acCell;
 }
 
+function gridStatusToggleCell(n,otherStatus){
+  const label=n.status[0].toUpperCase()+n.status.slice(1);
+  return `<td><button type="button" class="status-badge s-${n.status} grid-status-toggle" data-act="toggle-status" data-toggle-to="${otherStatus}" title="Click to toggle">${label}</button></td>`;
+}
+function gridStatusDisplayCell(n){
+  const label=n.status[0].toUpperCase()+n.status.slice(1);
+  return `<td><span class="status-badge s-${n.status}">${label}</span></td>`;
+}
 function buildExRemRow(n,depth){
-  const statusOpts=['existing','removed'].map(s=>`<option value="${s}"${s===n.status?' selected':''}>${s[0].toUpperCase()+s.slice(1)}</option>`).join('');
+  const otherStatus=n.status==='existing'?'removed':'existing';
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
     <td>${gridDescCell(n,depth)}</td>
-    <td><select data-field="status">${statusOpts}</select></td>
+    ${gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
     ${gridEffCell(n)}${gridPfCell(n)}
-    ${gridCapCells(n)}
-    ${gridPowerGroupCells(n,'existingLoad',hasCap(n.type))}
-    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type))}
+    ${gridCapCells(n)}${gridGroupResetCell('capacity',hasCap(n.type))}
+    ${gridPowerGroupCells(n,'existingLoad',hasCap(n.type))}${gridGroupResetCell('existingLoad',hasCap(n.type))}
+    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type))}${gridGroupResetCell('loadValue',isLoad(n.type))}
     ${gridActionsCell(n,false)}
   </tr>`;
 }
-function gridHeader(group2Label,group3Label){
+function gridHeader(group2Label,group3Label,resettable3=true){
   return `<thead><tr>
     <th class="left" rowspan="2">Item</th><th rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
-    <th class="group-hdr" colspan="2">Capacity</th>
-    <th class="group-hdr" colspan="5">${group2Label}</th>
-    <th class="group-hdr" colspan="5">${group3Label}</th>
+    <th class="group-hdr" colspan="3">Capacity</th><th class="reset-hdr" rowspan="2"></th>
+    <th class="group-hdr" colspan="5">${group2Label}</th><th class="reset-hdr" rowspan="2"></th>
+    <th class="group-hdr" colspan="5">${group3Label}</th>${resettable3?'<th class="reset-hdr" rowspan="2"></th>':''}
     <th rowspan="2"></th>
   </tr><tr>
-    <th class="grp-first">A</th><th>VA/W</th>
+    <th class="grp-first">A</th><th>VA (AC)</th><th>W (DC)</th>
     <th class="grp-first">A</th><th>VA</th><th>W</th><th>VAR</th><th>PF</th>
     <th class="grp-first">A</th><th>VA</th><th>W</th><th>VAR</th><th>PF</th>
   </tr></thead>`;
@@ -1696,12 +1813,12 @@ function buildNewRow(n,depth){
   const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
   return `<tr data-nid="${n.id}" class="${rowCls}">
     <td>${gridDescCell(n,depth,!isExistingCtx)}</td>
-    <td>${isExistingCtx?'Existing':'New'}</td>
+    ${gridStatusDisplayCell(n)}
     ${gridVoltAcdcCells(n,isExistingCtx)}
     ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
-    ${gridCapCells(n,isExistingCtx)}
-    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}
-    ${gridDisplayCells(n,'_netChange',!isLoad(n.type))}
+    ${gridCapCells(n,isExistingCtx)}${gridGroupResetCell('capacity',hasCap(n.type)&&!isExistingCtx)}
+    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!isExistingCtx)}
+    ${gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}
     ${gridActionsCell(n,isExistingCtx)}
   </tr>`;
 }
@@ -1718,9 +1835,9 @@ function gridFieldChanged(e,renderFn){
   else if (field==='acdc') n.acDc=el.value;
   else if (field==='efficiency') { const eff=parseF(evalFormula(el.value.trim())); if (eff!==null&&eff>0&&eff<=1) n.efficiency=eff; }
   else if (field==='convPf') { const pf=parseF(evalFormula(el.value.trim())); if (pf!==null) n.convPf=pf; }
-  else if (field==='capacity') gridCommitCapacity(n);
-  else if (field==='existingLoad') gridCommitPowerGroup(n,'existingLoad');
-  else if (field==='loadValue') gridCommitPowerGroup(n,'loadValue');
+  else if (field==='capacity') gridCommitCapacity(n,el.dataset.key);
+  else if (field==='existingLoad') gridCommitPowerGroup(n,'existingLoad',el.dataset.key);
+  else if (field==='loadValue') gridCommitPowerGroup(n,'loadValue',el.dataset.key);
   recalc();persist();
   const fKey=el.dataset.field, kKey=el.dataset.key;
   renderFn();
@@ -1750,7 +1867,7 @@ function gridDuplicateRow(id,renderFn){
   batchCommit();
   renderFn();
 }
-function wireGridEvents(el,renderFn){
+function wireGridEvents(el,renderFn,defaultChildStatus){
   el.querySelectorAll('input[data-field],select[data-field]').forEach(inp=>{
     inp.addEventListener('change',e=>gridFieldChanged(e,renderFn));
   });
@@ -1759,10 +1876,12 @@ function wireGridEvents(el,renderFn){
       const row=btn.closest('tr[data-nid]'); const id=row.dataset.nid; const act=btn.dataset.act;
       if (act==='up') { moveSibling(id,-1); renderFn(); }
       else if (act==='down') { moveSibling(id,1); renderFn(); }
-      else if (act==='child') openAdd(id);
+      else if (act==='child') gridAddChildRow(id,defaultChildStatus,renderFn);
       else if (act==='edit') openEdit(id);
       else if (act==='del') gridDeleteRow(id,renderFn);
       else if (act==='dup') gridDuplicateRow(id,renderFn);
+      else if (act==='reset-group') gridResetGroup(id,btn.dataset.resetField,renderFn);
+      else if (act==='toggle-status') { const n=state.nodes[id]; if (n) { n.status=btn.dataset.toggleTo; recalc();persist();renderFn(); } }
     });
   });
   const cancelBtn=el.querySelector('[data-grid-cancel]'), saveBtn=el.querySelector('[data-grid-save]');
@@ -1793,7 +1912,7 @@ function renderExRemGrid(){
   const rows=ids.map(id=>buildExRemRow(state.nodes[id],dm[id]||0)).join('');
   const table=`<table class="data-grid">${gridHeader('Existing Load','Load')}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No Existing or Removed items.</div>'}</div>${gridFooter('exrem')}`;
-  wireGridEvents(el,renderExRemGrid);
+  wireGridEvents(el,renderExRemGrid,'existing');
 }
 
 function renderNewGrid(){
@@ -1803,9 +1922,9 @@ function renderNewGrid(){
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
   const rows=ids.map(id=>buildNewRow(state.nodes[id],dm[id]||0)).join('');
-  const table=`<table class="data-grid">${gridHeader('Load','Net Change')}<tbody>${rows}</tbody></table>`;
+  const table=`<table class="data-grid">${gridHeader('Load','Net Change',false)}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No items to display.</div>'}</div>${gridFooter('new')}`;
-  wireGridEvents(el,renderNewGrid);
+  wireGridEvents(el,renderNewGrid,'new');
 }
 
 function renderWarnings() {
@@ -2858,17 +2977,20 @@ function defaultPrintCfg(){
     convInNcOnly:true,
   };
 }
+// A genuine zero is a real value and renders as "0" — only a missing/inapplicable value (val==null,
+// filtered by callers before this is reached) should render as an em-dash. Previously this collapsed
+// near-zero reals to null too, making zero indistinguishable from "not applicable".
 function fmtRpt(v){
   if(v===null||v===undefined)return null;
   const n=+v;if(isNaN(n))return null;
-  const abs=Math.abs(n);if(abs<0.0005)return null;
+  const abs=Math.abs(n);
   if(abs<10)   return String(parseFloat(n.toFixed(3)));
   if(abs<100)  return String(parseFloat(n.toFixed(2)));
   if(abs<1000) return String(parseFloat(n.toFixed(1)));
   if(abs<10000)return Math.round(n).toLocaleString('en-US');
   return (Math.round(n/10)*10).toLocaleString('en-US');
 }
-function fmtPfRpt(v){const n=+v;if(isNaN(n)||Math.abs(n)<0.005)return null;return n.toFixed(2);}
+function fmtPfRpt(v){const n=+v;if(isNaN(n))return null;return n.toFixed(2);}
 function rptTxt(val,isPf,isNeg){const s=isPf?fmtPfRpt(val):fmtRpt(val);if(s===null)return'—';return isNeg?`(${s})`:s;}
 function rptTd(val,isPf,isNeg,ec,gf){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}">${rptTxt(val,isPf,isNeg)}</td>`;}
 
@@ -3009,11 +3131,11 @@ function buildAnnotationMap() {
   return{annotMap,notesList};
 }
 
-function buildRptHeader(cols,hasAnnot){
+function buildRptHeader(cols,hasAnnot,leftCellContent){
   const runs=[];
   cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
   const annotTh=hasAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
-  return `<thead><tr><th class="rpt-left" rowspan="2"></th>${annotTh}${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
+  return `<thead><tr><th class="rpt-left" rowspan="2">${leftCellContent||''}</th>${annotTh}${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
 }
 
 function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
