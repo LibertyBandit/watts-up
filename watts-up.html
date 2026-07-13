@@ -231,7 +231,7 @@
     .grid-footer{flex-shrink:0;padding:.5rem .75rem;border-top:1px solid var(--border);
       display:flex;align-items:center;gap:.6rem;justify-content:flex-end;background:var(--bg-secondary)}
     .grid-footer .grid-footer-msg{margin-right:auto;font-size:.74rem;color:var(--text-muted)}
-    .data-grid{width:auto;min-width:100%;table-layout:fixed;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
+    .data-grid{table-layout:fixed;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
     .data-grid thead{position:sticky;top:0;z-index:5;background:var(--bg-secondary)}
     .data-grid th{padding:.3rem .4rem;text-align:center;font-weight:700;color:var(--text-secondary);
       border-bottom:1px solid var(--border);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
@@ -252,16 +252,22 @@
     .data-grid .grid-desc-cell input.grid-refdes{flex:1;min-width:64px;font-family:monospace;font-size:.68rem}
     .data-grid .grid-desc-cell span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     /* Frozen (sticky) Item + Status columns, so they stay put while numeric columns scroll */
-    .data-grid th:nth-child(1),.data-grid td:nth-child(1){position:sticky;left:0;z-index:3;width:300px;min-width:300px;max-width:300px;white-space:normal}
-    .data-grid th:nth-child(2),.data-grid td:nth-child(2){position:sticky;left:300px;z-index:3;width:100px;min-width:100px;max-width:100px}
-    .data-grid thead th:nth-child(1),.data-grid thead th:nth-child(2){z-index:6}
-    .data-grid tbody td:nth-child(1),.data-grid tbody td:nth-child(2){background:var(--bg-primary)}
-    .data-grid tbody tr:hover td:nth-child(1),.data-grid tbody tr:hover td:nth-child(2){background:var(--bg-hover)}
+    /* Sticky/frozen Item + Status columns use explicit classes, not nth-child(1)/(2) — the header
+       is two physical <tr> rows (group labels + sub-labels), so "first/second child of its own
+       row" lands on the Capacity sub-header cells in row 2, not Item/Status. nth-child silently
+       applied the frozen-column width/position to those cells too, corrupting the whole header's
+       column widths. Classes don't have that ambiguity. */
+    .data-grid .grid-col-item{position:sticky;left:0;z-index:3;width:300px;min-width:300px;max-width:300px;white-space:normal}
+    .data-grid .grid-col-status{position:sticky;left:300px;z-index:3;width:100px;min-width:100px;max-width:100px}
+    .data-grid thead .grid-col-item,.data-grid thead .grid-col-status{z-index:6}
+    .data-grid tbody .grid-col-item,.data-grid tbody .grid-col-status{background:var(--bg-primary)}
+    .data-grid tbody tr:hover .grid-col-item,.data-grid tbody tr:hover .grid-col-status{background:var(--bg-hover)}
     /* DC tint stops at the AC/DC column (4th) so it doesn't compete with the disabled-cell fill
        further right; sticky columns 1-2 need a flattened solid color, columns 3-4 can use the
-       translucent tint directly since they scroll normally. */
-    .data-grid tbody tr.row-dc td:nth-child(1),.data-grid tbody tr.row-dc td:nth-child(2){background:#16243a;box-shadow:inset 4px 0 0 var(--accent-blue)}
-    .data-grid tbody tr.row-dc:hover td:nth-child(1),.data-grid tbody tr.row-dc:hover td:nth-child(2){background:#1c2d47}
+       translucent tint directly since they scroll normally. Columns 3-4 are tbody-only (data rows
+       are a single flat <tr>, no header-row ambiguity), so nth-child is safe there. */
+    .data-grid tbody tr.row-dc .grid-col-item,.data-grid tbody tr.row-dc .grid-col-status{background:#16243a;box-shadow:inset 4px 0 0 var(--accent-blue)}
+    .data-grid tbody tr.row-dc:hover .grid-col-item,.data-grid tbody tr.row-dc:hover .grid-col-status{background:#1c2d47}
     .data-grid tbody tr.row-dc td:nth-child(3),.data-grid tbody tr.row-dc td:nth-child(4){background:rgba(88,166,255,.22)}
     .data-grid tbody tr.row-dc:hover td:nth-child(3),.data-grid tbody tr.row-dc:hover td:nth-child(4){background:rgba(88,166,255,.32)}
     .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
@@ -1761,16 +1767,16 @@ function gridVoltAcdcCells(n,forceDisabled){
 
 function gridStatusToggleCell(n,otherStatus){
   const label=n.status[0].toUpperCase()+n.status.slice(1);
-  return `<td><button type="button" class="status-badge s-${n.status} grid-status-toggle" data-act="toggle-status" data-toggle-to="${otherStatus}" title="Click to toggle">${label}</button></td>`;
+  return `<td class="grid-col-status"><button type="button" class="status-badge s-${n.status} grid-status-toggle" data-act="toggle-status" data-toggle-to="${otherStatus}" title="Click to toggle">${label}</button></td>`;
 }
 function gridStatusDisplayCell(n){
   const label=n.status[0].toUpperCase()+n.status.slice(1);
-  return `<td><span class="status-badge s-${n.status}">${label}</span></td>`;
+  return `<td class="grid-col-status"><span class="status-badge s-${n.status}">${label}</span></td>`;
 }
 function buildExRemRow(n,depth){
   const otherStatus=n.status==='existing'?'removed':'existing';
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
-    <td>${gridDescCell(n,depth)}</td>
+    <td class="grid-col-item">${gridDescCell(n,depth)}</td>
     ${gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
     ${gridEffCell(n)}${gridPfCell(n)}
@@ -1783,19 +1789,22 @@ function buildExRemRow(n,depth){
 // Mirrors gridHeader's exact column sequence with explicit widths, so every numeric column is
 // the same size (sized for the widest plausible value) instead of the browser's auto-layout
 // giving whichever column has the widest content that render pass more room than its neighbors.
+// Returns {html, total} — total is the exact sum of declared column widths, which the caller
+// must set as the <table>'s own width. table-layout:fixed only holds column widths to their
+// colgroup values if the table's own width is at least that sum; width:auto/min-width:100% lets
+// the browser shrink the table (and every column proportionally) to fit the container instead,
+// which is what was actually causing the uneven columns even after the colgroup was added.
 function gridColgroup(resettable3){
-  const num=w=>`<col style="width:${w}px">`;
-  let html='<colgroup>';
-  html+=num(300)+num(100)+num(52)+num(58)+num(56)+num(52); // Item, Status, V, AC/DC, Eff, PF
-  html+=num(64).repeat(3)+num(34); // Capacity A/VA/W + reset
-  html+=num(64).repeat(5)+num(34); // group2 + reset
-  html+=num(64).repeat(5)+(resettable3?num(34):''); // group3 (+ reset)
-  html+=num(210); // actions
-  return html+'</colgroup>';
+  const widths=[300,100,52,58,56,52, 64,64,64,34, 64,64,64,64,64,34, 64,64,64,64,64];
+  if (resettable3) widths.push(34);
+  widths.push(210);
+  const total=widths.reduce((a,b)=>a+b,0);
+  const html='<colgroup>'+widths.map(w=>`<col style="width:${w}px">`).join('')+'</colgroup>';
+  return {html,total};
 }
 function gridHeader(group2Label,group3Label,resettable3=true){
   return `<thead><tr>
-    <th class="left" rowspan="2">Item</th><th rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
+    <th class="left grid-col-item" rowspan="2">Item</th><th class="grid-col-status" rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
     <th class="group-hdr" colspan="3">Capacity</th><th class="reset-hdr" rowspan="2"></th>
     <th class="group-hdr" colspan="5">${group2Label}</th><th class="reset-hdr" rowspan="2"></th>
     <th class="group-hdr" colspan="5">${group3Label}</th>${resettable3?'<th class="reset-hdr" rowspan="2"></th>':''}
@@ -1810,7 +1819,7 @@ function buildNewRow(n,depth){
   const isExistingCtx=n.status==='existing';
   const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
   return `<tr data-nid="${n.id}" class="${rowCls}">
-    <td>${gridDescCell(n,depth,!isExistingCtx)}</td>
+    <td class="grid-col-item">${gridDescCell(n,depth,!isExistingCtx)}</td>
     ${gridStatusDisplayCell(n)}
     ${gridVoltAcdcCells(n,isExistingCtx)}
     ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
@@ -1919,7 +1928,8 @@ function renderExRemGrid(){
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='removed'); });
   const rows=ids.map(id=>buildExRemRow(state.nodes[id],dm[id]||0)).join('');
-  const table=`<table class="data-grid">${gridColgroup(true)}${gridHeader('Existing Load','Load')}<tbody>${rows}</tbody></table>`;
+  const cg=gridColgroup(true);
+  const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Existing Load','Load')}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No Existing or Removed items.</div>'}</div>${gridFooter('exrem')}`;
   wireGridEvents(el,renderExRemGrid,'existing');
 }
@@ -1931,7 +1941,8 @@ function renderNewGrid(){
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
   const rows=ids.map(id=>buildNewRow(state.nodes[id],dm[id]||0)).join('');
-  const table=`<table class="data-grid">${gridColgroup(false)}${gridHeader('Load','Net Change',false)}<tbody>${rows}</tbody></table>`;
+  const cg=gridColgroup(false);
+  const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Load','Net Change',false)}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No items to display.</div>'}</div>${gridFooter('new')}`;
   wireGridEvents(el,renderNewGrid,'new');
 }
