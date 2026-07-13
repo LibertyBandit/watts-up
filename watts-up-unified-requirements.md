@@ -1,6 +1,6 @@
 # Watts Up — Unified Requirements
 Supersedes: watts-up-requirements.txt, watts-up-revision-1- through revision-9-requirements.txt
-Last updated: 2026-07-11 (through Revision 22)
+Last updated: 2026-07-12 (through Revision 24 + column-layout follow-up fixes)
 
 ---
 
@@ -918,7 +918,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§23).
+enhancement (§26).
 
 ---
 
@@ -1140,7 +1140,177 @@ is unchanged.
 
 ---
 
-## 23. Future Enhancements
+## 23. Revision 23 — Grid Editing Fix, Layout Polish, "+ Child" Rework, Report Polish
+
+*Last updated: 2026-07-12*
+
+### 23.1 Grid editing bug fix
+
+The Existing/Removed and New grids (§21) had a real defect, not just a rough edge:
+editing a cell in a multi-key value group (Capacity, Existing Load, Load) could silently
+revert to its previous value. Cause: the underlying derivation helpers recompute a whole
+group from a **fixed priority order** among its sub-fields (roughly W/VAR > VA+W > VA+PF
+> W > VA > A last for AC; A before W for DC) — once a higher-priority field had any
+value, editing a lower-priority one (commonly A) got discarded on the next recompute.
+
+Fixed by making whichever key the user just edited authoritative: a legitimate two-field
+pair (e.g. W+VAR entered together) is still honored if the edited key's pair partner also
+has a value; otherwise the edited key alone drives the derivation. A **Reset** button was
+also added per column-group per row, clearing that group back to blank — the simpler
+alternative to auto-clear-on-edit that the original request had flagged as needing
+careful one-time-per-session logic to avoid continually wiping re-entered values.
+
+### 23.2 Grid layout and interaction changes (Existing/Removed and New)
+
+- Description/Ref Des/Status columns widened (superseded by §26 — the widths chosen here
+  still weren't sufficient; see below).
+- Capacity's combined column split into two always-present columns, "VA (AC)" and
+  "W (DC)", each inhibited (disabled, dashed) for the wrong AC/DC type — matching how the
+  5-key groups already inhibit inapplicable sub-columns.
+- Item and Status columns made sticky/frozen with horizontal scroll for the rest
+  (**superseded by §26** — frozen columns were removed entirely after causing two rounds
+  of layout bugs; see §26).
+- Existing/Removed: status shown as a click-to-toggle badge (existing ↔ removed),
+  matching Load Analysis Summary's badge style, replacing the dropdown. New: matching
+  badge styling, display-only (status isn't editable there).
+- New grid's existing-status context rows now genuinely hide (not just disable)
+  Efficiency/PF/Capacity/Load/Net Change values, and lose the Edit button — both had
+  previously only been disabled while still showing/offering their values.
+
+### 23.3 "+ Child" behavior
+
+Clicking **+ Child** in either grid now inserts a blank, immediately-editable child row
+directly (status defaults to Existing for the Existing/Removed grid, New for the New
+grid) instead of opening the Add Item(s) dialog. New child defaults to type **Load**.
+**+ Child** is hidden entirely for Conversion-IN nodes, in both grids and the LH tree —
+adding a child there is invalid since a conversion item's only valid child is its own
+paired OUT node, which is created automatically as part of the conversion pair itself.
+
+### 23.4 Power Distribution Summary and Load Analysis Detail polish
+
+- Section headings include voltage ("115 VAC Summary"/"28 VDC Summary" for Power
+  Distribution Summary; "115 VAC Detail"/"28 VDC Detail" for Load Analysis Detail).
+- Conversion-IN items excluded from both reports as report *subjects* (Power Distribution
+  Summary rows and Load Analysis Detail's own per-item tables) — the OUT side still shows,
+  and an IN node still correctly appears as a child row within its actual parent's table
+  in Load Analysis Detail.
+- Load Analysis Detail: column widths made consistent across every table within a section
+  (shared colgroup, computed once per AC/DC section); Removed/Added pseudo-label rows now
+  appear per table (mirroring Print Report's convention), including the case where the
+  table's own subject item is itself New (an "Added" label is inserted above that first
+  row); the breadcrumb path moved from a line above the table into the table's own empty
+  header cell; notes/references renumbered locally in this report's own top-to-bottom
+  order and shown directly below each table, rather than collected globally at the end.
+- **Zero vs. "not applicable" fixed at the shared formatter level** (`fmtRpt`/`fmtPfRpt`):
+  previously any near-zero real value was collapsed to null and rendered as an em-dash,
+  indistinguishable from a genuinely inapplicable cell. A real zero now renders as "0"/
+  "0.00"; a true N/A cell (value never existed) still renders as "—". This fix is shared
+  with Print Report and Word export, not just Load Analysis Detail.
+
+---
+
+## 24. Revision 24 — Grid Item Type & Column Overhaul, Live Refresh, Report Column Settings
+
+*Last updated: 2026-07-12*
+
+### 24.1 Item Type dropdown
+
+Expanded from a "same-shape swaps only" restriction to the full Generation/Distribution/
+Protection/Load type menu for any node that isn't Root and doesn't have a conversion role.
+Conversion-role rows (TRU/Inverter/etc., IN or OUT) keep a fixed, single-option dropdown —
+a conversion item is a paired IN/OUT structure, not a single-node type change, so free
+switching isn't offered for those rows. Switching a node's type initializes whatever
+fields the new type requires (capacity/existing load for capacity-bearing types, load
+value for Load) if missing, without touching whatever the old type left behind.
+
+### 24.2 Grid numeric-value display and editing
+
+- Numeric cells display **rounded** values at rest, matching Load Analysis Summary's
+  rounding tiers, while the full-precision value is retained in the underlying data and
+  swapped in automatically while the cell is focused, so editing is always exact. The
+  rounded display returns on blur if the value wasn't changed.
+- Every numeric column within the Capacity/Existing Load/Load/Net Change groups given a
+  uniform width, sized for the widest plausible value, instead of relying on the
+  browser's default column-sizing (which let whichever column had the widest content that
+  render pass squeeze its neighbors). Horizontal scrolling picks up the rest.
+- Reset buttons (§23.1) now clear the affected group fully to blank, not to zero — the
+  Existing Load reset had been zeroing the group instead of blanking it, inconsistent
+  with the Load reset, which already blanked correctly.
+- Cells that aren't available for editing (wrong AC/DC type, wrong item type, read-only
+  context row) get a subtle fill so they read as visually distinct, not just faded.
+
+### 24.3 Live refresh on every grid edit
+
+Every grid edit (not just Save) now refreshes the Power Distribution Tree and every
+report tab immediately — previously, ordinary cell edits only re-rendered the active
+grid itself, leaving the tree and other reports stale until some unrelated action
+happened to trigger a fuller refresh. Since grid edits already apply live, that staleness
+was misleading regardless of which specific action triggered the refresh.
+
+### 24.4 Power Distribution Summary — Print/Export column settings
+
+Power Distribution Summary's columns (Capacity, Net Change, New Load, Remaining) are now
+driven by the same Print/Export column-selection settings (§13.1) used elsewhere, instead
+of a fixed, hardcoded column set — toggling a column checkbox in that dialog changes what
+Power Distribution Summary shows, the same as it already did for Print Report.
+
+### 24.5 Load Analysis Detail — two small fixes
+
+- Group header labels (e.g. "Rating / Capacity") now wrap instead of clipping.
+- The redundant "Added" pseudo-label is no longer repeated for an all-new item's already-
+  new children — if the table's own subject row is itself New (and already labeled), its
+  New-status children don't get a second, repeated label. Print Report and Word Report
+  already handled this correctly via their own recursive tracking; Load Analysis Detail's
+  simpler per-table logic just needed to match.
+
+---
+
+## 25. Revision 24 Follow-Up — Grid Column Layout Corrections
+
+*Last updated: 2026-07-12*
+
+Two rounds of user feedback after Revision 24 traced the Existing/Removed and New grids'
+column-width problems to real bugs in the layout mechanics themselves — not to the tab
+placement, the VA/W column split, or the frozen-column concept as such. Both fixes were
+verified by measuring actual rendered pixel widths in-browser, not by re-reading the CSS.
+
+### 25.1 First fix: two CSS bugs in the column-width mechanism
+
+1. **Sticky-column selectors matched the wrong cells.** The frozen Item/Status columns
+   were styled via `:nth-child(1)`/`:nth-child(2)`. The grid header is two physical
+   table rows (group labels, then A/VA/W sub-labels) — `nth-child` is relative to each
+   row's own children, so in the second row it matched the first two Capacity
+   sub-header cells instead of Item/Status, forcing the frozen-column width and position
+   onto them and corrupting that row's widths. Fixed with explicit CSS classes instead of
+   positional selectors.
+2. **The table wasn't sized to its own columns.** `table-layout:fixed` combined with
+   `width:auto`/`min-width:100%` let the browser shrink the whole table to fit the visible
+   pane and compress every column proportionally, instead of holding each to its declared
+   width — `table-layout:fixed` only holds columns to their declared widths if the table's
+   own width is at least the sum of them. Fixed by giving the table an explicit width
+   equal to the exact sum of its declared column widths.
+
+### 25.2 Second fix: Item Type / Description / Ref Des still not viewable
+
+After 25.1, the numeric columns (Capacity, Existing Load, Net Change, Load) were
+correctly and evenly sized, but Item Type, Description, and Ref Des still weren't usable.
+Root cause: the frozen Item column crammed a badge, the Item Type dropdown, the
+description, and the ref des into a single ~300px flex row — measured directly, the Item
+Type dropdown was rendering at under 12px wide, with description and ref des stuck at
+their bare minimum widths. 300px was never enough for all four.
+
+Per the user's own stated fallback (prefer unrestricted horizontal scrolling over
+obscuring these columns), **sticky/frozen columns were removed entirely** — the second
+layout bug the mechanism had caused in as many rounds — rather than patched further.
+Item Type, Description, and Ref Des are now three separate columns (240px/260px/100px)
+instead of one cramped cell; the whole table scrolls horizontally together, including
+what used to be the frozen columns. The DC-row blue tint and left accent bar now span all
+the identity columns (Item Type through AC/DC) using explicit CSS classes rather than
+column-position selectors, avoiding the same class of bug going forward.
+
+---
+
+## 26. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
