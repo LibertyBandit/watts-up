@@ -247,29 +247,26 @@
     .data-grid input:hover,.data-grid select:hover{border-color:var(--border)}
     .data-grid input:focus,.data-grid select:focus{outline:none;border-color:var(--accent-blue);background:var(--bg-primary)}
     .data-grid input:disabled,.data-grid select:disabled{opacity:.55;pointer-events:none;border-color:transparent;background:rgba(255,255,255,.06)}
-    .data-grid .grid-desc-cell{display:flex;align-items:center;gap:.3rem}
-    .data-grid .grid-desc-cell input{flex:2;min-width:110px}
-    .data-grid .grid-desc-cell input.grid-refdes{flex:1;min-width:64px;font-family:monospace;font-size:.68rem}
-    .data-grid .grid-desc-cell span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    /* Frozen (sticky) Item + Status columns, so they stay put while numeric columns scroll */
-    /* Sticky/frozen Item + Status columns use explicit classes, not nth-child(1)/(2) — the header
-       is two physical <tr> rows (group labels + sub-labels), so "first/second child of its own
-       row" lands on the Capacity sub-header cells in row 2, not Item/Status. nth-child silently
-       applied the frozen-column width/position to those cells too, corrupting the whole header's
-       column widths. Classes don't have that ambiguity. */
-    .data-grid .grid-col-item{position:sticky;left:0;z-index:3;width:300px;min-width:300px;max-width:300px;white-space:normal}
-    .data-grid .grid-col-status{position:sticky;left:300px;z-index:3;width:100px;min-width:100px;max-width:100px}
-    .data-grid thead .grid-col-item,.data-grid thead .grid-col-status{z-index:6}
-    .data-grid tbody .grid-col-item,.data-grid tbody .grid-col-status{background:var(--bg-primary)}
-    .data-grid tbody tr:hover .grid-col-item,.data-grid tbody tr:hover .grid-col-status{background:var(--bg-hover)}
-    /* DC tint stops at the AC/DC column (4th) so it doesn't compete with the disabled-cell fill
-       further right; sticky columns 1-2 need a flattened solid color, columns 3-4 can use the
-       translucent tint directly since they scroll normally. Columns 3-4 are tbody-only (data rows
-       are a single flat <tr>, no header-row ambiguity), so nth-child is safe there. */
-    .data-grid tbody tr.row-dc .grid-col-item,.data-grid tbody tr.row-dc .grid-col-status{background:#16243a;box-shadow:inset 4px 0 0 var(--accent-blue)}
-    .data-grid tbody tr.row-dc:hover .grid-col-item,.data-grid tbody tr.row-dc:hover .grid-col-status{background:#1c2d47}
-    .data-grid tbody tr.row-dc td:nth-child(3),.data-grid tbody tr.row-dc td:nth-child(4){background:rgba(88,166,255,.22)}
-    .data-grid tbody tr.row-dc:hover td:nth-child(3),.data-grid tbody tr.row-dc:hover td:nth-child(4){background:rgba(88,166,255,.32)}
+    /* No frozen/sticky columns — two rounds of feedback showed sticky positioning kept causing
+       real bugs (nth-child mismatched the two-row header; the frozen width also couldn't fit
+       Type+Description+Ref Des without cramming them into one narrow flex row). Unrestricted
+       horizontal scroll with properly-sized columns is simpler and was the user's own stated
+       fallback. Type/Description/Ref Des are now separate columns, not one flex-row cell. */
+    .data-grid .grid-type-cell{display:flex;align-items:center;gap:.3rem;overflow:hidden}
+    .data-grid .grid-col-desc input{width:100%}
+    .data-grid .grid-desc-readonly,.data-grid .grid-refdes-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;padding:.16rem .3rem;font-size:.74rem}
+    .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.68rem;color:var(--text-muted)}
+    .data-grid .grid-col-refdes input{font-family:monospace;font-size:.68rem}
+    /* DC tint covers the identity columns (Type through AC/DC) and stops before the editable
+       numeric groups, so it doesn't compete with the disabled-cell fill further right. Explicit
+       classes, not nth-child, so column order can change safely. */
+    .data-grid tbody tr.row-dc .grid-col-type,.data-grid tbody tr.row-dc .grid-col-desc,
+    .data-grid tbody tr.row-dc .grid-col-refdes,.data-grid tbody tr.row-dc .grid-col-status,
+    .data-grid tbody tr.row-dc .grid-col-v,.data-grid tbody tr.row-dc .grid-col-acdc{background:rgba(88,166,255,.22)}
+    .data-grid tbody tr.row-dc:hover .grid-col-type,.data-grid tbody tr.row-dc:hover .grid-col-desc,
+    .data-grid tbody tr.row-dc:hover .grid-col-refdes,.data-grid tbody tr.row-dc:hover .grid-col-status,
+    .data-grid tbody tr.row-dc:hover .grid-col-v,.data-grid tbody tr.row-dc:hover .grid-col-acdc{background:rgba(88,166,255,.32)}
+    .data-grid tbody tr.row-dc .grid-col-type{box-shadow:inset 4px 0 0 var(--accent-blue)}
     .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
     .data-grid .grid-actions button{padding:.1rem .32rem;font-size:.68rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
@@ -1664,22 +1661,24 @@ function siblingOrderInfoForNode(n){
   return {canUp:idx>0,canDown:idx>=0&&idx<sameStatus.length-1};
 }
 
-function gridDescCell(n,depth,editable=true){
-  if (!editable) {
-    return `<div class="grid-desc-cell" style="padding-left:${depth*14}px">
-      ${badgeHtml(n)}
-      <span style="flex:2;overflow:hidden;text-overflow:ellipsis">${esc(n.description||'unnamed')}</span>
-      <span class="grid-refdes" style="flex:1">${esc(n.refDes||'')}</span>
-    </div>`;
-  }
+// Item Type, Description, and Ref Des are three separate columns (not one flex-row cell) — a
+// single ~300px cell couldn't fit a badge, a type dropdown, a description, and a ref des all at
+// once (the dropdown alone was squeezed to ~12px). Each now gets a column properly sized for
+// its own content.
+function gridTypeCell(n,depth,editable=true){
+  const indent=`style="padding-left:${depth*14}px"`;
+  if (!editable) return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}</div></td>`;
   const shapes=gridAvailableTypes(n);
   const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(t)}</option>`).join('');
-  return `<div class="grid-desc-cell" style="padding-left:${depth*14}px">
-    ${badgeHtml(n)}
-    <select data-field="type" class="grid-type-select"${shapes.length<=1?' disabled':''}>${typeOpts}</select>
-    <input data-field="description" value="${esc(n.description||'')}" placeholder="Description">
-    <input data-field="refDes" class="grid-refdes" value="${esc(n.refDes||'')}" placeholder="Ref Des">
-  </div>`;
+  return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}<select data-field="type" class="grid-type-select"${shapes.length<=1?' disabled':''}>${typeOpts}</select></div></td>`;
+}
+function gridDescInputCell(n,editable=true){
+  if (!editable) return `<td class="grid-col-desc"><span class="grid-desc-readonly" title="${esc(n.description||'unnamed')}">${esc(n.description||'unnamed')}</span></td>`;
+  return `<td class="grid-col-desc"><input data-field="description" value="${esc(n.description||'')}" placeholder="Description"></td>`;
+}
+function gridRefDesCell(n,editable=true){
+  if (!editable) return `<td class="grid-col-refdes"><span class="grid-refdes-readonly">${esc(n.refDes||'')}</span></td>`;
+  return `<td class="grid-col-refdes"><input data-field="refDes" value="${esc(n.refDes||'')}" placeholder="Ref Des"></td>`;
 }
 function gridEffCell(n,forceDisabled){
   const showVal=isConv(n.type)&&n.convRole!=='out'&&!forceDisabled;
@@ -1757,11 +1756,11 @@ function gridVoltAcdcInfo(n){
 function gridVoltAcdcCells(n,forceDisabled){
   const {vEditable,vVal,acEditable,acVal}=gridVoltAcdcInfo(n);
   const vCell=(vEditable&&!forceDisabled)
-    ? `<td class="num">${gridNumInput('voltage',null,vVal)}</td>`
-    : `<td class="num"><input disabled value="${fmtGridDisplay(vVal)}"></td>`;
+    ? `<td class="num grid-col-v">${gridNumInput('voltage',null,vVal)}</td>`
+    : `<td class="num grid-col-v"><input disabled value="${fmtGridDisplay(vVal)}"></td>`;
   const acCell=(acEditable&&!forceDisabled)
-    ? `<td><select data-field="acdc"><option value="dc"${acVal==='dc'?' selected':''}>DC</option><option value="ac"${acVal==='ac'?' selected':''}>AC</option></select></td>`
-    : `<td><input disabled value="${acVal==='ac'?'AC':'DC'}"></td>`;
+    ? `<td class="grid-col-acdc"><select data-field="acdc"><option value="dc"${acVal==='dc'?' selected':''}>DC</option><option value="ac"${acVal==='ac'?' selected':''}>AC</option></select></td>`
+    : `<td class="grid-col-acdc"><input disabled value="${acVal==='ac'?'AC':'DC'}"></td>`;
   return vCell+acCell;
 }
 
@@ -1776,7 +1775,7 @@ function gridStatusDisplayCell(n){
 function buildExRemRow(n,depth){
   const otherStatus=n.status==='existing'?'removed':'existing';
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
-    <td class="grid-col-item">${gridDescCell(n,depth)}</td>
+    ${gridTypeCell(n,depth)}${gridDescInputCell(n)}${gridRefDesCell(n)}
     ${gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
     ${gridEffCell(n)}${gridPfCell(n)}
@@ -1795,7 +1794,7 @@ function buildExRemRow(n,depth){
 // the browser shrink the table (and every column proportionally) to fit the container instead,
 // which is what was actually causing the uneven columns even after the colgroup was added.
 function gridColgroup(resettable3){
-  const widths=[300,100,52,58,56,52, 64,64,64,34, 64,64,64,64,64,34, 64,64,64,64,64];
+  const widths=[240,260,100,100,52,58,56,52, 64,64,64,34, 64,64,64,64,64,34, 64,64,64,64,64];
   if (resettable3) widths.push(34);
   widths.push(210);
   const total=widths.reduce((a,b)=>a+b,0);
@@ -1804,7 +1803,7 @@ function gridColgroup(resettable3){
 }
 function gridHeader(group2Label,group3Label,resettable3=true){
   return `<thead><tr>
-    <th class="left grid-col-item" rowspan="2">Item</th><th class="grid-col-status" rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
+    <th class="left grid-col-type" rowspan="2">Item Type</th><th class="left grid-col-desc" rowspan="2">Description</th><th class="left grid-col-refdes" rowspan="2">Ref Des</th><th class="grid-col-status" rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
     <th class="group-hdr" colspan="3">Capacity</th><th class="reset-hdr" rowspan="2"></th>
     <th class="group-hdr" colspan="5">${group2Label}</th><th class="reset-hdr" rowspan="2"></th>
     <th class="group-hdr" colspan="5">${group3Label}</th>${resettable3?'<th class="reset-hdr" rowspan="2"></th>':''}
@@ -1819,7 +1818,7 @@ function buildNewRow(n,depth){
   const isExistingCtx=n.status==='existing';
   const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
   return `<tr data-nid="${n.id}" class="${rowCls}">
-    <td class="grid-col-item">${gridDescCell(n,depth,!isExistingCtx)}</td>
+    ${gridTypeCell(n,depth,!isExistingCtx)}${gridDescInputCell(n,!isExistingCtx)}${gridRefDesCell(n,!isExistingCtx)}
     ${gridStatusDisplayCell(n)}
     ${gridVoltAcdcCells(n,isExistingCtx)}
     ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
