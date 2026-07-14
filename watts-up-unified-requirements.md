@@ -1310,7 +1310,53 @@ column-position selectors, avoiding the same class of bug going forward.
 
 ---
 
-## 26. Future Enhancements
+## 26. Revision 24 Follow-Up (Round 2) — Grid Column Balance, Contrast, Density, Tab Navigation
+
+*Last updated: 2026-07-14*
+
+Four more usability items on the Existing/Removed and New grids, raised after §25's fixes
+had settled. Verified live via `getBoundingClientRect()`/`scrollWidth` measurements on a
+seeded 6-level-deep tree across both grid tabs, per the user's concern about repeated
+regressions in this area — including the Tab-key fix's edit-then-rerender race condition.
+
+### 26.1 Item Type vs. Description column balance
+
+At depth 5-6 in the tree, the Item Type column's fixed width combined with per-level
+indentation left too little room for longer type names (e.g. "Circuit Breaker" clipped in
+its dropdown), while Description had far more width than any real description text needs.
+Item Type widened (240→270px) and Description narrowed (260→170px); per-level indent
+reduced (14→10px). Confirmed at depth 6: type dropdown now renders at 126px vs. a 125px
+`scrollWidth` need, no clipping.
+
+### 26.2 Disabled-cell fill contrast
+
+The gray fill marking inapplicable/disabled cells (§24.2) was too subtle to read as
+distinct from editable cells at a glance. Background raised from
+`rgba(255,255,255,.06)` to `rgba(255,255,255,.16)`.
+
+### 26.3 Grid density scaled for 100% zoom
+
+Both grids had been designed at pixel/font values that read best at ~90% browser zoom.
+Rather than only fix that at one zoom level again, grid font-sizes, cell padding, and all
+column widths were scaled down by ~0.9 together in one pass, so 100% zoom now gives the
+same density the user had been achieving manually at 90%. The column-width /
+`table-layout:fixed` mechanism from §25.1 is unchanged — only the declared values were
+scaled, not the mechanism.
+
+### 26.4 Tab key advances to the next editable cell
+
+Tab (Shift+Tab reverses) now moves focus to the next editable cell within the same row,
+skipping disabled cells and the status-toggle button, rather than falling through to the
+browser's default tab order. The tricky part: a value-changing edit's `change` handler
+(`gridFieldChanged`) runs `recalc()`/`persist()`/`renderAll()` on blur, which rebuilds the
+row's DOM and refocuses the *same* field — a race that would otherwise undo any Tab
+navigation attempted through it. The new `keydown` handler captures the row's `data-nid`
+and the field's position index before blurring, then resolves the actual next element
+after a `setTimeout(0)`, so it runs after any synchronous rerender instead of before it.
+
+---
+
+## 27. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
