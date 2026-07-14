@@ -231,22 +231,24 @@
     .grid-footer{flex-shrink:0;padding:.5rem .75rem;border-top:1px solid var(--border);
       display:flex;align-items:center;gap:.6rem;justify-content:flex-end;background:var(--bg-secondary)}
     .grid-footer .grid-footer-msg{margin-right:auto;font-size:.74rem;color:var(--text-muted)}
-    .data-grid{table-layout:fixed;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
+    .data-grid{table-layout:fixed;border-collapse:collapse;font-size:.68rem;white-space:nowrap}
     .data-grid thead{position:sticky;top:0;z-index:5;background:var(--bg-secondary)}
-    .data-grid th{padding:.3rem .4rem;text-align:center;font-weight:700;color:var(--text-secondary);
-      border-bottom:1px solid var(--border);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
+    .data-grid th{padding:.27rem .36rem;text-align:center;font-weight:700;color:var(--text-secondary);
+      border-bottom:1px solid var(--border);font-size:.59rem;text-transform:uppercase;letter-spacing:.4px}
     .data-grid th.left{text-align:left}
     .data-grid th.group-hdr{border-left:1px solid var(--border)}
-    .data-grid td{padding:.18rem .3rem;border-bottom:1px solid var(--border);vertical-align:middle}
+    .data-grid td{padding:.16rem .27rem;border-bottom:1px solid var(--border);vertical-align:middle}
     .data-grid td.grp-first{border-left:1px solid var(--border)}
     .data-grid td.num{text-align:right}
     .data-grid tbody tr:hover{background:var(--bg-hover)}
     .data-grid tr.row-readonly{opacity:.6}
     .data-grid input,.data-grid select{width:100%;min-width:0;background:transparent;border:1px solid transparent;
-      color:var(--text-primary);border-radius:3px;padding:.16rem .3rem;font-size:.74rem;font-family:inherit;text-align:inherit}
+      color:var(--text-primary);border-radius:3px;padding:.14rem .27rem;font-size:.67rem;font-family:inherit;text-align:inherit}
     .data-grid input:hover,.data-grid select:hover{border-color:var(--border)}
     .data-grid input:focus,.data-grid select:focus{outline:none;border-color:var(--accent-blue);background:var(--bg-primary)}
-    .data-grid input:disabled,.data-grid select:disabled{opacity:.55;pointer-events:none;border-color:transparent;background:rgba(255,255,255,.06)}
+    .data-grid input:disabled,.data-grid select:disabled{opacity:.55;pointer-events:none;border-color:transparent;background:rgba(255,255,255,.16)}
+    .data-grid .type-badge{font-size:.58rem}
+    .data-grid .status-badge{font-size:.56rem}
     /* No frozen/sticky columns — two rounds of feedback showed sticky positioning kept causing
        real bugs (nth-child mismatched the two-row header; the frozen width also couldn't fit
        Type+Description+Ref Des without cramming them into one narrow flex row). Unrestricted
@@ -254,9 +256,9 @@
        fallback. Type/Description/Ref Des are now separate columns, not one flex-row cell. */
     .data-grid .grid-type-cell{display:flex;align-items:center;gap:.3rem;overflow:hidden}
     .data-grid .grid-col-desc input{width:100%}
-    .data-grid .grid-desc-readonly,.data-grid .grid-refdes-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;padding:.16rem .3rem;font-size:.74rem}
-    .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.68rem;color:var(--text-muted)}
-    .data-grid .grid-col-refdes input{font-family:monospace;font-size:.68rem}
+    .data-grid .grid-desc-readonly,.data-grid .grid-refdes-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;padding:.14rem .27rem;font-size:.67rem}
+    .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.61rem;color:var(--text-muted)}
+    .data-grid .grid-col-refdes input{font-family:monospace;font-size:.61rem}
     /* DC tint covers the identity columns (Type through AC/DC) and stops before the editable
        numeric groups, so it doesn't compete with the disabled-cell fill further right. Explicit
        classes, not nth-child, so column order can change safely. */
@@ -268,12 +270,12 @@
     .data-grid tbody tr.row-dc:hover .grid-col-v,.data-grid tbody tr.row-dc:hover .grid-col-acdc{background:rgba(88,166,255,.32)}
     .data-grid tbody tr.row-dc .grid-col-type{box-shadow:inset 4px 0 0 var(--accent-blue)}
     .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
-    .data-grid .grid-actions button{padding:.1rem .32rem;font-size:.68rem;background:var(--bg-elevated);
+    .data-grid .grid-actions button{padding:.09rem .29rem;font-size:.61rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
     .data-grid .grid-actions button:hover{color:var(--text-primary);background:var(--bg-hover)}
     .data-grid th.reset-hdr{border-left:none}
-    .data-grid td.grid-reset-cell{padding:.18rem .1rem;text-align:center;border-left:none}
-    .data-grid .grid-reset-cell button{padding:.05rem .28rem;font-size:.72rem;background:transparent;
+    .data-grid td.grid-reset-cell{padding:.16rem .09rem;text-align:center;border-left:none}
+    .data-grid .grid-reset-cell button{padding:.04rem .25rem;font-size:.65rem;background:transparent;
       color:var(--text-muted);border:1px solid var(--border);border-radius:4px;line-height:1.3}
     .data-grid .grid-reset-cell button:hover{color:var(--accent-red);border-color:var(--accent-red)}
     .hidden{display:none !important}
@@ -1666,7 +1668,8 @@ function siblingOrderInfoForNode(n){
 // once (the dropdown alone was squeezed to ~12px). Each now gets a column properly sized for
 // its own content.
 function gridTypeCell(n,depth,editable=true){
-  const indent=`style="padding-left:${depth*14}px"`;
+  // 10px/level (was 14px) so deep nesting leaves more of the Type column for the badge+select.
+  const indent=`style="padding-left:${depth*10}px"`;
   if (!editable) return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}</div></td>`;
   const shapes=gridAvailableTypes(n);
   const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(t)}</option>`).join('');
@@ -1794,9 +1797,14 @@ function buildExRemRow(n,depth){
 // the browser shrink the table (and every column proportionally) to fit the container instead,
 // which is what was actually causing the uneven columns even after the colgroup was added.
 function gridColgroup(resettable3){
-  const widths=[240,260,100,100,52,58,56,52, 64,64,64,34, 64,64,64,64,64,34, 64,64,64,64,64];
-  if (resettable3) widths.push(34);
-  widths.push(210);
+  // Type is widened (was 240) and Description narrowed (was 260) so deep tree indentation
+  // (see gridTypeCell) doesn't crowd out the type badge/select at 5th-6th level nesting, where
+  // Description has more room than any real description text needs. All widths are also scaled
+  // by ~0.9 from their pre-rebalance values so the grid reads at a comfortable density at 100%
+  // browser zoom instead of requiring ~90% zoom.
+  const widths=[270,170,80,90,47,52,50,47, 58,58,58,31, 58,58,58,58,58,31, 58,58,58,58,58];
+  if (resettable3) widths.push(31);
+  widths.push(190);
   const total=widths.reduce((a,b)=>a+b,0);
   const html='<colgroup>'+widths.map(w=>`<col style="width:${w}px">`).join('')+'</colgroup>';
   return {html,total};
@@ -1887,6 +1895,33 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
   el.addEventListener('focusout',e=>{
     const t=e.target;
     if (t.matches && t.matches('input[data-full]') && t.value===t.dataset.full) t.value=fmtGridDisplay(parseF(t.dataset.full));
+  });
+  // Advance to the next (or, with Shift, previous) editable cell within the same row on Tab,
+  // instead of leaving Tab to the browser's default order. Computed by position index rather
+  // than by element reference because a value-changing edit triggers gridFieldChanged's
+  // recalc()/renderAll(), which rebuilds the row's DOM (and refocuses the same field) before our
+  // setTimeout callback runs — re-querying the row by data-nid and re-focusing by index afterward
+  // wins that race instead of fighting it. Left unhandled (native Tab) at row boundaries.
+  el.addEventListener('keydown',e=>{
+    if (e.key!=='Tab') return;
+    const t=e.target;
+    if (!t.matches || !t.matches('input[data-field],select[data-field]')) return;
+    const row=t.closest('tr[data-nid]'); if (!row) return;
+    const id=row.dataset.nid;
+    const fields=Array.from(row.querySelectorAll('input[data-field]:not(:disabled),select[data-field]:not(:disabled)'));
+    const idx=fields.indexOf(t);
+    if (idx===-1) return;
+    const nextIdx=idx+(e.shiftKey?-1:1);
+    if (nextIdx<0||nextIdx>=fields.length) return;
+    e.preventDefault();
+    t.blur();
+    setTimeout(()=>{
+      const newRow=document.querySelector(`tr[data-nid="${id}"]`);
+      if (!newRow) return;
+      const newFields=Array.from(newRow.querySelectorAll('input[data-field]:not(:disabled),select[data-field]:not(:disabled)'));
+      const target=newFields[nextIdx];
+      if (target) { target.focus(); if (target.select) target.select(); }
+    },0);
   });
   el.querySelectorAll('button[data-act]').forEach(btn=>{
     btn.addEventListener('click',()=>{
