@@ -918,7 +918,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§26).
+enhancement (§28).
 
 ---
 
@@ -1356,7 +1356,124 @@ after a `setTimeout(0)`, so it runs after any synchronous rerender instead of be
 
 ---
 
-## 27. Future Enhancements
+## 27. Revision 27 — AC Sign Fix, Edit Modal Sections, Tab Reorg, Document Tab Restructure, Grid Polish, Calc-on-Demand, Net Change Override Entry
+
+*Last updated: 2026-07-18*
+
+Largest single wish-list round to date (14 top-level items across calculation logic, the Edit
+Item dialog, the Analysis tab, the Document tab, and both data-entry grids), implemented and
+verified in-browser across 7 phases, each confirmed before moving to the next.
+
+### 27.1 AC sign-preservation fix
+
+`deriveAcFromWVar(w,var_,v)` — the function nearly every AC derivation path funnels through —
+computed `VA = √(W²+VAR²)`, always non-negative, discarding W's sign. A removed AC child
+correctly produced a negative W in Net Change rollups, but VA and A (derived from it) came out
+positive — a real sign-consistency bug, not just a display quirk. Fixed by making VA's sign
+follow W's sign; `pf = W/VA` still resolves correctly since a matching sign pair divides to the
+same positive ratio as before. The Edit Item modal's "Calculate" button (`doEditCalculate`'s
+`calcAcGroup`, the `VAR → W` direction) had the same defect and received the same fix. Verified
+against the exact reported scenario: an AC bus with a removed 200 W / 40 VAR load produces Net
+Change W=-200, VA=-204, A=-1.77 at both the load and its parent, visible correctly in the tree
+badge and Load Analysis Summary — not just in raw state.
+
+### 27.2 Edit Item dialog: status-conditional sections
+
+`efShowSections()` now also hides "Net Change Override" when Status = Removed, and "Existing
+Load" (newly wrapped in its own `#ef-sec-exload` container) when Status = New — in addition to
+the pre-existing hide conditions (has children, conversion pair), which remain unaffected.
+
+### 27.3 Analysis tab position and LH pane column alignment
+
+Analysis moved to the last tab position (after New) — a pure markup reorder; no CSS in the tab
+bar depends on button order.
+
+The "align status badges" / "align load change value" requests turned out not to be a
+per-row vertical-centering problem (flexbox already centered everything correctly) but a
+column-alignment-down-the-page problem: `.node-desc`'s `flex:1` absorbs whatever space isn't
+used by the row's other elements, so any row that omitted an element — Load rows never showed
+a net-change badge; Load/Removed/conversion-IN rows hid "+ Child"; the three status labels
+("existing"/"new"/"removed") have different natural widths — let its description grow into
+the freed space, shifting the status badge and net-change value to a different X position
+depending on that row's particular combination. Fixed with three coordinated, tree-scoped
+changes: the net-change value and "+ Child" button are now always rendered (`visibility:hidden`
+reserving their layout space when not applicable, the same technique already used for leaf
+nodes' toggle button) instead of omitted, and the status badge got a fixed width with centered
+text instead of sizing to its own text length. Verified across 9 rows spanning 5 depth levels,
+all three statuses, and a Load-type row: badge and net-change value land at the exact same X
+position on every row.
+
+### 27.4 Document tab restructuring
+
+"Aircraft & Document Identity" split into **Document Properties** (Doc #, Rev, Prepared by, Rev
+Date, new Revision Description) and **Aircraft Information** (Make, Model, Designation, Serial
+#, Flight Phase, new Interval) — both inside one `<form>` so the existing name-keyed sync/
+persistence wiring needed no changes. "Approved by" removed (it was never wired into the Word
+export template anyway).
+
+Rev Date is now a native date picker, stored internally as ISO (`YYYY-MM-DD`) and formatted to
+**MMM-DD-YYYY** everywhere it is displayed or exported via a new shared `fmtRevDate()` helper —
+the picker's own on-screen display follows the browser's locale, but the Word export's
+`wu-revdate` content control always renders the requested format (verified by JSZip-decoding a
+generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (e.g.
+"Jun-20-2026") to ISO so older saves still populate the picker instead of appearing blank.
+
+New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
+(default "Continuous") — document-tracking fields only; distinct from the full per-item
+multi-interval load analysis still listed under Future Enhancements (§28).
+
+General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
+input); editing, reordering, and persistence all continue to work unchanged.
+
+### 27.5 Grid shared polish (Existing/Removed and New)
+
+- Root row's Type cell now shows "Total Aircraft Load" (matching the Edit modal and reports)
+  instead of the literal internal type string "Root".
+- Del/Dup hidden on conversion-**output** rows — structurally paired with their IN parent, so
+  duplicating/deleting independently doesn't make sense (both already happen via the IN row).
+- Duplicate's confirmation is now a real 3-way choice (Item Only / Entire Branch / Cancel) via
+  a new small reusable `showChoiceDialog()` overlay, replacing the old two-outcome
+  `confirm()` (which could only offer "duplicate the whole branch" or abort entirely).
+- `duplicateBranch()` now appends " (copy)" to every descendant, not just the top node.
+- The DC row's left accent bar moved from the `<td>` onto the inner (already depth-indented)
+  flex div and gained `border-radius`, so it starts at the badge's position and reads as
+  rounded — matching the LH tree pane's treatment — instead of starting at the cell's outer
+  edge with square corners. (The bar renders slightly shorter than the full row height, a minor
+  cosmetic side effect of table cells not reliably honoring percentage heights; judged not
+  worth a riskier fixed-row-height change to close entirely.)
+- Footer message gained a second line: "Use Analysis tab to add TRUs." — an interim stopgap,
+  not a new TRU-creation capability in the grids themselves.
+
+### 27.6 Grid AC groups: Calc-on-demand instead of calc-on-every-edit
+
+AC Existing Load / Load Value groups (both grids) no longer auto-derive the other 4 fields the
+instant one cell is edited — `gridCommitPowerGroup` now stores just the edited key for AC rows,
+leaving the rest of the group untouched, so entering several fields in sequence (A, then VA,
+then pf) no longer has an earlier entry silently overwritten by the derivation that used to
+fire on every blur. DC groups are unaffected (simple A↔W conversion, never reported as fighting
+entry).
+
+A new per-row **Calc** button (before Dup, shown on any AC row with an applicable group) fills
+in whatever can be derived from what's present — reusing the exact same cascading fill logic as
+the Edit modal's own "Calculate" button (`calcAcPowerGroup`, mirroring `calcAcGroup`) — without
+ever overwriting a value already entered. The grid tab's **Save** button now also runs this
+derivation across every AC row before re-baselining the Cancel snapshot, so a later Cancel
+reverts to the calculated values, not the pre-save partial ones.
+
+### 27.7 New grid: direct Net Change override entry
+
+New-status, non-load, childless rows can now enter a Net Change override directly in the New
+grid's Net Change column group — the same `netChangeOverride` field the Edit modal already
+supported, just exposed for grid entry in this specific case. AC keys follow §27.6's pattern
+(raw storage, Calc/Save-driven derivation); DC keys (A and W only) auto-derive as before. "+
+Child" hides once an override becomes active (clearing it via the new reset button — which
+resets to `null`, not a blank object, since `calcNC` treats any non-null override as active even
+when every key inside it is blank — restores "+ Child"). Rows with children, or existing-status
+context rows, are unaffected and keep the original read-only computed display.
+
+---
+
+## 28. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

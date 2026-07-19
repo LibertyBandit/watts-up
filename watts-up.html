@@ -80,6 +80,13 @@
     .node-refdes{font-size:.72rem;color:var(--text-muted);font-family:monospace;flex-shrink:0}
     .node-nc{font-size:.75rem;font-weight:600;min-width:76px;text-align:right;flex-shrink:0}
     .nc-pos{color:var(--accent-orange)}.nc-neg{color:var(--accent-green)}.nc-zero{color:var(--text-muted)}
+    /* Scoped to the tree pane only (not the shared .status-badge used elsewhere): without a
+       fixed width, "existing"/"new"/"removed" render at different intrinsic widths, which
+       shifted the column start of everything after them (net-change value) since .node-desc's
+       flex:1 absorbs whatever width the status badge doesn't use. A fixed width + centered text
+       keeps that boundary constant so both the badge and the net-change value form a real
+       column down the page. */
+    .tree-node-row .status-badge{min-width:60px;text-align:center;flex-shrink:0}
     .node-actions{display:flex;gap:.15rem;flex-shrink:0}
     .btn-node{padding:.12rem .38rem;font-size:.7rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
@@ -93,8 +100,8 @@
     .bg-load{background:#3a1a00;color:#f0883e}
     .status-badge{font-size:.62rem;padding:1px 5px;border-radius:8px;font-weight:700;flex-shrink:0}
     .s-existing{background:#21262d;color:#8b949e;border:1px solid #30363d}
-    .s-new{background:#0c3a1e;color:#3fb950}
-    .s-removed{background:#3a0c0c;color:#f85149}
+    .s-new{background:#0c3a1e;color:#3fb950;border:1px solid transparent}
+    .s-removed{background:#3a0c0c;color:#f85149;border:1px solid transparent}
     button.grid-status-toggle{font-family:inherit;cursor:pointer;transition:filter .1s}
     button.grid-status-toggle:hover{filter:brightness(1.35)}
     .summary-table{width:100%;border-collapse:collapse;font-size:.76rem;white-space:nowrap}
@@ -129,6 +136,13 @@
     #modal-close{background:none;color:var(--text-secondary);font-size:1.15rem;padding:.1rem .38rem;border-radius:4px}
     #modal-close:hover{background:var(--bg-hover);color:var(--text-primary)}
     .modal-body{flex:1;overflow-y:auto;padding:.85rem 1rem;display:flex;flex-direction:column;gap:.6rem}
+    /* Small generic 2-choice dialog (currently used by grid Duplicate) — a separate overlay
+       from #modal-overlay so it never collides with the Edit/Add form modal's own state. */
+    .choice-modal{background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;
+      width:440px;max-width:92vw;display:flex;flex-direction:column;overflow:hidden}
+    .choice-message{font-size:.85rem;color:var(--text-secondary);line-height:1.4}
+    .choice-btns{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.3rem}
+    .choice-btns button{padding:.4rem .8rem;border-radius:6px;font-size:.82rem;cursor:pointer}
     .form-row{display:flex;gap:.6rem;flex-wrap:wrap}
     .form-group{display:flex;flex-direction:column;gap:.22rem;flex:1;min-width:70px}
     .form-group label{font-size:.78rem;color:var(--text-secondary);font-weight:500}
@@ -254,7 +268,7 @@
        Type+Description+Ref Des without cramming them into one narrow flex row). Unrestricted
        horizontal scroll with properly-sized columns is simpler and was the user's own stated
        fallback. Type/Description/Ref Des are now separate columns, not one flex-row cell. */
-    .data-grid .grid-type-cell{display:flex;align-items:center;gap:.3rem;overflow:hidden}
+    .data-grid .grid-type-cell{display:flex;align-items:center;gap:.3rem;overflow:hidden;height:100%}
     .data-grid .grid-col-desc input{width:100%}
     .data-grid .grid-desc-readonly,.data-grid .grid-refdes-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;padding:.14rem .27rem;font-size:.67rem}
     .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.61rem;color:var(--text-muted)}
@@ -268,7 +282,10 @@
     .data-grid tbody tr.row-dc:hover .grid-col-type,.data-grid tbody tr.row-dc:hover .grid-col-desc,
     .data-grid tbody tr.row-dc:hover .grid-col-refdes,.data-grid tbody tr.row-dc:hover .grid-col-status,
     .data-grid tbody tr.row-dc:hover .grid-col-v,.data-grid tbody tr.row-dc:hover .grid-col-acdc{background:rgba(88,166,255,.32)}
-    .data-grid tbody tr.row-dc .grid-col-type{box-shadow:inset 4px 0 0 var(--accent-blue)}
+    /* Lives on the inner (already depth-indented) flex div, not the <td> itself, so the bar
+       starts at the badge's actual position (matching the LH tree pane's indented look) instead
+       of the cell's outer left edge; border-radius gives it the tree's same rounded-row look. */
+    .data-grid tbody tr.row-dc .grid-type-cell{box-shadow:inset 4px 0 0 var(--accent-blue);border-radius:4px}
     .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
     .data-grid .grid-actions button{padding:.09rem .29rem;font-size:.61rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
@@ -297,6 +314,8 @@
     .doc-list-item-row{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
     .doc-list-item input{background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit}
     .doc-list-item input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .doc-list-item textarea{background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit;resize:vertical;min-height:1.9rem}
+    .doc-list-item textarea:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
     .doc-item-num{font-size:.78rem;font-weight:700;color:var(--accent-blue);min-width:22px;flex-shrink:0}
     .doc-item-lbl{font-size:.72rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
     .doc-item-opt{font-size:.72rem;color:var(--text-muted);opacity:.65;white-space:nowrap;flex-shrink:0}
@@ -360,10 +379,10 @@
   </header>
 
   <div id="tab-bar">
-    <button id="tab-analysis" class="tab-btn active">Analysis</button>
     <button id="tab-document" class="tab-btn">Document</button>
     <button id="tab-exrem" class="tab-btn rh-subtab-existing">Existing / Removed</button>
     <button id="tab-new" class="tab-btn rh-subtab-new">New</button>
+    <button id="tab-analysis" class="tab-btn active">Analysis</button>
   </div>
 
   <div id="warning-banner" class="hidden">
@@ -375,21 +394,32 @@
   </div>
 
   <div id="doc-panel" class="hidden">
-    <div>
-      <div class="doc-section-title">Aircraft &amp; Document Identity</div>
-      <form id="doc-identity-form" class="doc-identity-form" autocomplete="off">
-        <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
-        <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
-        <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
-        <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
-        <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
-        <label>Doc #        <input name="documentNumber"       type="text" placeholder="e.g. RPT1234"></label>
-        <label>Rev          <input name="revisionLevel"        type="text" placeholder="e.g. A" style="width:52px"></label>
-        <label>Prepared by  <input name="preparedBy"           type="text" placeholder="Name"></label>
-        <label>Approved by  <input name="approvedBy"           type="text" placeholder="Name"></label>
-        <label>Rev Date     <input name="revisionDate"         type="text" placeholder="e.g. Jun-20-2026"></label>
-      </form>
-    </div>
+    <form id="doc-identity-form" autocomplete="off">
+      <div>
+        <div class="doc-section-title">Document Properties</div>
+        <div class="doc-identity-form">
+          <label>Doc #        <input name="documentNumber"       type="text" placeholder="e.g. RPT1234"></label>
+          <label>Rev          <input name="revisionLevel"        type="text" placeholder="e.g. A" style="width:52px"></label>
+          <label>Prepared by  <input name="preparedBy"           type="text" placeholder="Name"></label>
+          <label>Rev Date     <input name="revisionDate"         type="date"></label>
+        </div>
+        <div class="doc-ta-group" style="margin-top:.5rem">
+          <label>Revision Description</label>
+          <textarea id="doc-revdesc" rows="3" placeholder="Describe what changed in this revision…"></textarea>
+        </div>
+      </div>
+      <div style="margin-top:.9rem">
+        <div class="doc-section-title">Aircraft Information</div>
+        <div class="doc-identity-form">
+          <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
+          <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
+          <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
+          <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
+          <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
+          <label>Interval     <input name="interval"             type="text" placeholder="e.g. Continuous"></label>
+        </div>
+      </div>
+    </form>
     <div>
       <div class="doc-section-title">References</div>
       <div id="doc-ref-list" class="doc-list"></div>
@@ -513,25 +543,27 @@
                 <div class="form-group"><label>Cap (VA)</label><input id="ef-cap-va" type="text" inputmode="decimal" placeholder="optional"></div>
               </div>
             </div>
-            <div class="section-label-row">
-              <div class="section-label">Existing Load</div>
-              <button type="button" class="btn-reset" data-ids="ef-exld-a,ef-exld-w,ef-exld-ac-a,ef-exld-ac-va,ef-exld-ac-w,ef-exld-ac-var,ef-exld-ac-pf">Reset</button>
-            </div>
-            <div id="ef-exld-dc">
-              <div class="form-row">
-                <div class="form-group"><label>Ex. Load (A)</label><input id="ef-exld-a" type="text" inputmode="decimal" value="0"></div>
-                <div class="form-group"><label>Ex. Load (W)</label><input id="ef-exld-w" type="text" inputmode="decimal" value="0"></div>
+            <div id="ef-sec-exload">
+              <div class="section-label-row">
+                <div class="section-label">Existing Load</div>
+                <button type="button" class="btn-reset" data-ids="ef-exld-a,ef-exld-w,ef-exld-ac-a,ef-exld-ac-va,ef-exld-ac-w,ef-exld-ac-var,ef-exld-ac-pf">Reset</button>
               </div>
-            </div>
-            <div id="ef-exld-ac" class="hidden">
-              <div class="form-row">
-                <div class="form-group"><label>Ex. Load (A)</label><input id="ef-exld-ac-a" type="text" inputmode="decimal"></div>
-                <div class="form-group"><label>Ex. Load (VA)</label><input id="ef-exld-ac-va" type="text" inputmode="decimal"></div>
+              <div id="ef-exld-dc">
+                <div class="form-row">
+                  <div class="form-group"><label>Ex. Load (A)</label><input id="ef-exld-a" type="text" inputmode="decimal" value="0"></div>
+                  <div class="form-group"><label>Ex. Load (W)</label><input id="ef-exld-w" type="text" inputmode="decimal" value="0"></div>
+                </div>
               </div>
-              <div class="form-row">
-                <div class="form-group"><label>Ex. Load (W)</label><input id="ef-exld-ac-w" type="text" inputmode="decimal"></div>
-                <div class="form-group"><label>Ex. Load (VAR)</label><input id="ef-exld-ac-var" type="text" inputmode="decimal"></div>
-                <div class="form-group"><label>Ex. Load (pf)</label><input id="ef-exld-ac-pf" type="text" inputmode="decimal"></div>
+              <div id="ef-exld-ac" class="hidden">
+                <div class="form-row">
+                  <div class="form-group"><label>Ex. Load (A)</label><input id="ef-exld-ac-a" type="text" inputmode="decimal"></div>
+                  <div class="form-group"><label>Ex. Load (VA)</label><input id="ef-exld-ac-va" type="text" inputmode="decimal"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Ex. Load (W)</label><input id="ef-exld-ac-w" type="text" inputmode="decimal"></div>
+                  <div class="form-group"><label>Ex. Load (VAR)</label><input id="ef-exld-ac-var" type="text" inputmode="decimal"></div>
+                  <div class="form-group"><label>Ex. Load (pf)</label><input id="ef-exld-ac-pf" type="text" inputmode="decimal"></div>
+                </div>
               </div>
             </div>
             <div id="ef-sec-override">
@@ -737,6 +769,19 @@
     </div>
   </div>
 
+  <div id="choice-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="choice-modal">
+      <div class="modal-header">
+        <h2 id="choice-title">Duplicate Item</h2>
+        <button id="choice-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="choice-message" class="choice-message"></p>
+        <div id="choice-btns" class="choice-btns"></div>
+      </div>
+    </div>
+  </div>
+
 <script>
 'use strict';
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -777,6 +822,24 @@ function fmtN(v) {
   return abs>=10000 ? n.toLocaleString('en-US',{maximumFractionDigits:0})
        : abs>=100   ? n.toLocaleString('en-US',{maximumFractionDigits:1})
        :              n.toFixed(2);
+}
+const REV_DATE_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Rev Date is stored as the native date input's ISO value (YYYY-MM-DD) but always displayed/
+// exported as MMM-DD-YYYY, independent of the picker's own browser/locale-controlled display.
+function fmtRevDate(iso) {
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');
+  if (!m) return iso||'';
+  const mi=+m[2]-1;
+  return `${REV_DATE_MONTHS[mi]||m[2]}-${m[3]}-${m[1]}`;
+}
+// One-time migration for saves predating the date picker, which stored free-text like
+// "Jun-20-2026" — converts to ISO so it still populates the native picker instead of going blank.
+function parseLegacyRevDate(s) {
+  const m=/^([A-Za-z]{3})-(\d{1,2})-(\d{4})$/.exec((s||'').trim());
+  if (!m) return null;
+  const mi=REV_DATE_MONTHS.findIndex(mo=>mo.toLowerCase()===m[1].toLowerCase());
+  if (mi<0) return null;
+  return `${m[3]}-${String(mi+1).padStart(2,'0')}-${String(+m[2]).padStart(2,'0')}`;
 }
 function evalFormula(raw) {
   const s=String(raw??'').trim();
@@ -846,9 +909,13 @@ function mkPow(w=null,var_=null,va=null,a=null,pf=null) { return {w,var:var_,va,
 function parseF(v) { if (v===''||v===null||v===undefined) return null; const n=+v; return isNaN(n)?null:n; }
 function deriveAcFromWVar(w,var_,v) {
   w=w||0; var_=var_||0;
-  const va=Math.sqrt(w*w+var_*var_);
+  // VA's sign follows W's sign (magnitude via the usual right-triangle sqrt) instead of always
+  // coming out non-negative — a negative W (e.g. net change from removed loads) must produce a
+  // negative VA/A, not a sign mismatch between W and its own derived VA.
+  const mag=Math.sqrt(w*w+var_*var_);
+  const va=w<0?-mag:mag;
   const a=(v>0)?va/v:null;
-  const pf=va>0?w/va:(w===0?1:0);
+  const pf=va!==0?w/va:(w===0?1:0);
   return {w,var:var_,va,a,pf};
 }
 function deriveDcFromA(a,v) { a=a||0; return {w:(v>0)?a*v:null,var:null,va:null,a,pf:null}; }
@@ -903,8 +970,8 @@ function makeNode(type,parentId,overrides={}) {
 function freshState() {
   const rid=uid();
   const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115});
-  return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',
-    documentNumber:'',revisionLevel:'',preparedBy:'',approvedBy:'',revisionDate:'',
+  return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',interval:'Continuous',
+    documentNumber:'',revisionLevel:'',preparedBy:'',revisionDate:'',revisionDescription:'Initial Release.',
     introText:'',generalNotes:[],complianceText:'',references:[]},
     nodes:{[rid]:root},rootIds:[rid],lastSaved:null};
 }
@@ -920,12 +987,19 @@ function migrateLegacy(p) {
   if (!m.documentNumber)  m.documentNumber='';
   if (!m.revisionLevel)   m.revisionLevel='';
   if (!m.preparedBy)      m.preparedBy='';
-  if (!m.approvedBy)      m.approvedBy='';
   if (!m.revisionDate)    m.revisionDate='';
+  if (!m.revisionDescription) m.revisionDescription='Initial Release.';
+  if (!m.interval)        m.interval='Continuous';
   if (!m.introText)       m.introText='';
   if (!m.complianceText)  m.complianceText='';
   if (!Array.isArray(m.generalNotes)) m.generalNotes=[];
   if (!Array.isArray(m.references))   m.references=[];
+  // Rev Date became a native date picker (stores ISO YYYY-MM-DD); reformat any pre-existing
+  // free-text "MMM-DD-YYYY" value so it still populates the picker instead of appearing blank.
+  if (m.revisionDate && !/^\d{4}-\d{2}-\d{2}$/.test(m.revisionDate)) {
+    const iso=parseLegacyRevDate(m.revisionDate);
+    if (iso) m.revisionDate=iso;
+  }
   // Backfill childIds for saves predating explicit sibling ordering: derive from
   // parentId (preserving the object's existing key order) for any node missing it.
   const needsChildBackfill=Object.values(p.nodes||{}).some(n=>!Array.isArray(n.childIds));
@@ -1175,13 +1249,18 @@ function badgeHtml(node) {
   if (node.type==='Root') return '';
   return `<span class="${groupClass(node.type)}">${esc(displayType(node))}</span>`;
 }
-function ncHtml(nc,acDc) {
-  if (!nc) return '';
+// `hidden` still renders the span (visibility:hidden, not omitted) so it keeps reserving its
+// column width — omitting it entirely (as Load rows used to) let flex:1 .node-desc grow into
+// the freed space, shifting every trailing row's status badge/net-change value out of column
+// alignment depending on whether that particular row happened to show one.
+function ncHtml(nc,acDc,hidden) {
+  const vis=hidden?' style="visibility:hidden"':'';
+  if (!nc) return `<span class="node-nc"${vis}>&nbsp;</span>`;
   const val=acDc==='ac'?(nc.va||0):(nc.a||0);
   const unit=acDc==='ac'?'VA':'A';
-  if (Math.abs(val)<0.001) return `<span class="node-nc nc-zero">±0 ${unit}</span>`;
+  if (Math.abs(val)<0.001) return `<span class="node-nc nc-zero"${vis}>±0 ${unit}</span>`;
   const sign=val>0?'+':''; const cls=val>0?'nc-pos':'nc-neg';
-  return `<span class="node-nc ${cls}">${sign}${fmtN(val)} ${unit}</span>`;
+  return `<span class="node-nc ${cls}"${vis}>${sign}${fmtN(val)} ${unit}</span>`;
 }
 
 function buildTreeLi(node,nodes) {
@@ -1193,9 +1272,13 @@ function buildTreeLi(node,nodes) {
   const refDesSpan=node.refDes?` <span class="node-refdes">[${esc(node.refDes)}]</span>`:'';
   const descLabel=descText+refDesSpan;
   const descTitle=(node.description||'unnamed')+(node.refDes?' ['+node.refDes+']':'');
-  const ncDisplay=isLoad(node.type)?'':ncHtml(node._netChange,node.acDc);
+  const ncDisplay=ncHtml(node._netChange,node.acDc,isLoad(node.type));
   const isTerminal=isLoad(node.type)||node.status==='removed'||node.convRole==='in';
-  const addBtn=isTerminal?'':`<button class="btn-node btn-add" data-pid="${node.id}">+ Child</button>`;
+  // Rendered (not omitted) even when hidden, same reasoning as ncHtml above: an omitted button
+  // let flex:1 .node-desc grow into the freed space, shifting the status badge/net-change value
+  // out of column alignment for every terminal row (Load/Removed/conversion-IN) versus every
+  // other row.
+  const addBtn=`<button class="btn-node btn-add" data-pid="${node.id}"${isTerminal?' style="visibility:hidden;pointer-events:none"':''}>+ Child</button>`;
   const sibArr=node.parentId?(nodes[node.parentId]?.childIds||[]):(state.rootIds||[]);
   const sameStatusSibs=sibArr.filter(cid=>nodes[cid]?.status===node.status);
   const sibPos=sameStatusSibs.indexOf(node.id);
@@ -1572,6 +1655,9 @@ function sameShapeTypes(type){ for (const g of SAME_SHAPE_GROUPS) if (g.includes
 // meaning without also building/attaching the other half. Everything else is switchable.
 const GRID_SWITCHABLE_TYPES=[...NT.GENERATION,...NT.DISTRIBUTION,...NT.PROTECTION,...NT.LOAD];
 function gridAvailableTypes(n){ return (n.convRole||n.type==='Root') ? [n.type] : GRID_SWITCHABLE_TYPES; }
+// Matches fillTypeSelect's Edit-modal convention (and Print/Word reports' displayType-adjacent
+// handling) so the root row doesn't show the literal internal type string "Root" anywhere.
+function typeOptionLabel(t){ return t==='Root'?'Total Aircraft Load':t; }
 // After a type change, make sure whatever fields the new type needs actually exist (with the
 // same defaults makeNode would have used), without touching/clearing fields the old type left
 // behind — those simply go unused, since rendering already conditions on hasCap/isLoad.
@@ -1632,7 +1718,12 @@ function computeCapacity(acDc,editedKey,aVal,vawVal,v){
 function gridCommitPowerGroup(n,field,editedKey){
   const row=document.querySelector(`tr[data-nid="${n.id}"]`); if (!row) return;
   const v=n.voltage||0;
-  if (n.acDc==='ac') n[field]=computeAcGroupValue(editedKey,{w:gridCellVal(row,field,'w'),var:gridCellVal(row,field,'var'),va:gridCellVal(row,field,'va'),a:gridCellVal(row,field,'a'),pf:gridCellVal(row,field,'pf')},v);
+  // AC groups no longer auto-derive the other 4 keys from a single edit — that fought entering
+  // several fields in sequence, since each blur immediately recomputed the whole group from a
+  // fixed priority order. The edited key is stored as typed and the rest of the group is left
+  // alone until the row's explicit Calc button (or the grid tab's Save) derives the rest.
+  // DC groups are unaffected — a simple A<->W conversion, not reported as fighting entry.
+  if (n.acDc==='ac') { if (!n[field]) n[field]=mkPow(); n[field]={...n[field],[editedKey]:gridCellVal(row,field,editedKey)}; }
   else n[field]=computeDcGroupValue(editedKey,{a:gridCellVal(row,field,'a'),w:gridCellVal(row,field,'w')},v);
 }
 function gridCommitCapacity(n,editedKey){
@@ -1641,11 +1732,57 @@ function gridCommitCapacity(n,editedKey){
   const vawKey=n.acDc==='ac'?'va':'w';
   n.capacity=computeCapacity(n.acDc,editedKey,gridCellVal(row,'capacity','a'),gridCellVal(row,'capacity',vawKey),v);
 }
+// Mirrors the Edit modal's own "Calculate" button (calcAcGroup/doEditCalculate) — cascading
+// setIfEmpty fills so whatever the user already typed is never overwritten — but operates
+// directly on a stored PowerObj group instead of form fields, since the grid's AC groups no
+// longer auto-derive on every keystroke (gridCommitPowerGroup above) and need an explicit
+// trigger (the row's Calc button, or the tab's Save) to fill in the rest.
+function calcAcPowerGroup(p,v){
+  const g={...(p||mkPow())};
+  const setIfEmpty=(k,val)=>{ if (val===null||val===undefined||isNaN(val)) return; if (g[k]===null||g[k]===undefined) g[k]=val; };
+  if (g.a!=null&&v>0) setIfEmpty('va',g.a*v);
+  if (g.va!=null&&v>0) setIfEmpty('a',g.va/v);
+  const va2=g.va;
+  if (va2!=null&&g.pf!=null) setIfEmpty('w',va2*g.pf);
+  const w2=g.w;
+  if (va2!=null&&w2!=null) {
+    setIfEmpty('var',Math.sqrt(Math.max(0,va2*va2-w2*w2)));
+    setIfEmpty('pf',va2!==0?Math.min(1,w2/va2):null);
+  }
+  const var2=g.var;
+  if (va2!=null&&var2!=null) {
+    const wMag=Math.sqrt(Math.max(0,va2*va2-var2*var2));
+    const wFromVar=va2<0?-wMag:wMag;
+    setIfEmpty('w',wFromVar);
+    setIfEmpty('pf',va2!==0?Math.min(1,wFromVar/va2):null);
+  }
+  return g;
+}
+function gridCalcNodeAcGroups(n){
+  if (!n||n.acDc!=='ac') return;
+  const v=n.voltage||0;
+  if (hasCap(n.type)&&n.existingLoad) n.existingLoad=calcAcPowerGroup(n.existingLoad,v);
+  if (isLoad(n.type)&&n.loadValue)    n.loadValue=calcAcPowerGroup(n.loadValue,v);
+  if (n.netChangeOverride)            n.netChangeOverride=calcAcPowerGroup(n.netChangeOverride,v);
+}
+function gridCalcRow(id){
+  const n=state.nodes[id]; if (!n) return;
+  gridCalcNodeAcGroups(n);
+  recalc();persist();renderAll();
+}
+function gridCalcAllAc(){
+  Object.values(state.nodes).forEach(gridCalcNodeAcGroups);
+  recalc();
+}
 function gridResetGroup(id,field,renderFn){
   const n=state.nodes[id]; if (!n) return;
   if (field==='capacity') n.capacity=null;
   else if (field==='existingLoad') n.existingLoad=mkPow();
   else if (field==='loadValue') n.loadValue=mkPow();
+  // null (not mkPow()) — calcNC treats a non-null override object as active even when every
+  // key inside it is blank, so clearing it back to "no override" must actually null it out to
+  // fall through to the normal children-summed calculation (and re-enable "+Child").
+  else if (field==='netChangeOverride') n.netChangeOverride=null;
   recalc();persist();renderAll();
 }
 // Inserts a blank, immediately-editable child row instead of opening the Add Item(s) modal.
@@ -1672,7 +1809,7 @@ function gridTypeCell(n,depth,editable=true){
   const indent=`style="padding-left:${depth*10}px"`;
   if (!editable) return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}</div></td>`;
   const shapes=gridAvailableTypes(n);
-  const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(t)}</option>`).join('');
+  const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(typeOptionLabel(t))}</option>`).join('');
   return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}<select data-field="type" class="grid-type-select"${shapes.length<=1?' disabled':''}>${typeOpts}</select></div></td>`;
 }
 function gridDescInputCell(n,editable=true){
@@ -1723,15 +1860,25 @@ function gridDisplayCells(n,field,applicable,forceDisabled){
 }
 function gridActionsCell(n,readOnly){
   const {canUp,canDown}=siblingOrderInfoForNode(n);
-  const canAddChild=!(isLoad(n.type)||n.status==='removed'||n.convRole==='in');
+  // A New-status item with an active Net Change override is being treated as a fixed value
+  // rather than a sum of children — adding a child wouldn't affect the total anyway (and
+  // would need the override cleared first), so +Child is hidden rather than just warned about.
+  const canAddChild=!(isLoad(n.type)||n.status==='removed'||n.convRole==='in'||(n.status==='new'&&n.netChangeOverride!=null));
+  // A conversion-output row is structurally paired with its IN parent — duplicating or deleting
+  // it independently doesn't make sense (both already happen via the IN row's own Dup/Del).
+  const canDelDup=n.convRole!=='out';
+  // AC groups no longer auto-derive on every edit (gridCommitPowerGroup) — Calc is the explicit
+  // trigger, shown only for AC rows that actually have an editable AC power group.
+  const canCalc=n.acDc==='ac'&&(hasCap(n.type)||isLoad(n.type));
   if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}</div></td>`;
   return `<td><div class="grid-actions">
     <button data-act="up" title="Move up"${canUp?'':' disabled'}>&uarr;</button>
     <button data-act="down" title="Move down"${canDown?'':' disabled'}>&darr;</button>
-    <button data-act="dup" title="Duplicate">Dup</button>
+    ${canCalc?'<button data-act="calc" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>':''}
+    ${canDelDup?'<button data-act="dup" title="Duplicate">Dup</button>':''}
     ${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}
     <button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>
-    <button data-act="del" title="Delete">Del</button>
+    ${canDelDup?'<button data-act="del" title="Delete">Del</button>':''}
   </div></td>`;
 }
 function gridGroupResetCell(field,editable){
@@ -1824,6 +1971,10 @@ function gridHeader(group2Label,group3Label,resettable3=true){
 }
 function buildNewRow(n,depth){
   const isExistingCtx=n.status==='existing';
+  // New-status, non-load, childless items can carry a direct Net Change override instead of
+  // the usual computed (children-summed) value — the same netChangeOverride field the Edit
+  // modal already supports, just exposed for direct grid entry in this specific case.
+  const ncOverridable=!isExistingCtx&&!isLoad(n.type)&&children(n.id,state.nodes).length===0;
   const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
   return `<tr data-nid="${n.id}" class="${rowCls}">
     ${gridTypeCell(n,depth,!isExistingCtx)}${gridDescInputCell(n,!isExistingCtx)}${gridRefDesCell(n,!isExistingCtx)}
@@ -1832,7 +1983,7 @@ function buildNewRow(n,depth){
     ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
     ${gridCapCells(n,isExistingCtx)}${gridGroupResetCell('capacity',hasCap(n.type)&&!isExistingCtx)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!isExistingCtx)}
-    ${gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}
+    ${ncOverridable?gridPowerGroupCells(n,'netChangeOverride',true,false):gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}${gridGroupResetCell('netChangeOverride',ncOverridable&&n.netChangeOverride!=null)}
     ${gridActionsCell(n,isExistingCtx)}
   </tr>`;
 }
@@ -1852,6 +2003,7 @@ function gridFieldChanged(e,renderFn){
   else if (field==='capacity') gridCommitCapacity(n,el.dataset.key);
   else if (field==='existingLoad') gridCommitPowerGroup(n,'existingLoad',el.dataset.key);
   else if (field==='loadValue') gridCommitPowerGroup(n,'loadValue',el.dataset.key);
+  else if (field==='netChangeOverride') gridCommitPowerGroup(n,'netChangeOverride',el.dataset.key);
   recalc();persist();
   const fKey=el.dataset.field, kKey=el.dataset.key;
   renderAll();
@@ -1869,15 +2021,23 @@ function gridDeleteRow(id,renderFn){
   delNode(id);
   renderAll();
 }
-function gridDuplicateRow(id,renderFn){
+async function gridDuplicateRow(id,renderFn){
   const n=state.nodes[id]; if (!n) return;
   const kidCount=children(id,state.nodes).length;
+  let branch=false;
   if (kidCount>0) {
-    if (!confirm(`"${n.description||'This item'}" has ${kidCount} child item(s). Duplicate this item and all its descendants?`)) return;
-    duplicateBranch(id);
-  } else {
-    duplicateNodeById(id);
+    const choice=await showChoiceDialog({
+      title:'Duplicate Item',
+      message:`"${n.description||'This item'}" has ${kidCount} child item(s). Duplicate this item only, or the entire branch (including its ${kidCount} descendant(s))?`,
+      options:[
+        {label:'Item Only',value:'item'},
+        {label:'Entire Branch',value:'branch',primary:true}
+      ]
+    });
+    if (!choice) return;
+    branch=choice==='branch';
   }
+  if (branch) duplicateBranch(id); else duplicateNodeById(id);
   batchCommit();
   renderAll();
 }
@@ -1932,6 +2092,7 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
       else if (act==='edit') openEdit(id);
       else if (act==='del') gridDeleteRow(id,renderFn);
       else if (act==='dup') gridDuplicateRow(id,renderFn);
+      else if (act==='calc') gridCalcRow(id);
       else if (act==='reset-group') gridResetGroup(id,btn.dataset.resetField,renderFn);
       else if (act==='toggle-status') { const n=state.nodes[id]; if (n) { n.status=btn.dataset.toggleTo; recalc();persist();renderAll(); } }
     });
@@ -1943,13 +2104,17 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
     recalc();renderAll();
   });
   if (saveBtn) saveBtn.addEventListener('click',()=>{
+    // Also runs the Calc derivation across every AC row with partial values, so the
+    // re-baselined snapshot (and a later Cancel) reflects the calculated values too.
+    gridCalcAllAc();
     gridSnapshot=JSON.parse(JSON.stringify(state));
     persist();
+    renderAll();
   });
 }
 function gridFooter(gridKey){
   return `<div class="grid-footer">
-    <span class="grid-footer-msg">Edits apply immediately. Cancel reverts everything changed since you opened this tab.</span>
+    <span class="grid-footer-msg">Edits apply immediately. Cancel reverts everything changed since you opened this tab.<br>Use Analysis tab to add TRUs.</span>
     <button data-grid-cancel class="btn-default">Cancel</button>
     <button data-grid-save class="btn-primary">Save</button>
   </div>`;
@@ -1975,8 +2140,10 @@ function renderNewGrid(){
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
   const rows=ids.map(id=>buildNewRow(state.nodes[id],dm[id]||0)).join('');
-  const cg=gridColgroup(false);
-  const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Load','Net Change',false)}<tbody>${rows}</tbody></table>`;
+  // Net Change now has its own reset column too (resettable3=true), since New-status childless
+  // non-load rows can carry a real netChangeOverride the user may want to clear.
+  const cg=gridColgroup(true);
+  const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Load','Net Change',true)}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No items to display.</div>'}</div>${gridFooter('new')}`;
   wireGridEvents(el,renderNewGrid,'new');
 }
@@ -1988,8 +2155,8 @@ function renderWarnings() {
   document.getElementById('banner-title').textContent=`⚠ ${ws.length} Warning${ws.length>1?'s':''}`;
   document.getElementById('banner-items').innerHTML=ws.map(w=>`<span>• ${w.message}</span>`).join('');
 }
-const DOC_IDENTITY_KEYS=['make','model','marketingDesignation','serialNumber','flightPhase',
-  'documentNumber','revisionLevel','preparedBy','approvedBy','revisionDate'];
+const DOC_IDENTITY_KEYS=['make','model','marketingDesignation','serialNumber','flightPhase','interval',
+  'documentNumber','revisionLevel','preparedBy','revisionDate'];
 
 function renderMeta() {
   if (!state) return;
@@ -2049,12 +2216,13 @@ function renderNoteList() {
   notes.forEach((note,i)=>{
     const item=document.createElement('div');item.className='doc-list-item';
     item.innerHTML=`<div class="doc-list-item-row">
-      <input value="${esc(note)}" placeholder="Note text" style="flex:1">
+      <span class="doc-item-num">${i+1}.</span>
+      <textarea rows="2" placeholder="Note text" style="flex:1">${esc(note)}</textarea>
       <div class="doc-list-btns">
         <button class="note-up">↑</button><button class="note-dn">↓</button>
         <button class="note-del" style="color:var(--accent-red)">✕</button>
       </div></div>`;
-    const inp=item.querySelector('input');
+    const inp=item.querySelector('textarea');
     inp.addEventListener('input',()=>{notes[i]=inp.value;persist();});
     item.querySelector('.note-up').addEventListener('click',()=>{if(i===0)return;[notes[i-1],notes[i]]=[notes[i],notes[i-1]];persist();renderNoteList();});
     item.querySelector('.note-dn').addEventListener('click',()=>{if(i>=notes.length-1)return;[notes[i],notes[i+1]]=[notes[i+1],notes[i]];persist();renderNoteList();});
@@ -2069,8 +2237,10 @@ function renderDocPanel() {
   renderNoteList();
   const intro=document.getElementById('doc-intro');
   const comp=document.getElementById('doc-compliance');
+  const revdesc=document.getElementById('doc-revdesc');
   if(state&&intro&&intro.value!==(state.meta.introText||''))intro.value=state.meta.introText||'';
   if(state&&comp&&comp.value!==(state.meta.complianceText||''))comp.value=state.meta.complianceText||'';
+  if(state&&revdesc&&revdesc.value!==(state.meta.revisionDescription||''))revdesc.value=state.meta.revisionDescription||'';
 }
 
 function updateSaveEl() {
@@ -2226,6 +2396,29 @@ function closeModal() {
   afRows=[];afRowCtr=0;afRowData={};
 }
 
+// Small generic N-choice dialog (separate overlay from #modal-overlay, so it can't collide with
+// Edit/Add form state). Resolves to the clicked option's `value`, or null if closed/cancelled.
+function showChoiceDialog({title,message,options}) {
+  return new Promise(resolve=>{
+    const overlay=document.getElementById('choice-overlay');
+    document.getElementById('choice-title').textContent=title;
+    document.getElementById('choice-message').textContent=message;
+    const btnWrap=document.getElementById('choice-btns');
+    btnWrap.innerHTML='';
+    let settled=false;
+    function finish(val){ if (settled) return; settled=true; overlay.classList.add('hidden'); resolve(val); }
+    options.forEach(opt=>{
+      const b=document.createElement('button');
+      b.className=opt.primary?'btn-primary':'btn-default';
+      b.textContent=opt.label;
+      b.addEventListener('click',()=>finish(opt.value));
+      btnWrap.appendChild(b);
+    });
+    document.getElementById('choice-close').onclick=()=>finish(null);
+    overlay.classList.remove('hidden');
+  });
+}
+
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
 function duplicateNodeById(id) {
   const n=state.nodes[id];if (!n) return null;
@@ -2261,7 +2454,7 @@ function duplicateBranch(rootId) {
     copy.id=idMap[id];
     copy.parentId=id===rootId?originalParentId:idMap[orig.parentId];
     copy.childIds=(orig.childIds||[]).filter(cid=>idMap[cid]).map(cid=>idMap[cid]);
-    if (id===rootId) copy.description=(copy.description||'')+' (copy)';
+    copy.description=(copy.description||'')+' (copy)';
     state.nodes[copy.id]=copy;
   });
   attachChild(idMap[rootId],originalParentId);
@@ -2330,7 +2523,8 @@ function efShowSections(type,convRole,status,hasChildren,acDc) {
   document.getElementById('ef-cap-ac'       ).classList.toggle('hidden', dc);
   document.getElementById('ef-exld-dc'      ).classList.toggle('hidden',!dc);
   document.getElementById('ef-exld-ac'      ).classList.toggle('hidden', dc);
-  document.getElementById('ef-sec-override' ).classList.toggle('hidden',hasChildren||isConvPair);
+  document.getElementById('ef-sec-exload'   ).classList.toggle('hidden',status==='new');
+  document.getElementById('ef-sec-override' ).classList.toggle('hidden',hasChildren||isConvPair||status==='removed');
   document.getElementById('ef-override-dc'  ).classList.toggle('hidden',!dc);
   document.getElementById('ef-override-ac'  ).classList.toggle('hidden', dc);
   document.getElementById('ef-load-dc'      ).classList.toggle('hidden',!dc);
@@ -2373,14 +2567,16 @@ function doEditCalculate() {
     const w2=getV(p('w'))||w;
     if (va2!==null&&w2!==null) {
       setIfEmpty(p('var'),Math.sqrt(Math.max(0,va2*va2-w2*w2)));
-      setIfEmpty(p('pf'),va2>0?Math.min(1,w2/va2):null);
+      setIfEmpty(p('pf'),va2!==0?Math.min(1,w2/va2):null);
     }
-    // VAR → W, pf
+    // VAR → W, pf — W's sign follows VA's sign (a negative VA must derive a negative W, not
+    // the always-non-negative sqrt result on its own).
     const var2=getV(p('var'))||var_;
     if (va2!==null&&var2!==null) {
-      const wFromVar=Math.sqrt(Math.max(0,va2*va2-var2*var2));
+      const wMag=Math.sqrt(Math.max(0,va2*va2-var2*var2));
+      const wFromVar=va2<0?-wMag:wMag;
       setIfEmpty(p('w'),wFromVar);
-      setIfEmpty(p('pf'),va2>0?Math.min(1,wFromVar/va2):null);
+      setIfEmpty(p('pf'),va2!==0?Math.min(1,wFromVar/va2):null);
     }
   }
 
@@ -3659,7 +3855,7 @@ async function generateDocx(){
    ['wu-preparedby',m.preparedBy]
   ].forEach(([tag,val])=>{docXml=fillSdtText(docXml,tag,val);});
   // wu-revdate has multiple runs — use block replacement
-  const revDatePara=`<w:p><w:pPr><w:widowControl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/></w:pBdr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${xe(m.revisionDate||'')}</w:t></w:r></w:p>`;
+  const revDatePara=`<w:p><w:pPr><w:widowControl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/></w:pBdr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${xe(fmtRevDate(m.revisionDate))}</w:t></w:r></w:p>`;
   docXml=fillSdtBlock(docXml,'wu-revdate',revDatePara);
   docXml=fillSdtBlock(docXml,'wu-intro',buildBodyTextParas(m.introText));
   docXml=fillSdtBlock(docXml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes));
@@ -3818,12 +4014,15 @@ function initEvents() {
   });
 
   // Section text textareas
-  let introT,compT;
+  let introT,compT,revdescT;
   document.getElementById('doc-intro').addEventListener('input',e=>{
     clearTimeout(introT);introT=setTimeout(()=>{if(state){state.meta.introText=e.target.value;persist();}},350);
   });
   document.getElementById('doc-compliance').addEventListener('input',e=>{
     clearTimeout(compT);compT=setTimeout(()=>{if(state){state.meta.complianceText=e.target.value;persist();}},350);
+  });
+  document.getElementById('doc-revdesc').addEventListener('input',e=>{
+    clearTimeout(revdescT);revdescT=setTimeout(()=>{if(state){state.meta.revisionDescription=e.target.value;persist();}},350);
   });
 
   // Add Reference
