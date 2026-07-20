@@ -184,17 +184,39 @@ Formulas: A = W / V; W = V × A
 - **Reset button**: Clears all fields in this section
 
 ### 7.7 AC field derivation formulas
-Used by the Calculate button (§7.12). Applies to all AC field groups (Existing Load, Load).
-Requires VA to be set for W/VAR/pf derivations; requires V > 0 for A/VA derivations.
-No-op if prerequisite values are missing.
 
-| Field entered | Fields derived | Formulas |
+*Revised in the Revision 27 Calculate & Save modification (2026-07-19).* Implemented once, in
+`calcAcPowerGroup()`, and shared by every AC entry point in the app — the Edit Item dialog's
+Save button, its Calculate button, the Add Item(s) modal's Save, and the grid's Calc and Save
+buttons all apply these exact rules, instead of Save using a separate, more limited function
+that could drift out of sync with Calculate (as it had before this revision). Never overwrites
+a field the user already entered — only blank fields are filled in.
+
+**Single field entered** (unity power factor assumed):
+
+| Field(s) entered | Fields derived | Comments |
 |---|---|---|
-| **A** | VA, W, VAR | VA = V×A; W = VA×pf; VAR = √(VA²−W²) |
-| **VA** | A, W, VAR | A = VA/V; W = VA×pf; VAR = √(VA²−W²) |
-| **W** | VAR, pf | VAR = √(VA²−W²); pf = W/VA |
-| **VAR** | W, pf | W = √(VA²−VAR²); pf = W/VA |
-| **pf** | W, VAR | W = VA×pf; VAR = √(VA²−W²) |
+| A | VA, W | VAR = 0; pf = 1 |
+| VA | A, W | VAR = 0; pf = 1 |
+| W | A, VA | VAR = 0; pf = 1 |
+
+**Two fields entered:**
+
+| Field(s) entered | Fields derived | Comments |
+|---|---|---|
+| A, W | VA, VAR, pf | VA is derived from A first (VA = V×A); VAR and pf are then calculated from that derived VA and the given W |
+| VA, W | A, VAR, pf | |
+| A, VAR | VA, W, pf | |
+| VA, VAR | A, W, pf | |
+| W, VAR | A, VA, pf | VA = √(W²+VAR²), sign following W's sign |
+| W, pf | A, VA, VAR | VA is derived from W and pf first (VA = W/pf); A and VAR are then calculated from that derived VA |
+
+**Combinations not listed above** (A+VA, A+pf, VA+pf, VAR+pf alone) fall through to the same
+general derivation logic rather than a special-cased rule: A+pf and VA+pf resolve completely
+(both give a real answer), A+VA leaves W/VAR/pf blank (redundant inputs, no new information),
+and VAR+pf alone stays entirely a no-op — there is no anchor value (A, VA, or W) to establish a
+magnitude from, so nothing can be derived. If nothing at all is entered, the historical default
+(VAR = 0, pf = 1, all magnitudes zero) still applies.
 
 ### 7.8 Auto-clear on first entry (Revision 9)
 When the user types into any field in a section (Capacity, Existing Load, Load, Net Change Override)
@@ -225,9 +247,11 @@ Input/output capacity and existing load auto-derive via efficiency and convPf; s
 All numeric fields accept Excel-style expressions starting with `=` (e.g., `=28*2` → `56`).
 
 ### 7.12 Calculate button
-Fills blank fields from entered values using power formulas. Applies on button press; also applies
-automatically on save for any remaining blank fields.
-- **AC sections**: derives per the field table in §7.7
+Fills blank fields from entered values using power formulas. Applies on button press; also
+applies automatically on Save (the Edit Item dialog's Save, the Add Item(s) modal's Save, and
+the grid's own Save button all run the identical derivation, not just a "remaining blanks"
+pass — see §7.7).
+- **AC sections**: derives per the field table in §7.7 (`calcAcPowerGroup()`, shared everywhere)
 - **DC sections**: derives missing A or W using A = W/V or W = V×A
 - **Conversion items**: derives input/output capacity and existing load via efficiency and convPf
 
@@ -918,7 +942,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§28).
+enhancement (§29).
 
 ---
 
@@ -1420,7 +1444,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§28).
+multi-interval load analysis still listed under Future Enhancements (§29).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1473,7 +1497,39 @@ context rows, are unaffected and keep the original read-only computed display.
 
 ---
 
-## 28. Future Enhancements
+## 28. Revision 27 Follow-Up — Calculate & Save Unification
+
+*Last updated: 2026-07-19*
+
+Follow-up request after Revision 27 landed: revise the AC field-derivation rules (§7.7) and,
+critically, make the Edit Item dialog's **Save** button, its **Calculate** button, the **Add
+Item(s)** modal's Save, and the grid's **Calc**/**Save** buttons all apply the identical rules —
+previously Save (in both the Edit and Add modals) used a separate, simpler function (`autoAc()`)
+that had drifted out of sync with Calculate's own cascading logic, even though §7.12 already
+documented that "Calculate... applies automatically on save."
+
+Tracing the requested table against the existing cascade found it was **already correct** for
+six of the nine specified rows (all three single-field cases, and A+W / VA+W / A+VAR / VA+VAR)
+— the real defect was that `autoAc()`, not the cascade, was missing an A+W case entirely (it
+silently discarded A whenever W was also present). Two genuine gaps existed in the cascade
+itself, both explicitly flagged in the request as "(change from current function)":
+- **W+VAR** with neither A nor VA given: no path derived VA from these two at all.
+- **W+pf** with neither A nor VA given: no path derived VA = W/pf.
+
+Fixed by extending the shared `calcAcPowerGroup()` (introduced in Revision 27, §27.6) with an
+explicit VA-establishment priority order — A directly; else W+VAR (Pythagorean); else W+pf
+(division); else W alone (unity pf assumed) — and retiring `autoAc()` entirely in favor of this
+one function, now called from all five entry points. See §7.7 for the full revised table.
+
+Verified with 14 cases run directly against the function (all 9 specified rows, the 4 unlisted
+combinations, and the fully-blank case) — every result matched hand-derived expectations exactly
+— then confirmed live through each of the five real UI paths (Edit Calculate, Edit Save without
+Calculate, Add Item(s) Save, grid Calc, grid Save), each producing identical, correct results for
+the same inputs.
+
+---
+
+## 29. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

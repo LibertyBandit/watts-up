@@ -937,17 +937,6 @@ function fmtP(p,key) {
   return fmtN(p[key]);
 }
 function fmtPField(v) { if (v===null||v===undefined) return ''; return String(+(+v).toFixed(6)); }
-function autoAc(w,var_,va,a,pf,v) {
-  w=parseF(w);var_=parseF(var_);va=parseF(va);a=parseF(a);pf=parseF(pf);
-  const has=x=>x!==null;
-  if (has(w)&&has(var_)) return deriveAcFromWVar(w,var_,v);
-  if (has(va)&&has(w))   { const vr=Math.sqrt(Math.max(0,va*va-w*w)); return deriveAcFromWVar(w,vr,v); }
-  if (has(va)&&has(pf))  { const w2=va*pf; return deriveAcFromWVar(w2,Math.sqrt(Math.max(0,va*va-w2*w2)),v); }
-  if (has(w))  return deriveAcFromWVar(w,0,v);
-  if (has(va)) return deriveAcFromWVar(va,0,v);
-  if (has(a)&&v>0) return deriveAcFromWVar(a*v,0,v);
-  return mkPow(0,0,0,0,1);
-}
 function autoDc(a,w,v) {
   a=parseF(a);w=parseF(w);
   if (a!==null) return deriveDcFromA(a,v);
@@ -1732,23 +1721,55 @@ function gridCommitCapacity(n,editedKey){
   const vawKey=n.acDc==='ac'?'va':'w';
   n.capacity=computeCapacity(n.acDc,editedKey,gridCellVal(row,'capacity','a'),gridCellVal(row,'capacity',vawKey),v);
 }
-// Mirrors the Edit modal's own "Calculate" button (calcAcGroup/doEditCalculate) — cascading
-// setIfEmpty fills so whatever the user already typed is never overwritten — but operates
-// directly on a stored PowerObj group instead of form fields, since the grid's AC groups no
-// longer auto-derive on every keystroke (gridCommitPowerGroup above) and need an explicit
-// trigger (the row's Calc button, or the tab's Save) to fill in the rest.
+// The single canonical AC field-derivation function (Revision 27 Calculate & Save
+// modification) — used by the Edit Item dialog's Save button, its Calculate button, the Add
+// Item(s) modal's Save, and the grid's Calc/Save buttons alike, so all four apply identical
+// rules instead of drifting apart (as Save's old, more limited autoAc() had from Calculate's
+// own cascade). setIfEmpty never overwrites a value the user actually entered — only blanks
+// get filled in. Reference: "Watts Up Revision 27 (+) Calculate & Save modification" table.
 function calcAcPowerGroup(p,v){
-  const g={...(p||mkPow())};
+  const src=p||mkPow();
+  const g={...src};
+  const has=x=>x!==null&&x!==undefined&&!isNaN(x);
   const setIfEmpty=(k,val)=>{ if (val===null||val===undefined||isNaN(val)) return; if (g[k]===null||g[k]===undefined) g[k]=val; };
-  if (g.a!=null&&v>0) setIfEmpty('va',g.a*v);
+  const origA=has(src.a),origVA=has(src.va),origW=has(src.w),origVAR=has(src.var),origPF=has(src.pf);
+
+  // Nothing at all entered — fall back to the documented "no info" default (VAR=0, pf=1, all
+  // magnitudes zero) rather than leaving every field blank.
+  if (!origA&&!origVA&&!origW&&!origVAR&&!origPF) return mkPow(0,0,0,0,1);
+
+  // Establish VA (the anchor magnitude used for everything else), in priority order:
+  // A directly; else W+VAR (Pythagorean); else W+pf (VA=W/pf); else W alone.
+  if (origA&&v>0) setIfEmpty('va',g.a*v);
+  if (g.va==null&&origW&&origVAR) {
+    const mag=Math.sqrt(g.w*g.w+g.var*g.var);
+    setIfEmpty('va',g.w<0?-mag:mag);
+  } else if (g.va==null&&origW&&origPF&&g.pf!==0) {
+    setIfEmpty('va',g.w/g.pf);
+  } else if (g.va==null&&origW) {
+    setIfEmpty('va',g.w);
+  }
   if (g.va!=null&&v>0) setIfEmpty('a',g.va/v);
   const va2=g.va;
+
+  // Exactly one of A/VA/W was originally given, with neither VAR nor pf — the only anchor we
+  // have implies unity power factor (VAR=0, pf=1, W=VA).
+  const anchorCount=[origA,origVA,origW].filter(Boolean).length;
+  if (va2!=null&&anchorCount<=1&&!origVAR&&!origPF) {
+    setIfEmpty('w',va2);
+    setIfEmpty('var',0);
+    setIfEmpty('pf',1);
+  }
+
+  // pf -> W (pf was actually given, W wasn't derived from it above)
   if (va2!=null&&g.pf!=null) setIfEmpty('w',va2*g.pf);
   const w2=g.w;
+  // W -> VAR, pf (both VA and W now known)
   if (va2!=null&&w2!=null) {
     setIfEmpty('var',Math.sqrt(Math.max(0,va2*va2-w2*w2)));
     setIfEmpty('pf',va2!==0?Math.min(1,w2/va2):null);
   }
+  // VAR -> W, pf (VA and VAR known, W still blank)
   const var2=g.var;
   if (va2!=null&&var2!=null) {
     const wMag=Math.sqrt(Math.max(0,va2*va2-var2*var2));
@@ -2552,32 +2573,18 @@ function doEditCalculate() {
   const getV=id=>{const el=g(id);return el?parseF(el.value):null;};
   const setIfEmpty=(id,val)=>{if(val===null||val===undefined)return;const el=g(id);if(el&&el.value.trim()==='')el.value=fmtPField(val)??'';};
 
+  // Delegates to the single canonical AC derivation function (calcAcPowerGroup, shared with
+  // the Edit modal's Save, the Add Item(s) modal's Save, and the grid's Calc/Save buttons) —
+  // reads the 5 fields, derives via the Revision 27 Calculate & Save modification rules, then
+  // writes back only whatever was blank (setIfEmpty), never overwriting an entered value.
   function calcAcGroup(prefix) {
     const p=k=>prefix+k;
-    const a=getV(p('a')),va=getV(p('va')),w=getV(p('w')),var_=getV(p('var')),pf=getV(p('pf'));
-    // A → VA
-    if (a!==null&&v>0) setIfEmpty(p('va'),a*v);
-    // VA → A
-    if (va!==null&&v>0) setIfEmpty(p('a'),va/v);
-    // read va again after possible fill
-    const va2=getV(p('va'))||va;
-    // pf → W
-    if (va2!==null&&pf!==null) setIfEmpty(p('w'),va2*pf);
-    // W → VAR, pf
-    const w2=getV(p('w'))||w;
-    if (va2!==null&&w2!==null) {
-      setIfEmpty(p('var'),Math.sqrt(Math.max(0,va2*va2-w2*w2)));
-      setIfEmpty(p('pf'),va2!==0?Math.min(1,w2/va2):null);
-    }
-    // VAR → W, pf — W's sign follows VA's sign (a negative VA must derive a negative W, not
-    // the always-non-negative sqrt result on its own).
-    const var2=getV(p('var'))||var_;
-    if (va2!==null&&var2!==null) {
-      const wMag=Math.sqrt(Math.max(0,va2*va2-var2*var2));
-      const wFromVar=va2<0?-wMag:wMag;
-      setIfEmpty(p('w'),wFromVar);
-      setIfEmpty(p('pf'),va2!==0?Math.min(1,wFromVar/va2):null);
-    }
+    const result=calcAcPowerGroup({a:getV(p('a')),va:getV(p('va')),w:getV(p('w')),var:getV(p('var')),pf:getV(p('pf'))},v);
+    setIfEmpty(p('a'),result.a);
+    setIfEmpty(p('va'),result.va);
+    setIfEmpty(p('w'),result.w);
+    setIfEmpty(p('var'),result.var);
+    setIfEmpty(p('pf'),result.pf);
   }
 
   function calcDcGroup(aId,wId) {
@@ -2864,7 +2871,7 @@ function doEditSave() {
     if (acDc==='ac') {
       const ovW=pF('ef-ov-ac-w');const ovVAR=pF('ef-ov-ac-var');
       data.netChangeOverride=ovW!==null?{w:ovW,var:ovVAR??0}:null;
-      data.existingLoad=autoAc(pF('ef-exld-ac-w'),pF('ef-exld-ac-var'),pF('ef-exld-ac-va'),pF('ef-exld-ac-a'),pF('ef-exld-ac-pf'),v);
+      data.existingLoad=calcAcPowerGroup({a:pF('ef-exld-ac-a'),va:pF('ef-exld-ac-va'),w:pF('ef-exld-ac-w'),var:pF('ef-exld-ac-var'),pf:pF('ef-exld-ac-pf')},v);
     } else {
       const ovA=pF('ef-ov-a'),ovW=pF('ef-ov-w');
       if (ovA!==null||ovW!==null) {
@@ -2880,7 +2887,7 @@ function doEditSave() {
   if (isConv(type)&&!n.convRole) data.efficiency=+document.getElementById('ef-eff').value;
   if (isLoad(type)) {
     if (acDc==='ac') {
-      data.loadValue=autoAc(pF('ef-load-ac-w'),pF('ef-load-ac-var'),pF('ef-load-ac-va'),pF('ef-load-ac-a'),pF('ef-load-ac-pf'),v);
+      data.loadValue=calcAcPowerGroup({a:pF('ef-load-ac-a'),va:pF('ef-load-ac-va'),w:pF('ef-load-ac-w'),var:pF('ef-load-ac-var'),pf:pF('ef-load-ac-pf')},v);
     } else {
       data.loadValue=autoDc(pF('ef-load-a'),pF('ef-load-w'),v);
     }
@@ -3102,10 +3109,7 @@ function doAddSave() {
       };
       const mkL=(val,acdcType,volt,pf=1.0)=>{
         val=val||0;
-        if (acdcType==='ac') {
-          const w=val*pf,var_=Math.sqrt(Math.max(0,val*val-w*w));
-          return autoAc(w,var_,val,null,pf,volt);
-        }
+        if (acdcType==='ac') return calcAcPowerGroup({va:val,pf},volt);
         return deriveDcFromA(volt>0?val/volt:0,volt);
       };
       const inData={type,status,convRole:'in',description:desc+' (IN)',refDes,voltage,acDc:inAcDc,
@@ -3116,7 +3120,7 @@ function doAddSave() {
         capacity:mkC(outCapV,outAcDc,outV2),existingLoad:mkL(outLdV,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null});
     } else if (isLoad(type)) {
       let lv;
-      if (acDc==='ac') lv=autoAc(getN('load_w'),getN('load_var'),getN('load_va'),getN('load_a'),getN('load_pf'),v);
+      if (acDc==='ac') lv=calcAcPowerGroup({a:getN('load_a'),va:getN('load_va'),w:getN('load_w'),var:getN('load_var'),pf:getN('load_pf')},v);
       else lv=autoDc(getN('load_a'),getN('load_w'),v);
       addNode(pid,{type,status,description:desc,refDes,voltage,acDc,loadValue:lv});
     } else {
@@ -3124,7 +3128,7 @@ function doAddSave() {
       if (acDc==='ac') {const cva=getN('cap_va'),ca=getN('cap_a');cap=cva!==null?{w:null,var:null,va:cva,a:v>0?cva/v:ca,pf:null}:(ca!==null?{w:null,var:null,va:v>0?ca*v:null,a:ca,pf:null}:null);}
       else {const cw=getN('cap_w'),ca=getN('cap_a');cap=cw!==null?{w:cw,var:null,va:null,a:v>0?cw/v:ca,pf:null}:(ca!==null?deriveDcFromA(ca,v):null);}
       let exLd;
-      if (acDc==='ac') exLd=autoAc(getN('ex_load_w'),getN('ex_load_var'),getN('ex_load_va'),null,null,v);
+      if (acDc==='ac') exLd=calcAcPowerGroup({a:null,va:getN('ex_load_va'),w:getN('ex_load_w'),var:getN('ex_load_var'),pf:null},v);
       else exLd=autoDc(getN('ex_load_a'),getN('ex_load_w'),v);
       let ncOv=null;
       if (acDc==='ac') {const lva=getN('load_va'),lw=getN('load_w'),lvar=getN('load_var');if (lw!==null) ncOv={w:lw}; else if (lva!==null) ncOv={w:lva};}
