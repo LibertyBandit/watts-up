@@ -1074,11 +1074,14 @@ function warnNode(node) {
     const nlV=node.acDc==='ac'?nl?.va:nl?.w;
     if (nlV!==null&&nlV!==undefined&&nlV<0)
       w.push({code:'W2',message:`Negative new load — "${esc(node.description)}".`});
-    if (node.capacity) {
-      const capV=node.acDc==='ac'?node.capacity?.va:node.capacity?.w;
-      if (capV!==null&&capV!==undefined&&nlV!==null&&nlV!==undefined&&nlV>capV)
-        w.push({code:'W3',message:`Overloaded: new load exceeds capacity — "${esc(node.description)}".`});
-    }
+    // A blank/never-entered capacity is treated as zero capacity for this comparison — a
+    // positive new load against no capacity at all is exactly as overloaded as one against an
+    // explicit 0, and previously only the explicit-0 case warned (the null-capacity case was
+    // skipped by an outer `if(node.capacity)` guard, silently missing the more common case).
+    const capVRaw=node.acDc==='ac'?node.capacity?.va:node.capacity?.w;
+    const capV=(capVRaw===null||capVRaw===undefined)?0:capVRaw;
+    if (nlV!==null&&nlV!==undefined&&nlV>capV)
+      w.push({code:'W3',message:`Overloaded: new load exceeds capacity — "${esc(node.description)}".`});
   }
   return w;
 }
@@ -1778,6 +1781,56 @@ function calcAcPowerGroup(p,v){
     setIfEmpty('pf',va2!==0?Math.min(1,wFromVar/va2):null);
   }
   return g;
+}
+
+// ── CONVERSION PAIR ROW DERIVATION (Capacity / Existing Load, IN+OUT) ────────────────────────
+// Real power (Watts) represented by one side's A/VA(W) entry — the common currency used to
+// cross-derive the other side via efficiency (§3.3: input = output / efficiency; output =
+// input × efficiency). An AC side uses the conversion's shared convPf to convert between
+// apparent (VA) and real (W) power; a DC side has no such distinction (W = V×A directly).
+function convSideRealPower(aVal,vawVal,acdcType,volt,pf){
+  const vaw=vawVal!=null?vawVal:(aVal!=null&&volt>0?aVal*volt:null);
+  if (vaw==null) return null;
+  return acdcType==='ac'?vaw*pf:vaw;
+}
+// Expands a real-power (Watts) figure into a side's own {a, vaw} pair.
+function convSideFromRealPower(power,acdcType,volt,pf){
+  if (power==null) return {a:null,vaw:null};
+  const vaw=acdcType==='ac'?(pf>0?power/pf:null):power;
+  const a=(vaw!=null&&volt>0)?vaw/volt:null;
+  return {a,vaw};
+}
+// Fills in whatever's missing WITHIN one side alone (A from VA(W) or vice versa) — matches the
+// existing single-side fallback mkCap/mkLd already used before this row had cross-derivation.
+function convSideFillOwn(aVal,vawVal,volt){
+  const vaw=vawVal!=null?vawVal:(aVal!=null&&volt>0?aVal*volt:null);
+  const a=aVal!=null?aVal:(vaw!=null&&volt>0?vaw/volt:null);
+  return {a,vaw};
+}
+// Cross-derives one conversion-pair row (Capacity or Existing Load): if the user entered
+// values for only one side (IN or OUT) and left the other side entirely blank, the blank side
+// is derived via efficiency (and convPf, for whichever side is AC) instead of staying blank —
+// e.g. entering only OUT Cap(A) fills OUT Cap(W), then derives IN Cap(A) and IN Cap(W) from
+// it. If the user entered values on both sides separately, each side is calculated
+// independently (unchanged) since there's no blank side to derive.
+function calcConvPairRow(inA,inVAW,outA,outVAW,inAcDc,outAcDc,inV,outV,efficiency,convPf){
+  const inGiven=inA!=null||inVAW!=null, outGiven=outA!=null||outVAW!=null;
+  if (inGiven&&outGiven) {
+    return {in:convSideFillOwn(inA,inVAW,inV), out:convSideFillOwn(outA,outVAW,outV)};
+  }
+  if (outGiven) {
+    const out=convSideFillOwn(outA,outVAW,outV);
+    const outPower=convSideRealPower(out.a,out.vaw,outAcDc,outV,convPf);
+    const inPower=(outPower!=null&&efficiency>0)?outPower/efficiency:null;
+    return {in:convSideFromRealPower(inPower,inAcDc,inV,convPf), out};
+  }
+  if (inGiven) {
+    const inSide=convSideFillOwn(inA,inVAW,inV);
+    const inPower=convSideRealPower(inSide.a,inSide.vaw,inAcDc,inV,convPf);
+    const outPower=inPower!=null?inPower*efficiency:null;
+    return {in:inSide, out:convSideFromRealPower(outPower,outAcDc,outV,convPf)};
+  }
+  return {in:{a:null,vaw:null}, out:{a:null,vaw:null}};
 }
 function gridCalcNodeAcGroups(n){
   if (!n||n.acDc!=='ac') return;
@@ -2593,7 +2646,27 @@ function doEditCalculate() {
     if (w!==null&&v>0) setIfEmpty(aId,w/v);
   }
 
-  if (acDc==='ac') {
+  const n=mNode?state.nodes[mNode]:null;
+  if (n&&n.convRole) {
+    // Conversion pair (Capacity, Existing Load): same cross-derivation calcConvPairRow uses
+    // for Save, applied here too so Calculate and Save behave identically (Revision 27
+    // Calculate & Save modification's own precedent) — previously this was a complete no-op.
+    const paired=findPairedNode(n);
+    const inAcDc=CONV_IN_ACDC[n.type]||'ac';
+    const outAcDc=CONV_OUT_ACDC[n.type]||'dc';
+    const inV=n.convRole==='in'?v:(paired?.voltage||v);
+    const outV=n.convRole==='out'?v:(paired?.voltage||v);
+    const eff=getV('ef-conv-pair-eff')||0.85;
+    const cpf=getV('ef-convpf')||1.0;
+
+    const capRow=calcConvPairRow(getV('ef-in-cap-a'),getV('ef-in-cap-vaw'),getV('ef-out-cap-a'),getV('ef-out-cap-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
+    setIfEmpty('ef-in-cap-a',capRow.in.a);setIfEmpty('ef-in-cap-vaw',capRow.in.vaw);
+    setIfEmpty('ef-out-cap-a',capRow.out.a);setIfEmpty('ef-out-cap-vaw',capRow.out.vaw);
+
+    const ldRow=calcConvPairRow(getV('ef-in-ld-a'),getV('ef-in-ld-vaw'),getV('ef-out-ld-a'),getV('ef-out-ld-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
+    setIfEmpty('ef-in-ld-a',ldRow.in.a);setIfEmpty('ef-in-ld-vaw',ldRow.in.vaw);
+    setIfEmpty('ef-out-ld-a',ldRow.out.a);setIfEmpty('ef-out-ld-vaw',ldRow.out.vaw);
+  } else if (acDc==='ac') {
     // AC cap: A ↔ VA
     const ca=getV('ef-cap-a2'),cva=getV('ef-cap-va');
     if (ca!==null&&v>0) setIfEmpty('ef-cap-va',ca*v);
@@ -2734,7 +2807,8 @@ function openEdit(nodeId) {
     document.getElementById('ef-out-ld-vaw').value=fmtPField(outLdVAW??0);
     const effEl=document.getElementById('ef-conv-pair-eff');
     effEl.value=eff;effEl.disabled=n.convRole==='out';
-    document.getElementById('ef-convpf').value=cpf;
+    const cpfEl=document.getElementById('ef-convpf');
+    cpfEl.value=cpf;cpfEl.disabled=n.convRole==='out';
     const showCpf=['TRU','Inverter','Frequency Converter'].includes(n.type);
     document.getElementById('ef-convpf-group').classList.toggle('hidden',!showCpf);
     document.getElementById('ef-conv-pair-hint').textContent=n.convRole==='out'?'Efficiency and Conv. PF are set on the IN node.':'';
@@ -2821,43 +2895,43 @@ function doEditSave() {
     const outAcDc=CONV_OUT_ACDC[n.type]||'dc';
     const inCapA=pF('ef-in-cap-a');const inCapVAW=pF('ef-in-cap-vaw');
     const outCapA=pF('ef-out-cap-a');const outCapVAW=pF('ef-out-cap-vaw');
-    const inLdA=pF('ef-in-ld-a')??0;const inLdVAW=pF('ef-in-ld-vaw')??0;
-    const outLdA=pF('ef-out-ld-a')??0;const outLdVAW=pF('ef-out-ld-vaw')??0;
+    const inLdA=pF('ef-in-ld-a');const inLdVAW=pF('ef-in-ld-vaw');
+    const outLdA=pF('ef-out-ld-a');const outLdVAW=pF('ef-out-ld-vaw');
     const eff=+document.getElementById('ef-conv-pair-eff').value||0.85;
     const cpf=+document.getElementById('ef-convpf').value||1.0;
     const inV=n.convRole==='in'?v:(paired?.voltage||v);
     const outV=n.convRole==='out'?v:(paired?.voltage||v);
-    const mkCap=(aVal,vawVal,acdcType,volt)=>{
-      if (aVal===null&&vawVal===null) return null;
-      const a=aVal!==null?aVal:(vawVal!==null&&volt>0?vawVal/volt:null);
-      if (acdcType==='ac') { const va=vawVal!==null?vawVal:(aVal!==null&&volt>0?aVal*volt:null); return {w:null,var:null,va,a,pf:null}; }
-      else { const w=vawVal!==null?vawVal:(aVal!==null&&volt>0?aVal*volt:null); return {w,var:null,va:null,a,pf:null}; }
+    // Cross-derives each row (only one side entered -> derive the other via efficiency);
+    // leaves each side independent when both were entered separately. See calcConvPairRow.
+    const capRow=calcConvPairRow(inCapA,inCapVAW,outCapA,outCapVAW,inAcDc,outAcDc,inV,outV,eff,cpf);
+    const ldRow=calcConvPairRow(inLdA,inLdVAW,outLdA,outLdVAW,inAcDc,outAcDc,inV,outV,eff,cpf);
+    const mkCap=(side,acdcType)=>{
+      if (side.a==null&&side.vaw==null) return null;
+      return acdcType==='ac'?{w:null,var:null,va:side.vaw,a:side.a,pf:null}:{w:side.vaw,var:null,va:null,a:side.a,pf:null};
     };
-    const mkLd=(aVal,vawVal,acdcType,volt,pf=1.0)=>{
-      vawVal=vawVal||0;
+    const mkLd=(side,acdcType,volt,pf=1.0)=>{
+      const vaw=side.vaw??0;
       if (acdcType==='ac') {
-        const w=vawVal*pf,var_=Math.sqrt(Math.max(0,vawVal*vawVal-w*w));
-        const a=aVal!==null?aVal:(volt>0?vawVal/volt:null);
-        return {va:vawVal,w,var:var_,a,pf};
+        const w=vaw*pf,var_=Math.sqrt(Math.max(0,vaw*vaw-w*w));
+        return {va:vaw,w,var:var_,a:side.a??(volt>0?vaw/volt:null),pf};
       }
-      const a=aVal!==null?aVal:(volt>0?vawVal/volt:null);
-      return {w:vawVal,a,va:null,var:null,pf:null};
+      return {w:vaw,a:side.a??(volt>0?vaw/volt:null),va:null,var:null,pf:null};
     };
     if (n.convRole==='in') {
-      data.capacity=mkCap(inCapA,inCapVAW,inAcDc,inV);
-      data.existingLoad=mkLd(inLdA,inLdVAW,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
+      data.capacity=mkCap(capRow.in,inAcDc);
+      data.existingLoad=mkLd(ldRow.in,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
       data.efficiency=eff;data.convPf=cpf;data.netChangeOverride=null;
       if (paired) {
-        paired.capacity=mkCap(outCapA,outCapVAW,outAcDc,outV);
-        paired.existingLoad=mkLd(outLdA,outLdVAW,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
+        paired.capacity=mkCap(capRow.out,outAcDc);
+        paired.existingLoad=mkLd(ldRow.out,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       }
     } else {
-      data.capacity=mkCap(outCapA,outCapVAW,outAcDc,outV);
-      data.existingLoad=mkLd(outLdA,outLdVAW,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
+      data.capacity=mkCap(capRow.out,outAcDc);
+      data.existingLoad=mkLd(ldRow.out,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       data.netChangeOverride=null;
       if (paired) {
-        paired.capacity=mkCap(inCapA,inCapVAW,inAcDc,inV);
-        paired.existingLoad=mkLd(inLdA,inLdVAW,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
+        paired.capacity=mkCap(capRow.in,inAcDc);
+        paired.existingLoad=mkLd(ldRow.in,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
       }
     }
   } else if (hasCap(type)) {

@@ -236,8 +236,21 @@ without requiring a manual Reset first.
 | Row 2 — Existing Load | Input Exist. Load (A), Input Exist. Load (W) | Input Exist. Load (A), Input Exist. Load (VA) |
 | Row 3 — Efficiency/PF | Efficiency, Conv. Power Factor (Reset) | — |
 
-Each row's Reset button clears all fields in that row.
-Input/output capacity and existing load auto-derive via efficiency and convPf; see §7.12.
+Each row's Reset button clears all fields in that row. Both Efficiency and Conv. Power Factor
+are disabled with the hint "Efficiency and Conv. PF are set on the IN node." when editing the
+OUT node of a pair — they belong to the pair as a whole, edited from the IN side only.
+
+**Row 1 (Capacity) and Row 2 (Existing Load) cross-derivation** *(revised 2026-07-19)*, applied
+identically by the Calculate button and by Save (Edit Item dialog and Add Item(s) modal alike):
+- If the user enters values for **both** the IN and OUT side of a row (e.g. IN Cap (A) and OUT
+  Cap (A)), each side is calculated independently — no cross-derivation, since both are already
+  known.
+- If the user enters a value for **only one side** and leaves the entire other side blank, that
+  entered side's own missing unit is filled first (e.g. OUT Cap (A) → OUT Cap (W) using
+  W = V×A), then the **opposite side's** values are derived from it via efficiency (and convPf,
+  for whichever side happens to be AC) — matching §3.3's formulas (input = output / efficiency;
+  output = input × efficiency). Previously the opposite side was simply left blank/zeroed
+  instead of derived.
 
 ### 7.10 Duplicate button
 - Copies the current node; appends "(copy)" to the description
@@ -253,7 +266,9 @@ the grid's own Save button all run the identical derivation, not just a "remaini
 pass — see §7.7).
 - **AC sections**: derives per the field table in §7.7 (`calcAcPowerGroup()`, shared everywhere)
 - **DC sections**: derives missing A or W using A = W/V or W = V×A
-- **Conversion items**: derives input/output capacity and existing load via efficiency and convPf
+- **Conversion items**: Capacity and Existing Load cross-derive between the IN and OUT sides via
+  efficiency and convPf when only one side was entered; both sides calculate independently when
+  entered separately — see §7.9
 
 ---
 
@@ -329,7 +344,7 @@ Parent pre-set to "No Parent (New Root)".
 |---|---|
 | Negative load value entered | Warn on entry |
 | New load is negative after net changes applied | Warn |
-| New load exceeds item capacity | Warn |
+| New load exceeds item capacity (a blank/never-entered capacity counts as zero for this comparison — a positive new load against no capacity at all warns exactly as it would against an explicit 0) | Warn |
 | User adds children to a Load or Removed item | Warn |
 | User adds children after manually entering a net change override | Warn |
 | Non-load Removed item | Existing load entered as negative net change |
@@ -942,7 +957,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§29).
+enhancement (§30).
 
 ---
 
@@ -1444,7 +1459,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§29).
+multi-interval load analysis still listed under Future Enhancements (§30).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1529,7 +1544,51 @@ the same inputs.
 
 ---
 
-## 29. Future Enhancements
+## 29. Revision 27 Follow-Up (Round 2) — Conversion Pair Cross-Derivation, Conv PF Fix, Capacity Warning Fix
+
+*Last updated: 2026-07-19*
+
+Three requests: extend the Edit Item dialog's Calculate/Save cross-derivation to conversion
+(especially TRU) items' Capacity and Existing Load rows; fix a Conv. Power Factor field that
+looked editable from the OUT node's dialog but silently discarded any change; and fix a warning
+that failed to fire when capacity was blank rather than an explicit 0.
+
+An initially-requested fourth item — adding editable "OUT Volts"/"OUT AC-DC" fields to the
+Conversion Parameters section — was cancelled after live testing showed the OUT node's own
+top-level Volts field is *already* editable when opening Edit directly on the OUT node (per
+§7.2); the only gap was that this wasn't visually obvious, since the Conversion Parameters
+section itself looks identical regardless of which side of the pair you opened Edit on.
+
+**Conv. Power Factor fix**: the field lacked the `disabled` state and reset-on-view behavior
+Efficiency already had when editing the OUT node — it looked editable, but `doEditSave`'s OUT
+branch never read it into anything, so a change made there silently reverted on next open
+without ever reaching the IN node's stored `convPf`. Now disabled identically to Efficiency; see
+§7.9.
+
+**Conversion pair row cross-derivation** (§7.7, §7.9, §7.12): traced the actual behavior first
+rather than assuming — the Edit modal's Calculate button was a complete no-op for the
+Conversion Parameters section's Capacity/Existing Load rows, and Save's `mkCap`/`mkLd`
+processed each side fully independently, leaving a blank side blank (capacity) or defaulted to
+zero (existing load) instead of deriving it. Implemented via new shared functions
+(`calcConvPairRow` and its helpers `convSideRealPower`/`convSideFromRealPower`/
+`convSideFillOwn`) used identically by both Calculate and Save: compute the entered side's real
+power (W = V×A for DC; W = VA×convPf for AC), scale by efficiency in the appropriate direction,
+then re-expand into the other side's own A/VA(W). Verified against §3.3's formulas with a TRU
+(AC-in/DC-out) in both directions, then again with an Inverter (DC-in/AC-out, testing the
+reversed AC/DC arrangement to confirm the logic isn't TRU-specific), and confirmed editing from
+either the IN or OUT node's own dialog produces identical results. Existing Load still
+zero-defaults (never `null`) when both sides are left entirely blank, unchanged from before.
+
+**Capacity warning fix** (§11): `warnNode`'s overload check (W3) was gated behind
+`if(node.capacity)`, so a node with no capacity entered at all never warned regardless of how
+large the new load was — only an explicit capacity of `0` triggered it. A blank capacity is now
+treated as zero for this comparison, matching the explicit-0 case. Verified 5 scenarios (blank
+capacity + positive load now warns; blank capacity + zero load doesn't; explicit-0 and
+real-capacity cases unchanged) with no regressions.
+
+---
+
+## 30. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
