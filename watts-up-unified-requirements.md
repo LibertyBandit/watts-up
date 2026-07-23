@@ -161,6 +161,13 @@ Formulas: A = W / V; W = V × A
 | Conv OUT node | Editable | Locked to device type |
 | No parent (new root); regular node | Editable | Editable |
 
+*Revised 2026-07-19 (Round 3):* this table still governs each node's own underlying voltage/
+AC-DC values, but the top-level Volts/AC-DC row is now **hidden entirely** for any conversion
+IN or OUT node — showing it made the dialog behave differently depending on which side of the
+pair you opened Edit on (locked when editing IN, editable when editing OUT), which read as
+inconsistent. Conversion items now show and edit both sides' voltage consistently via the
+Conversion Parameters section's own Identity row instead — see §7.9.
+
 ### 7.3 Capacity section (non-load items)
 - DC: A, W
 - AC: A, VA
@@ -228,17 +235,30 @@ without requiring a manual Reset first.
 - **Efficiency** input (default 0.85)
 - **convPf** input — visible for TRU, Inverter, and Frequency Converter
   (default: TRU = 0.95, Inverter = 1.0, FC = 1.0)
-- Three-row layout with Reset button per row:
+- Four-row layout with Reset button per row (Identity row has no Reset — nothing there is
+  cleared to blank, only edited):
 
 | Row | DC-side fields | AC-side fields |
 |---|---|---|
+| Identity | IN Volts (read-only), IN AC/DC (read-only), OUT Volts (editable), OUT AC/DC (read-only) | same |
 | Row 1 — Capacity | Input Cap (A), Input Cap (W) | Input Cap (A), Input Cap (VA) |
 | Row 2 — Existing Load | Input Exist. Load (A), Input Exist. Load (W) | Input Exist. Load (A), Input Exist. Load (VA) |
 | Row 3 — Efficiency/PF | Efficiency, Conv. Power Factor (Reset) | — |
 
-Each row's Reset button clears all fields in that row. Both Efficiency and Conv. Power Factor
-are disabled with the hint "Efficiency and Conv. PF are set on the IN node." when editing the
-OUT node of a pair — they belong to the pair as a whole, edited from the IN side only.
+Each row's Reset button clears all fields in that row.
+
+**Identity row and dialog unification** *(added 2026-07-19, Round 3)*: this section — and now
+the whole conversion-pair editing experience — is identical regardless of whether Edit was
+opened on the IN node or the OUT node. IN Volts, IN AC/DC, and OUT AC/DC are read-only displays
+(IN's voltage is governed by §7.2's normal rules; both AC/DC types are fixed by the conversion
+Type per §3.3, never a free choice); OUT Volts is the one editable field here, since it's the
+one voltage previously unreachable when Edit was opened from the IN side. The dialog's ordinary
+top-level Volts/AC-DC row (§7.2) is hidden for conversion items entirely, avoiding two editable
+fields for the same OUT voltage. Efficiency and Conv. Power Factor are now **always editable**
+regardless of which side you opened Edit on (previously disabled when viewing OUT, which made
+the dialog behave inconsistently depending on role) — both are validated (Efficiency: 0.01–1.0)
+and persisted to the IN node's own stored fields regardless of which side's dialog you saved
+from.
 
 **Row 1 (Capacity) and Row 2 (Existing Load) cross-derivation** *(revised 2026-07-19)*, applied
 identically by the Calculate button and by Save (Edit Item dialog and Add Item(s) modal alike):
@@ -957,7 +977,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§30).
+enhancement (§31).
 
 ---
 
@@ -1459,7 +1479,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§30).
+multi-interval load analysis still listed under Future Enhancements (§31).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1588,7 +1608,52 @@ real-capacity cases unchanged) with no regressions.
 
 ---
 
-## 30. Future Enhancements
+## 30. Revision 27 Follow-Up (Round 3) — Conversion Dialog Unification, Grid In-Field Prompt, Grid Scroll Fix
+
+*Last updated: 2026-07-19*
+
+Three requests: fully unify the conversion-pair Edit dialog regardless of which side it's
+opened from (§7.2, §7.9); an in-field placeholder for the New grid's overridable Net Change
+cells; and a grid scroll-position bug affecting nearly every in-row button.
+
+**Conversion dialog unification** — see §7.2 and §7.9 for the resulting behavior. Implemented
+by adding the Identity row (IN Volts/AC-DC read-only, OUT Volts editable, OUT AC/DC read-only)
+to the Conversion Parameters section, hiding the dialog's ordinary top-level Volts/AC-DC row
+for conversion items, making Efficiency/Conv. Power Factor always editable, and updating both
+`doEditSave` and `doEditCalculate` to read IN Volts from the actual IN node (never user-edited)
+and OUT Volts from the new field (rather than the old top-level field, now hidden), persisting
+Efficiency/Conv. PF to the IN node's own stored fields regardless of which side's dialog was
+used to save. Also fixed a related gap the change surfaced: Efficiency's range validation
+(0.01–1.0) previously only ran when editing the IN node — since it's now editable from either
+side, the validation now runs for both. Verified opening Edit on the IN and OUT nodes of a TRU
+pair produces byte-for-byte identical field states, and confirmed persistence in every
+direction (OUT Volts edited from either side; Efficiency/Conv PF edited from OUT correctly
+reaching the IN node's stored fields, previously silently discarded; the validation blocking an
+out-of-range Efficiency entered from OUT).
+
+**New grid in-field prompt**: eligible Net Change cells (New status, non-load, childless, no
+override yet entered — see §27.7) now show a subdued "auto" placeholder, matching the intent of
+the Edit modal's "Leave blank to auto-calculate" and the Add Item(s) modal's "blank if children"
+prompts. "auto-calc" was considered but doesn't fit the grid's actual cell width (~40px usable
+after padding, measured directly rather than assumed).
+
+**Grid scroll-position fix**: every grid render rebuilds its `.grid-scroll` container via
+`innerHTML`, producing a brand-new element with no scroll history — confirmed directly (the
+element reference changes and `scrollTop` resets to 0) as the cause of the reported
+disorientation on nearly every in-row button (status toggle, up/down, Dup, Edit, Del, Calc).
+The type-dropdown case read as less disruptive only by coincidence: changing it refocuses the
+same field afterward (existing behavior, unrelated to scrolling), and the browser's native
+focus-scrolls-into-view behavior happened to land roughly back where the user was. Fixed by
+having both grid render functions capture and restore `.grid-scroll`'s scroll position by
+default around the rebuild. "+ Child" is the sole exception, by design — it now explicitly
+scrolls the newly-added row into view (centered) and focuses its Description field afterward,
+overriding the default scroll-preservation since that's the one action that should move the
+viewport. Verified scroll position holds across toggle/up/duplicate from a mid-list row, and
+that "+ Child" correctly centers and focuses a new row added far down a 30-row list.
+
+---
+
+## 31. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

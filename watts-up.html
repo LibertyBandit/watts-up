@@ -260,6 +260,7 @@
       color:var(--text-primary);border-radius:3px;padding:.14rem .27rem;font-size:.67rem;font-family:inherit;text-align:inherit}
     .data-grid input:hover,.data-grid select:hover{border-color:var(--border)}
     .data-grid input:focus,.data-grid select:focus{outline:none;border-color:var(--accent-blue);background:var(--bg-primary)}
+    .data-grid input::placeholder{color:var(--text-muted);opacity:1}
     .data-grid input:disabled,.data-grid select:disabled{opacity:.55;pointer-events:none;border-color:transparent;background:rgba(255,255,255,.16)}
     .data-grid .type-badge{font-size:.58rem}
     .data-grid .status-badge{font-size:.56rem}
@@ -505,7 +506,7 @@
               </select>
             </div>
           </div>
-          <div class="form-row">
+          <div id="ef-voltage-row" class="form-row">
             <div class="form-group" style="flex:0 0 100px">
               <label>Volts</label>
               <input id="ef-voltage" type="text" inputmode="decimal" placeholder="e.g. 28">
@@ -623,6 +624,23 @@
 
           <div id="ef-sec-conv-pair" class="hidden">
             <div class="section-label">Conversion Parameters</div>
+            <!-- Identity row: same regardless of whether Edit was opened on the IN or OUT node
+                 (Round 3 request) — IN's own voltage/AC-DC are always read-only here (IN's
+                 voltage is either inherited from its own parent bus or, if it has none, edited
+                 via the ordinary top-level Volts field, same as any other root-level item; it's
+                 never edited from this section). OUT AC/DC is fixed by the conversion Type
+                 (§3.3), never a free choice, so it's read-only too — only OUT Volts is editable
+                 here, since that's the one voltage this dialog previously had no way to reach
+                 when opened from the IN side. -->
+            <div class="section-label-row" style="margin-top:.3rem">
+              <div class="section-label" style="font-size:.65rem">Identity</div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:0 0 85px"><label>IN Volts</label><input id="ef-conv-in-volts" type="text" disabled></div>
+              <div class="form-group" style="flex:0 0 75px"><label>IN AC/DC</label><input id="ef-conv-in-acdc" type="text" disabled></div>
+              <div class="form-group" style="flex:0 0 85px"><label>OUT Volts</label><input id="ef-conv-out-volts" type="text" inputmode="decimal" placeholder="e.g. 28"></div>
+              <div class="form-group" style="flex:0 0 75px"><label>OUT AC/DC</label><input id="ef-conv-out-acdc" type="text" disabled></div>
+            </div>
             <!-- Row 1: Capacity -->
             <div class="section-label-row" style="margin-top:.3rem">
               <div class="section-label" style="font-size:.65rem">Capacity</div>
@@ -661,7 +679,6 @@
                 <input id="ef-convpf" type="text" inputmode="decimal" value="0.95">
               </div>
             </div>
-            <span class="field-hint" id="ef-conv-pair-hint"></span>
           </div>
 
           <div id="ef-siblings" class="sibling-wrap hidden">
@@ -1667,10 +1684,11 @@ function fmtGridDisplay(v){
        : abs>=100   ? n.toLocaleString('en-US',{maximumFractionDigits:1})
        : n.toFixed(2);
 }
-function gridNumInput(field,key,val){
+function gridNumInput(field,key,val,placeholder){
   const full=fmtPField(val), disp=fmtGridDisplay(val);
   const keyAttr=key?` data-key="${key}"`:'';
-  return `<input data-field="${field}"${keyAttr} data-full="${full}" value="${disp}">`;
+  const phAttr=placeholder?` placeholder="${esc(placeholder)}"`:'';
+  return `<input data-field="${field}"${keyAttr} data-full="${full}" value="${disp}"${phAttr}>`;
 }
 
 function gridCellVal(row,field,key){
@@ -1863,9 +1881,18 @@ function gridResetGroup(id,field,renderFn){
 function gridAddChildRow(parentId,defaultStatus,renderFn){
   const parent=state.nodes[parentId]; if (!parent) return;
   const type=ALL_TYPES.includes('Load')?'Load':ALL_TYPES[0];
-  addNode(parentId,{type,status:defaultStatus,acDc:parent.acDc||'dc',voltage:parent.voltage??null,description:'',refDes:''});
+  const newId=addNode(parentId,{type,status:defaultStatus,acDc:parent.acDc||'dc',voltage:parent.voltage??null,description:'',refDes:''});
   batchCommit();
   renderAll();
+  // Unlike every other grid action (which now preserves scroll position by default, see
+  // renderExRemGrid/renderNewGrid), +Child is the one case that should move the viewport —
+  // center the new row and focus its description so the user can immediately start typing.
+  const newRow=document.querySelector(`tr[data-nid="${newId}"]`);
+  if (newRow) {
+    newRow.scrollIntoView({block:'center'});
+    const descInput=newRow.querySelector('[data-field="description"]');
+    if (descInput) { descInput.focus(); if (descInput.select) descInput.select(); }
+  }
 }
 function siblingOrderInfoForNode(n){
   const arr=n.parentId?(state.nodes[n.parentId]?.childIds||[]):(state.rootIds||[]);
@@ -1913,13 +1940,13 @@ function gridCapCells(n,forceDisabled){
   const wCell=(isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num"><input disabled></td>`:`<td class="num">${gridNumInput('capacity','w',n.capacity?.w)}</td>`);
   return aCell+vaCell+wCell;
 }
-function gridPowerGroupCells(n,field,applicable,forceDisabled){
+function gridPowerGroupCells(n,field,applicable,forceDisabled,placeholder){
   const keys=['a','va','w','var','pf'];
   return keys.map((k,i)=>{
     const cls=`num${i===0?' grp-first':''}`;
     const activeForAcDc=n.acDc==='ac'?true:(k==='a'||k==='w');
     if (!applicable||!activeForAcDc||forceDisabled) return `<td class="${cls}"><input disabled></td>`;
-    return `<td class="${cls}">${gridNumInput(field,k,n[field]?.[k])}</td>`;
+    return `<td class="${cls}">${gridNumInput(field,k,n[field]?.[k],placeholder)}</td>`;
   }).join('');
 }
 function gridDisplayCells(n,field,applicable,forceDisabled){
@@ -2057,7 +2084,7 @@ function buildNewRow(n,depth){
     ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
     ${gridCapCells(n,isExistingCtx)}${gridGroupResetCell('capacity',hasCap(n.type)&&!isExistingCtx)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!isExistingCtx)}
-    ${ncOverridable?gridPowerGroupCells(n,'netChangeOverride',true,false):gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}${gridGroupResetCell('netChangeOverride',ncOverridable&&n.netChangeOverride!=null)}
+    ${ncOverridable?gridPowerGroupCells(n,'netChangeOverride',true,false,'auto'):gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}${gridGroupResetCell('netChangeOverride',ncOverridable&&n.netChangeOverride!=null)}
     ${gridActionsCell(n,isExistingCtx)}
   </tr>`;
 }
@@ -2194,8 +2221,17 @@ function gridFooter(gridKey){
   </div>`;
 }
 
+// Every grid render rebuilds .grid-scroll via innerHTML, which creates a brand-new element
+// with no scroll history — by default that reset the whole grid to the top on every button
+// click (Round 3 report). Capturing/restoring scroll position around the rebuild fixes that
+// uniformly; gridAddChildRow explicitly overrides this afterward for its own centered-new-row
+// behavior, since that's the one action that *should* move the viewport.
+function gridScrollPos(el){ const s=el.querySelector('.grid-scroll'); return s?{top:s.scrollTop,left:s.scrollLeft}:null; }
+function restoreGridScrollPos(el,pos){ if (!pos) return; const s=el.querySelector('.grid-scroll'); if (s) { s.scrollTop=pos.top; s.scrollLeft=pos.left; } }
+
 function renderExRemGrid(){
   const el=document.getElementById('exrem-container'); if (!el) return;
+  const scrollPos=gridScrollPos(el);
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
   const allIds=preOrder(state.rootIds,state.nodes);
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
@@ -2204,11 +2240,13 @@ function renderExRemGrid(){
   const cg=gridColgroup(true);
   const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Existing Load','Load')}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No Existing or Removed items.</div>'}</div>${gridFooter('exrem')}`;
+  restoreGridScrollPos(el,scrollPos);
   wireGridEvents(el,renderExRemGrid,'existing');
 }
 
 function renderNewGrid(){
   const el=document.getElementById('new-container'); if (!el) return;
+  const scrollPos=gridScrollPos(el);
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
   const allIds=preOrder(state.rootIds,state.nodes);
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
@@ -2219,6 +2257,7 @@ function renderNewGrid(){
   const cg=gridColgroup(true);
   const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Load','Net Change',true)}<tbody>${rows}</tbody></table>`;
   el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No items to display.</div>'}</div>${gridFooter('new')}`;
+  restoreGridScrollPos(el,scrollPos);
   wireGridEvents(el,renderNewGrid,'new');
 }
 
@@ -2589,6 +2628,12 @@ function findPairedNode(node) {
 function efShowSections(type,convRole,status,hasChildren,acDc) {
   const isConvPair=!!convRole;
   const dc=acDc!=='ac';
+  // The top-level Volts/AC-DC row shows/edits whichever specific node the dialog happened to
+  // open on, which made the dialog behave differently depending on IN vs OUT (Round 3 report);
+  // conversion-pair items now use the dedicated Identity row inside Conversion Parameters for
+  // both sides consistently, so the generic row is redundant (and would risk two editable
+  // fields for the same OUT voltage) for these items specifically.
+  document.getElementById('ef-voltage-row').classList.toggle('hidden',isConvPair);
   document.getElementById('ef-sec-cap'      ).classList.toggle('hidden',isLoad(type)||isConvPair);
   document.getElementById('ef-sec-load'     ).classList.toggle('hidden',!isLoad(type));
   document.getElementById('ef-sec-conv'     ).classList.toggle('hidden',!isConv(type)||isConvPair);
@@ -2654,8 +2699,10 @@ function doEditCalculate() {
     const paired=findPairedNode(n);
     const inAcDc=CONV_IN_ACDC[n.type]||'ac';
     const outAcDc=CONV_OUT_ACDC[n.type]||'dc';
-    const inV=n.convRole==='in'?v:(paired?.voltage||v);
-    const outV=n.convRole==='out'?v:(paired?.voltage||v);
+    const inNode=n.convRole==='in'?n:paired;
+    const outNode=n.convRole==='out'?n:paired;
+    const inV=inNode?.voltage||0;
+    const outV=getV('ef-conv-out-volts')??(outNode?.voltage||0);
     const eff=getV('ef-conv-pair-eff')||0.85;
     const cpf=getV('ef-convpf')||1.0;
 
@@ -2805,13 +2852,20 @@ function openEdit(nodeId) {
     document.getElementById('ef-in-ld-vaw').value=fmtPField(inLdVAW??0);
     document.getElementById('ef-out-ld-a').value  =fmtPField(outNode?.existingLoad?.a??0);
     document.getElementById('ef-out-ld-vaw').value=fmtPField(outLdVAW??0);
-    const effEl=document.getElementById('ef-conv-pair-eff');
-    effEl.value=eff;effEl.disabled=n.convRole==='out';
-    const cpfEl=document.getElementById('ef-convpf');
-    cpfEl.value=cpf;cpfEl.disabled=n.convRole==='out';
+    // Identity row: IN Volts/AC-DC and OUT AC/DC are always read-only display; only OUT Volts
+    // is editable — the one voltage this dialog previously had no way to reach from the IN
+    // side. Same regardless of which side of the pair Edit was opened on (Round 3).
+    document.getElementById('ef-conv-in-volts').value=fmtPField(inNode?.voltage);
+    document.getElementById('ef-conv-in-acdc').value=inAcDc.toUpperCase();
+    document.getElementById('ef-conv-out-volts').value=fmtPField(outNode?.voltage);
+    document.getElementById('ef-conv-out-acdc').value=outAcDc.toUpperCase();
+    // Efficiency and Conv. PF are properties of the pair as a whole and are now always
+    // editable regardless of which side you opened Edit on (previously locked when viewing
+    // OUT, which made the dialog behave differently depending on IN vs OUT).
+    document.getElementById('ef-conv-pair-eff').value=eff;
+    document.getElementById('ef-convpf').value=cpf;
     const showCpf=['TRU','Inverter','Frequency Converter'].includes(n.type);
     document.getElementById('ef-convpf-group').classList.toggle('hidden',!showCpf);
-    document.getElementById('ef-conv-pair-hint').textContent=n.convRole==='out'?'Efficiency and Conv. PF are set on the IN node.':'';
   }
 
   document.getElementById('ef-loadval-msg').classList.add('hidden');
@@ -2866,7 +2920,9 @@ function doEditSave() {
     if (isNaN(eff)||eff<=0||eff>1){document.getElementById('ef-eff-msg').classList.remove('hidden');return;}
     document.getElementById('ef-eff-msg').classList.add('hidden');
   }
-  if (n.convRole==='in') {
+  if (n.convRole) {
+    // Validated regardless of role now that Efficiency is editable from either side of the
+    // pair (Round 3) — previously only checked when editing the IN node specifically.
     const eff=+document.getElementById('ef-conv-pair-eff').value;
     if (isNaN(eff)||eff<=0||eff>1){document.getElementById('ef-conv-pair-eff-msg').classList.remove('hidden');return;}
     document.getElementById('ef-conv-pair-eff-msg').classList.add('hidden');
@@ -2899,8 +2955,13 @@ function doEditSave() {
     const outLdA=pF('ef-out-ld-a');const outLdVAW=pF('ef-out-ld-vaw');
     const eff=+document.getElementById('ef-conv-pair-eff').value||0.85;
     const cpf=+document.getElementById('ef-convpf').value||1.0;
-    const inV=n.convRole==='in'?v:(paired?.voltage||v);
-    const outV=n.convRole==='out'?v:(paired?.voltage||v);
+    const inNode=n.convRole==='in'?n:paired;
+    const outNode=n.convRole==='out'?n:paired;
+    // IN Volts is read-only (inherited from IN's own parent, or free-editable via the ordinary
+    // top-level field when IN has no parent — never edited from this section), so it's read
+    // straight from the node; OUT Volts is the one field this section makes editable.
+    const inV=inNode?.voltage||0;
+    const outV=pF('ef-conv-out-volts')??(outNode?.voltage||0);
     // Cross-derives each row (only one side entered -> derive the other via efficiency);
     // leaves each side independent when both were entered separately. See calcConvPairRow.
     const capRow=calcConvPairRow(inCapA,inCapVAW,outCapA,outCapVAW,inAcDc,outAcDc,inV,outV,eff,cpf);
@@ -2924,14 +2985,19 @@ function doEditSave() {
       if (paired) {
         paired.capacity=mkCap(capRow.out,outAcDc);
         paired.existingLoad=mkLd(ldRow.out,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
+        paired.voltage=outV;
       }
     } else {
       data.capacity=mkCap(capRow.out,outAcDc);
       data.existingLoad=mkLd(ldRow.out,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       data.netChangeOverride=null;
+      data.voltage=outV;
       if (paired) {
+        // Efficiency/Conv. PF belong to the IN node's own fields — always persisted there
+        // (paired, when editing from OUT) regardless of which side you opened Edit on.
         paired.capacity=mkCap(capRow.in,inAcDc);
         paired.existingLoad=mkLd(ldRow.in,inAcDc,inV,inAcDc==='ac'?cpf:1.0);
+        paired.efficiency=eff;paired.convPf=cpf;
       }
     }
   } else if (hasCap(type)) {
