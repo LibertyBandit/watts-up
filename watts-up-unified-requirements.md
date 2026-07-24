@@ -295,33 +295,61 @@ pass — see §7.7).
 ## 8. Add Item(s) Dialog
 
 ### 8.1 Field layout
+
+*Revised 2026-07-23 (Round 4).*
 1. **Parent Item** dropdown (top)
    - Excludes children/descendants of any selected item
    - Includes "No Parent (New Root)" option
 2. **Item Type** dropdown — "Aircraft Total" only when Parent = "No Parent"
-3. **Status**: Existing / New / Removed
+3. **Volts** — a single shared, read-only field (one value for every row, since they all share
+   the same Parent), positioned between Item Type and AC/DC. Locked to the parent's voltage
+   whenever a parent is selected (same rule as Edit Item §7.2, for both regular and
+   conversion-IN nodes); editable only when adding new root-level items. No longer a per-row
+   column.
 4. **AC / DC** selector — locked to parent's AC/DC when parent is selected
-5. Master-detail table (§8.3)
-6. **Duplicate row button** per row — copies the row and appends "(copy)" to the description
+5. **Status**: Existing / New / Removed — now also determines which numeric column group the
+   table shows (§8.3), not just node metadata
+6. "Items to Add" table (§8.3)
+7. **Duplicate row button** per row — copies the row and appends "(copy)" to the description
+8. Modal width auto-adjusts to fit however many columns the current Type/AC-DC/Status
+   combination needs (a simple non-conversion row fits around 1000px; a conversion row with
+   its fuller field set can reach ~1250px), instead of a single fixed width.
 
 ### 8.2 State memory
 - On open: fully reset the table (clear DOM and row data) and display one blank row
 - Remember last-used Item Type and Status; restore on next open
 
 ### 8.3 Table columns (context-sensitive)
-All row types include: Description, RefDes (optional)
 
-| Item / Status | Additional columns |
+*Revised 2026-07-23 (Round 4):* the column set, order, and units-of-measure now match
+whichever grid corresponds to the row's Status — Existing/Removed grid's columns for
+existing/removed status, New grid's columns for new status — with inapplicable columns
+omitted entirely rather than shown disabled, since every row here is a distinct new item, not
+a shared editing form. All row types still include Description and Ref Des first.
+
+| Item / Status | Columns (in order) |
 |---|---|
-| DC, any | Capacity (A or W), Existing Load (A, W), Load (A, W) |
-| AC, any | Capacity (A, VA), Existing Load (A, VA, W, VAR, pf), Load (A, VA, W, VAR, pf) |
-| Conv item | IN Volts column + OUT Volts column |
-| Non-load, New | Load field replaces Existing Load; leave blank if item will have children |
+| Non-load, existing/removed | Capacity (A, VA or A, W) + **Existing Load** (A, VA, W, VAR, pf or A, W) |
+| Non-load, new | Capacity (A, VA or A, W) + **Net Change** (A, VA, W, VAR, pf or A, W) — every row is childless at creation, so this is always available for a new non-load item |
+| Load, any status | **Load** (A, VA, W, VAR, pf or A, W) |
+| Conversion item, any status | Eff., OUT Volts, then **IN Cap**, **IN Load**, **OUT Cap**, **OUT Load** in that order, each group showing (A) first followed by (VA) for an AC side or (W) for a DC side |
+
+Existing Load and Net Change are mutually exclusive on the same row — matching how the
+Existing/Removed and New grids never show both groups either.
+
+**Calculation** *(added 2026-07-23, Round 4)*: every AC group that includes W/VAR/pf
+(Existing Load, Load, Net Change) and every conversion Cap/Load pair no longer auto-calculates
+on entry — the same `calcAcPowerGroup()`/`calcConvPairRow()` functions used everywhere else in
+the app (§7.7, §7.9) now drive a per-row **Calc** button, and run automatically on Save for any
+fields still blank. Capacity (a simple 2-key A/VA-or-W group with no VAR/pf) is unaffected and
+keeps auto-deriving freely, same as it always has. Every column group — including Capacity —
+gets its own **Reset** button, matching the grids' one-reset-per-group convention.
 
 Formula entry applies to all numeric columns.
 
 ### 8.4 Volts and AC/DC locking
-Same rules as Edit Item §7.2; applied per row based on selected parent and item type.
+Same rules as Edit Item §7.2. Volts is now a single field shared by every row (§8.1); AC/DC
+remains a single shared selector as before.
 
 ### 8.5 Root creation shortcut
 **"+ Root" button** in the tree panel header opens the Add Item(s) dialog with
@@ -977,7 +1005,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§31).
+enhancement (§32).
 
 ---
 
@@ -1479,7 +1507,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§31).
+multi-interval load analysis still listed under Future Enhancements (§32).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1653,7 +1681,59 @@ that "+ Child" correctly centers and focuses a new row added far down a 30-row l
 
 ---
 
-## 31. Future Enhancements
+## 31. Revision 27 Follow-Up (Round 4) — Add Item(s) Dialog Restructuring
+
+*Last updated: 2026-07-23*
+
+Requested as "tonight's entertainment": reorganize the Add Item(s) dialog's "Items to Add"
+table to match the Existing/Removed and New grids' own field sets, order, and calculation
+behavior, rather than the dialog's own separately-evolved (and in places incomplete) column
+set. See §8 for the resulting field layout and column rules.
+
+**Volts promoted to a shared field** (§8.1, §8.4): since every row in the table shares the same
+Parent, and Volts for a regular or conversion-IN node is either locked to that parent or free
+only when there's no parent (§7.2), repeating it as a per-row column added nothing — one shared
+read-only field (editable only for new root-level items) replaces it, positioned between Item
+Type and AC/DC per the request.
+
+**Column sets now mirror the grids exactly** (§8.3): previously the same fixed column set
+showed regardless of Status, with Existing Load and the (mislabeled) "Load" net-change-override
+columns always shown together — neither matches how the Existing/Removed and New grids actually
+work, where a row shows one or the other, never both. Existing Load also had genuine gaps (no A
+or pf field for AC), and Load-type's own value was missing its A field. All fixed by threading
+`status` into `afCols()` and expanding every AC group to the grids' full A/VA/W/VAR/pf set.
+Conversion items' Cap/Load fields, previously a single VA-or-W field per group, now split into
+A + VA/W pairs (matching the Edit modal's conversion-pair section), reordered to group by side
+first (IN Cap, IN Load, OUT Cap, OUT Load) rather than by group first — verified against a
+worked TRU example matching exactly.
+
+**Calc-on-demand extended to the Add dialog** (§8.3): the old per-row `oninput`/`blur` handlers
+(auto-deriving VAR/pf on every keystroke, and conversion Cap/Load via simple efficiency
+multiplication on every keystroke) are gone, replaced by the same `calcAcPowerGroup()`/
+`calcConvPairRow()` functions the rest of the app already uses (§7.7, §7.9), driven by a new
+per-row Calc button and an automatic pass on Save for any fields still blank. Every column group
+(including Capacity, which doesn't need Calc since it has no VAR/pf) now has its own Reset
+button, matching the grids' one-reset-per-group convention.
+
+**Modal width** (§8.1): auto-computed from the current column count instead of the dialog's
+normal fixed width, so a conversion item's fuller field set doesn't cramp — reverts to the
+normal width when the dialog closes.
+
+**Incidental fix caught along the way**: `doAddSave`'s conversion power-factor default
+incorrectly gave Inverter the same 0.95 as TRU (`['TRU','Inverter'].includes(type)?0.95:1.0`);
+§3.3 specifies Inverter should default to 1.0. Consolidated into one shared `convPfDefault()`
+helper (also used by `makeNode()`) so the three call sites can't drift apart again.
+
+Verified thoroughly given the scope: field order/set for every Type × AC/DC × Status
+combination (including the exact TRU field order requested), the shared Volts field's lock
+behavior with and without a parent, the Calc button's cross-derivation for both AC groups and
+conversion pairs, Reset buttons, calc-on-save filling blanks left after a Calc + Reset cycle,
+modal width scaling, header/row column-count parity (18=18 for the widest conversion case), and
+Duplicate/Delete still working unchanged.
+
+---
+
+## 32. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

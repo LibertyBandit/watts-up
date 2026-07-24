@@ -291,11 +291,11 @@
     .data-grid .grid-actions button{padding:.09rem .29rem;font-size:.61rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
     .data-grid .grid-actions button:hover{color:var(--text-primary);background:var(--bg-hover)}
-    .data-grid th.reset-hdr{border-left:none}
-    .data-grid td.grid-reset-cell{padding:.16rem .09rem;text-align:center;border-left:none}
-    .data-grid .grid-reset-cell button{padding:.04rem .25rem;font-size:.65rem;background:transparent;
+    .data-grid th.reset-hdr,.add-table th.reset-hdr{border-left:none}
+    .data-grid td.grid-reset-cell,.add-table td.grid-reset-cell{padding:.16rem .09rem;text-align:center;border-left:none}
+    .data-grid .grid-reset-cell button,.add-table .grid-reset-cell button{padding:.04rem .25rem;font-size:.65rem;background:transparent;
       color:var(--text-muted);border:1px solid var(--border);border-radius:4px;line-height:1.3}
-    .data-grid .grid-reset-cell button:hover{color:var(--accent-red);border-color:var(--accent-red)}
+    .data-grid .grid-reset-cell button:hover,.add-table .grid-reset-cell button:hover{color:var(--accent-red);border-color:var(--accent-red)}
     .hidden{display:none !important}
     .empty-state{padding:2rem;text-align:center;color:var(--text-muted);font-size:.82rem}
     /* ── TABS ── */
@@ -714,6 +714,10 @@
               <label>Item Type</label>
               <select id="af-type"></select>
             </div>
+            <div class="form-group" style="flex:0 0 70px">
+              <label>Volts</label>
+              <input id="af-voltage" type="text" inputmode="decimal" placeholder="e.g. 28">
+            </div>
             <div class="form-group" style="flex:0 0 90px">
               <label>AC / DC</label>
               <select id="af-acdc"><option value="dc">DC</option><option value="ac">AC</option></select>
@@ -968,7 +972,7 @@ function makeNode(type,parentId,overrides={}) {
   const node={id:uid(),type,description:'',refDes:'',status:'existing',parentId,convRole:null,
     voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],childIds:[],_netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
   if (hasCap(type)) {node.capacity=null;node.existingLoad=mkPow(0,0,0,0,1);node.netChangeOverride=null;}
-  if (isConv(type)) {node.efficiency=0.85;node.convPf=(type==='TRU'?0.95:1.0);}
+  if (isConv(type)) {node.efficiency=0.85;node.convPf=convPfDefault(type);}
   if (isLoad(type)) {node.loadValue=mkPow();}
   return Object.assign(node,overrides);
 }
@@ -2505,6 +2509,7 @@ function closeModal() {
   document.getElementById('af-acdc').disabled=false;
   document.getElementById('btn-duplicate').style.display='none';
   document.getElementById('btn-calculate').style.display='none';
+  document.getElementById('modal').style.width='';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
 }
@@ -3042,47 +3047,77 @@ function doEditSave() {
 let afRows=[],afRowCtr=0,afRowData={},afLastType='Generator',afLastStatus='existing';
 let efClearedSections=new Set();
 
-function afCols(type,acDc) {
+// Field set matches whichever grid this status corresponds to (Existing/Removed for
+// existing|removed, New for new), same column-group order and unit-of-measure order the
+// grids use (A, VA, W, VAR, pf) — inapplicable fields are omitted entirely (hidden) rather
+// than shown disabled, since every row here is a distinct new item, not a shared form.
+// `group` tags a field's column-group for the per-row Calc button (AC groups with
+// W/VAR/pf) and Reset buttons (every group, matching the grids' one-reset-per-group).
+function afCols(type,acDc,status) {
   const cols=[
     {key:'description',label:'Description',itype:'text',ph:'e.g. Main Bus',w:'140px'},
     {key:'refDes',     label:'Ref Des',     itype:'text',ph:'optional',    w:'65px'},
-    {key:'voltage',    label:'Volts',       itype:'text',ph:'e.g. 28',    w:'55px'},
   ];
   if (isConv(type)) {
     const inAcDc=CONV_IN_ACDC[type]||'ac';const outAcDc=CONV_OUT_ACDC[type]||'dc';
     const inU=inAcDc==='ac'?'VA':'W';const outU=outAcDc==='ac'?'VA':'W';
-    cols.push({key:'efficiency', label:'Eff.',              itype:'text',ph:'0.85',  w:'55px',def:'0.85'});
-    cols.push({key:'outVoltage', label:'OUT Volts',          itype:'text',ph:'e.g. 28',w:'65px'});
-    cols.push({key:'inputCap',   label:`IN Cap (${inU})`,   itype:'text',ph:'opt.', w:'80px'});
-    cols.push({key:'outputCap',  label:`OUT Cap (${outU})`, itype:'text',ph:'auto', w:'80px'});
-    cols.push({key:'inputLoad',  label:`IN Load (${inU})`,  itype:'text',ph:'0',    w:'80px',def:'0'});
-    cols.push({key:'outputLoad', label:`OUT Load (${outU})`,itype:'text',ph:'auto', w:'80px'});
+    cols.push({key:'efficiency', label:'Eff.',      itype:'text',ph:'0.85',  w:'55px',def:'0.85'});
+    cols.push({key:'outVoltage', label:'OUT Volts', itype:'text',ph:'e.g. 28',w:'65px'});
+    cols.push({key:'inCap_a',   label:'IN Cap (A)',      itype:'text',ph:'opt.',w:'65px',group:'inCap',  calc:'conv'});
+    cols.push({key:'inCap_vaw', label:`IN Cap (${inU})`, itype:'text',ph:'opt.',w:'70px',group:'inCap',  calc:'conv'});
+    cols.push({key:'inLd_a',    label:'IN Load (A)',     itype:'text',ph:'0',   w:'65px',group:'inLoad', calc:'conv'});
+    cols.push({key:'inLd_vaw',  label:`IN Load (${inU})`,itype:'text',ph:'0',   w:'70px',group:'inLoad', calc:'conv'});
+    cols.push({key:'outCap_a',  label:'OUT Cap (A)',      itype:'text',ph:'auto',w:'65px',group:'outCap', calc:'conv'});
+    cols.push({key:'outCap_vaw',label:`OUT Cap (${outU})`,itype:'text',ph:'auto',w:'70px',group:'outCap', calc:'conv'});
+    cols.push({key:'outLd_a',   label:'OUT Load (A)',     itype:'text',ph:'auto',w:'65px',group:'outLoad',calc:'conv'});
+    cols.push({key:'outLd_vaw', label:`OUT Load (${outU})`,itype:'text',ph:'auto',w:'70px',group:'outLoad',calc:'conv'});
   } else if (isLoad(type)) {
     if (acDc==='ac') {
-      cols.push({key:'load_va', label:'Load (VA)',  itype:'text',ph:'e.g. 1000',w:'80px'});
-      cols.push({key:'load_w',  label:'Load (W)',   itype:'text',ph:'e.g. 800', w:'80px'});
-      cols.push({key:'load_var',label:'Load (VAR)', itype:'text',ph:'opt.',     w:'75px'});
-      cols.push({key:'load_pf', label:'Load (pf)',  itype:'text',ph:'opt.',     w:'65px'});
+      cols.push({key:'load_a',  label:'Load (A)',  itype:'text',ph:'e.g. 5',   w:'65px',group:'load',calc:'ac'});
+      cols.push({key:'load_va', label:'Load (VA)', itype:'text',ph:'e.g. 1000',w:'75px',group:'load',calc:'ac'});
+      cols.push({key:'load_w',  label:'Load (W)',  itype:'text',ph:'e.g. 800', w:'75px',group:'load',calc:'ac'});
+      cols.push({key:'load_var',label:'Load (VAR)',itype:'text',ph:'opt.',     w:'70px',group:'load',calc:'ac'});
+      cols.push({key:'load_pf', label:'Load (pf)', itype:'text',ph:'opt.',     w:'60px',group:'load',calc:'ac'});
     } else {
-      cols.push({key:'load_a',label:'Load (A)',itype:'text',ph:'e.g. 5',  w:'80px'});
-      cols.push({key:'load_w',label:'Load (W)',itype:'text',ph:'e.g. 140',w:'80px'});
+      cols.push({key:'load_a',label:'Load (A)',itype:'text',ph:'e.g. 5',  w:'70px',group:'load'});
+      cols.push({key:'load_w',label:'Load (W)',itype:'text',ph:'e.g. 140',w:'70px',group:'load'});
     }
   } else {
+    // Capacity is always applicable (every non-load type) and is a simple 2-key A/VA(W)
+    // group like the grids' own Capacity column — no VAR/pf, so it keeps auto-deriving
+    // freely (no Calc button needed) but still gets a Reset button for consistency.
     if (acDc==='ac') {
-      cols.push({key:'cap_va',    label:'Cap (VA)',    itype:'text',ph:'opt.',w:'75px'});
-      cols.push({key:'cap_a',     label:'Cap (A)',     itype:'text',ph:'opt.',w:'65px'});
-      cols.push({key:'ex_load_va',label:'Ex Ld (VA)',  itype:'text',ph:'opt.',w:'80px'});
-      cols.push({key:'ex_load_w', label:'Ex Ld (W)',   itype:'text',ph:'opt.',w:'75px'});
-      cols.push({key:'ex_load_var',label:'Ex Ld (VAR)',itype:'text',ph:'opt.',w:'75px'});
-      cols.push({key:'load_va',   label:'Load (VA)',   itype:'text',ph:'blank if children',w:'90px'});
-      cols.push({key:'load_w',    label:'Load (W)',    itype:'text',ph:'blank if children',w:'90px'});
-      cols.push({key:'load_var',  label:'Load (VAR)',  itype:'text',ph:'opt.',w:'75px'});
+      cols.push({key:'cap_a', label:'Cap (A)', itype:'text',ph:'opt.',w:'65px',group:'cap'});
+      cols.push({key:'cap_va',label:'Cap (VA)',itype:'text',ph:'opt.',w:'75px',group:'cap'});
     } else {
-      cols.push({key:'cap_w',     label:'Cap (W)',     itype:'text',ph:'opt.',w:'75px'});
-      cols.push({key:'cap_a',     label:'Cap (A)',     itype:'text',ph:'opt.',w:'65px'});
-      cols.push({key:'ex_load_a', label:'Ex Ld (A)',   itype:'text',ph:'opt.',w:'70px'});
-      cols.push({key:'ex_load_w', label:'Ex Ld (W)',   itype:'text',ph:'opt.',w:'70px'});
-      cols.push({key:'load_w',    label:'Load (W)',    itype:'text',ph:'blank if children',w:'95px'});
+      cols.push({key:'cap_a',label:'Cap (A)',itype:'text',ph:'opt.',w:'65px',group:'cap'});
+      cols.push({key:'cap_w',label:'Cap (W)',itype:'text',ph:'opt.',w:'75px',group:'cap'});
+    }
+    if (status==='existing'||status==='removed') {
+      // Matches the Existing/Removed grid's Existing Load group.
+      if (acDc==='ac') {
+        cols.push({key:'exload_a',  label:'Ex Ld (A)',  itype:'text',ph:'opt.',w:'65px',group:'exload',calc:'ac'});
+        cols.push({key:'exload_va', label:'Ex Ld (VA)', itype:'text',ph:'opt.',w:'75px',group:'exload',calc:'ac'});
+        cols.push({key:'exload_w',  label:'Ex Ld (W)',  itype:'text',ph:'opt.',w:'75px',group:'exload',calc:'ac'});
+        cols.push({key:'exload_var',label:'Ex Ld (VAR)',itype:'text',ph:'opt.',w:'70px',group:'exload',calc:'ac'});
+        cols.push({key:'exload_pf', label:'Ex Ld (pf)', itype:'text',ph:'opt.',w:'60px',group:'exload',calc:'ac'});
+      } else {
+        cols.push({key:'exload_a',label:'Ex Ld (A)',itype:'text',ph:'opt.',w:'70px',group:'exload'});
+        cols.push({key:'exload_w',label:'Ex Ld (W)',itype:'text',ph:'opt.',w:'70px',group:'exload'});
+      }
+    } else {
+      // status==='new': matches the New grid's Net Change override group (every row here
+      // is childless at creation, so it's always eligible — see gridDisplayCells §27.7).
+      if (acDc==='ac') {
+        cols.push({key:'nc_a',  label:'Net Chg (A)',  itype:'text',ph:'auto',w:'70px',group:'nc',calc:'ac'});
+        cols.push({key:'nc_va', label:'Net Chg (VA)', itype:'text',ph:'auto',w:'80px',group:'nc',calc:'ac'});
+        cols.push({key:'nc_w',  label:'Net Chg (W)',  itype:'text',ph:'auto',w:'80px',group:'nc',calc:'ac'});
+        cols.push({key:'nc_var',label:'Net Chg (VAR)',itype:'text',ph:'auto',w:'75px',group:'nc',calc:'ac'});
+        cols.push({key:'nc_pf', label:'Net Chg (pf)', itype:'text',ph:'auto',w:'65px',group:'nc',calc:'ac'});
+      } else {
+        cols.push({key:'nc_a',label:'Net Chg (A)',itype:'text',ph:'auto',w:'75px',group:'nc'});
+        cols.push({key:'nc_w',label:'Net Chg (W)',itype:'text',ph:'auto',w:'75px',group:'nc'});
+      }
     }
   }
   return cols;
@@ -3096,31 +3131,90 @@ function afCapture() {
   });
 }
 
+// TRU is the only conversion type with a non-unity default power factor (§3.3) — shared here,
+// in makeNode(), and in doAddSave() so the three can't drift apart the way doAddSave's own
+// copy (`['TRU','Inverter'].includes(type)`, incorrectly including Inverter) had.
+function convPfDefault(type){ return type==='TRU'?0.95:1.0; }
+
+function afGroupKeys(cols,group){ return cols.filter(c=>c.group===group).map(c=>c.key); }
+function afIsLastOfGroup(cols,idx){
+  const g=cols[idx].group; if (!g) return false;
+  const next=cols[idx+1];
+  return !next||next.group!==g;
+}
+// Rough width estimate so the modal can widen to fit however many columns this type/status
+// combination needs (Round 4 request) — one reset-button column per group, a row-number
+// column, and an actions column (Calc/Dup/Del), on top of the fields' own declared widths.
+function afComputeModalWidth(cols){
+  const groups=new Set(cols.map(c=>c.group).filter(Boolean));
+  const colsPx=cols.reduce((sum,c)=>sum+(parseInt(c.w)||70),0);
+  const overhead=34+groups.size*34+150+cols.length*4+40;
+  return Math.max(720,Math.min(1400,colsPx+overhead));
+}
+function afCalcRow(ri){
+  const wrap=document.getElementById('af-table-wrap');
+  const type=document.getElementById('af-type').value;
+  const acDc=document.getElementById('af-acdc').value||'dc';
+  const status=document.getElementById('af-status').value;
+  const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
+  const getV=key=>{const el=g(key);return el?parseF(el.value):null;};
+  const setV=(key,val)=>{const el=g(key);if(el&&val!=null&&!isNaN(val))el.value=fmtPField(val);};
+  const v=parseF(document.getElementById('af-voltage').value)||0;
+  if (isConv(type)) {
+    const inAcDc=CONV_IN_ACDC[type]||'ac',outAcDc=CONV_OUT_ACDC[type]||'dc';
+    const eff=Math.max(0.001,Math.min(1,+g('efficiency')?.value||0.85));
+    const cpf=convPfDefault(type);
+    const outV=getV('outVoltage')??v;
+    const capRow=calcConvPairRow(getV('inCap_a'),getV('inCap_vaw'),getV('outCap_a'),getV('outCap_vaw'),inAcDc,outAcDc,v,outV,eff,cpf);
+    setV('inCap_a',capRow.in.a);setV('inCap_vaw',capRow.in.vaw);
+    setV('outCap_a',capRow.out.a);setV('outCap_vaw',capRow.out.vaw);
+    const ldRow=calcConvPairRow(getV('inLd_a'),getV('inLd_vaw'),getV('outLd_a'),getV('outLd_vaw'),inAcDc,outAcDc,v,outV,eff,cpf);
+    setV('inLd_a',ldRow.in.a);setV('inLd_vaw',ldRow.in.vaw);
+    setV('outLd_a',ldRow.out.a);setV('outLd_vaw',ldRow.out.vaw);
+  } else if (acDc==='ac') {
+    const gr=isLoad(type)?'load':(status==='new'?'nc':'exload');
+    const p=k=>`${gr}_${k}`;
+    const result=calcAcPowerGroup({a:getV(p('a')),va:getV(p('va')),w:getV(p('w')),var:getV(p('var')),pf:getV(p('pf'))},v);
+    setV(p('a'),result.a);setV(p('va'),result.va);setV(p('w'),result.w);setV(p('var'),result.var);setV(p('pf'),result.pf);
+  }
+}
+function afResetGroup(ri,keys){
+  const wrap=document.getElementById('af-table-wrap');
+  keys.forEach(k=>{ const el=wrap.querySelector(`input[data-row="${ri}"][data-key="${k}"]`); if (el) el.value=''; });
+  afCapture();
+}
 function afRenderTable() {
   const type=document.getElementById('af-type')?.value;
   const acDc=document.getElementById('af-acdc')?.value||'dc';
+  const status=document.getElementById('af-status')?.value||'existing';
   if (!type) return;
   afCapture();
   const pid=document.getElementById('af-parent').value||null;
   const parentNode=pid?state.nodes[pid]:null;
-  const lockVoltage=!isConv(type)&&!!parentNode;
-  const cols=afCols(type,acDc);
+  // Volts is now a single shared field (one value for every row, since they all share the
+  // same Parent) instead of a per-row column — locked to the parent's voltage whenever a
+  // parent is selected (matches §7.2's rule for both regular and conversion-IN nodes), free
+  // only when adding new root-level items.
+  const voltEl=document.getElementById('af-voltage');
+  if (parentNode) { voltEl.value=fmtPField(parentNode.voltage); voltEl.disabled=true; }
+  else { voltEl.disabled=false; }
+  const cols=afCols(type,acDc,status);
   const wrap=document.getElementById('af-table-wrap');
-  const head='<th class="row-num">#</th>'+cols.map(c=>`<th style="min-width:${c.w||'auto'}">${c.label}</th>`).join('')+'<th></th>';
+  const head='<th class="row-num">#</th>'+cols.map((c,i)=>`<th style="min-width:${c.w||'auto'}">${c.label}</th>`+(afIsLastOfGroup(cols,i)?'<th class="reset-hdr"></th>':'')).join('')+'<th></th>';
   const body=afRows.map((ri,idx)=>{
     const saved=afRowData[ri]||{};
-    const cells=cols.map(c=>{
-      let val=saved[c.key]!==undefined?saved[c.key]:(c.def??'');
-      let extraAttrs='';
-      if (c.key==='voltage'&&lockVoltage) {
-        val=parentNode.voltage??'';
-        extraAttrs=' readonly style="opacity:.6"';
-      }
-      return `<td><input data-row="${ri}" data-key="${c.key}" type="${c.itype||'text'}" value="${esc(String(val))}" placeholder="${esc(c.ph||'')}"${extraAttrs}></td>`;
+    const cells=cols.map((c,i)=>{
+      const val=saved[c.key]!==undefined?saved[c.key]:(c.def??'');
+      const cell=`<td><input data-row="${ri}" data-key="${c.key}" type="${c.itype||'text'}" value="${esc(String(val))}" placeholder="${esc(c.ph||'')}"></td>`;
+      if (!afIsLastOfGroup(cols,i)) return cell;
+      const keys=afGroupKeys(cols,c.group).join(',');
+      return cell+`<td class="grid-reset-cell"><button type="button" class="af-reset-group" data-row="${ri}" data-keys="${keys}" title="Reset this group">&#8635;</button></td>`;
     }).join('');
-    return `<tr><td class="row-num">${idx+1}</td>${cells}<td style="white-space:nowrap"><button class="af-dup btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Duplicate">⧉</button><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
+    const canCalc=cols.some(c=>c.calc);
+    return `<tr><td class="row-num">${idx+1}</td>${cells}<td style="white-space:nowrap">${canCalc?`<button class="af-calc btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>`:''}<button class="af-dup btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Duplicate">⧉</button><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
   }).join('');
   wrap.innerHTML=`<table class="add-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  document.getElementById('modal').style.width=afComputeModalWidth(cols)+'px';
   wrap.querySelectorAll('.af-del').forEach(btn=>btn.addEventListener('click',()=>{afCapture();afRows=afRows.filter(x=>x!==+btn.dataset.row);afRenderTable();}));
   wrap.querySelectorAll('.af-dup').forEach(btn=>btn.addEventListener('click',()=>{
     afCapture();
@@ -3133,55 +3227,8 @@ function afRenderTable() {
     afRows.splice(idx+1,0,newRi);
     afRenderTable();
   }));
-  if (isConv(type)) {
-    afRows.forEach(ri=>{
-      const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
-      const effEl=g('efficiency'),inCap=g('inputCap'),outCap=g('outputCap'),inLd=g('inputLoad'),outLd=g('outputLoad');
-      if (!effEl) return;
-      const getEff=()=>Math.max(0.001,Math.min(1,+effEl.value||0.85));
-      inCap.oninput=()=>{const v=+inCap.value;if(!isNaN(v)&&inCap.value!=='')outCap.value=String(Math.round(v*getEff()*1e6)/1e6);else outCap.value='';};
-      outCap.oninput=()=>{const v=+outCap.value;if(!isNaN(v)&&outCap.value!=='')inCap.value=String(Math.round(v/getEff()*1e6)/1e6);else inCap.value='';};
-      inLd.oninput=()=>{const v=+inLd.value;if(!isNaN(v))outLd.value=String(Math.round(v*getEff()*1e6)/1e6);};
-      outLd.oninput=()=>{const v=+outLd.value;if(!isNaN(v))inLd.value=String(Math.round(v/getEff()*1e6)/1e6);};
-      effEl.oninput=()=>{const v=+effEl.value;if(v>0&&v<=1){if(inCap.value!=='')outCap.value=String(Math.round(+inCap.value*v*1e6)/1e6);if(inLd.value!=='')outLd.value=String(Math.round(+inLd.value*v*1e6)/1e6);}};
-    });
-  } else if (!isLoad(type)&&acDc==='ac') {
-    afRows.forEach(ri=>{
-      const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
-      const getVolt=()=>{const vEl=g('voltage');return parseF(vEl?.value)||0;};
-      const setIfEmpty=(key,val)=>{if(val===null||val===undefined)return;const el=g(key);if(el&&el.value==='')el.value=fmtPField(val);};
-      ['ex_load_va','ex_load_w','ex_load_var'].forEach(k=>{
-        const el=g(k);if(!el)return;
-        el.addEventListener('blur',()=>{
-          const v=getVolt();
-          const va=parseF(g('ex_load_va')?.value),w=parseF(g('ex_load_w')?.value);
-          if(va!==null&&w!==null){setIfEmpty('ex_load_var',Math.sqrt(Math.max(0,va*va-w*w)));}
-        });
-      });
-      ['load_va','load_w','load_var'].forEach(k=>{
-        const el=g(k);if(!el)return;
-        el.addEventListener('blur',()=>{
-          const va=parseF(g('load_va')?.value),w=parseF(g('load_w')?.value);
-          if(va!==null&&w!==null){setIfEmpty('load_var',Math.sqrt(Math.max(0,va*va-w*w)));}
-        });
-      });
-    });
-  } else if (isLoad(type)&&acDc==='ac') {
-    afRows.forEach(ri=>{
-      const g=key=>wrap.querySelector(`input[data-row="${ri}"][data-key="${key}"]`);
-      const setIfEmpty=(key,val)=>{if(val===null||val===undefined)return;const el=g(key);if(el&&el.value==='')el.value=fmtPField(val);};
-      ['load_va','load_w','load_var','load_pf'].forEach(k=>{
-        const el=g(k);if(!el)return;
-        el.addEventListener('blur',()=>{
-          const va=parseF(g('load_va')?.value),w=parseF(g('load_w')?.value);
-          if(va!==null&&w!==null){
-            setIfEmpty('load_var',Math.sqrt(Math.max(0,va*va-w*w)));
-            setIfEmpty('load_pf',va>0?w/va:null);
-          }
-        });
-      });
-    });
-  }
+  wrap.querySelectorAll('.af-calc').forEach(btn=>btn.addEventListener('click',()=>afCalcRow(+btn.dataset.row)));
+  wrap.querySelectorAll('.af-reset-group').forEach(btn=>btn.addEventListener('click',()=>afResetGroup(+btn.dataset.row,btn.dataset.keys.split(','))));
 }
 
 function openAdd(parentId) {
@@ -3227,6 +3274,8 @@ function doAddSave() {
   const type=document.getElementById('af-type').value;
   const status=document.getElementById('af-status').value;
   const acDc=document.getElementById('af-acdc').value||'dc';
+  const voltage=parseF(evalFormula(document.getElementById('af-voltage').value.trim()));
+  const v=voltage||0;
   afCapture();
   if (!afRows.length){alert('Please add at least one item row.');return;}
   afRows.forEach(ri=>{
@@ -3234,30 +3283,32 @@ function doAddSave() {
     const getRaw=key=>(saved[key]!==undefined?String(saved[key]):'').trim();
     const getN=key=>parseF(evalFormula(getRaw(key)));
     const desc=getRaw('description');const refDes=getRaw('refDes');
-    const voltage=getN('voltage');const v=voltage||0;
     if (isConv(type)) {
       const eff=Math.max(0.001,Math.min(1,+getRaw('efficiency')||0.85));
       const inAcDc=CONV_IN_ACDC[type]||'ac';const outAcDc=CONV_OUT_ACDC[type]||'dc';
-      const cpf=['TRU','Inverter'].includes(type)?0.95:1.0;
+      const cpf=convPfDefault(type);
       const outVoltage=getN('outVoltage')??voltage;
       const outV2=outVoltage||0;
-      const inCapV=getN('inputCap');const outCapV=getN('outputCap');
-      const inLdV=getN('inputLoad')??0;const outLdV=getN('outputLoad')??0;
-      const mkC=(val,acdcType,volt)=>{
-        if (val===null) return null;
-        return acdcType==='ac'?{w:null,var:null,va:val,a:volt>0?val/volt:null,pf:null}:{w:val,var:null,va:null,a:volt>0?val/volt:null,pf:null};
+      // Same cross-derivation calcConvPairRow uses for Calc/Save everywhere else — entering
+      // only one side of Cap or Load derives the other via efficiency instead of leaving it
+      // blank/zeroed (Revision 27 Round 2's rule, now applied here too).
+      const mkCap=(side,acdcType)=>{
+        if (side.a==null&&side.vaw==null) return null;
+        return acdcType==='ac'?{w:null,var:null,va:side.vaw,a:side.a,pf:null}:{w:side.vaw,var:null,va:null,a:side.a,pf:null};
       };
-      const mkL=(val,acdcType,volt,pf=1.0)=>{
-        val=val||0;
-        if (acdcType==='ac') return calcAcPowerGroup({va:val,pf},volt);
-        return deriveDcFromA(volt>0?val/volt:0,volt);
+      const mkLd=(side,acdcType,volt,pf=1.0)=>{
+        const vaw=side.vaw??0;
+        if (acdcType==='ac') { const w=vaw*pf,var_=Math.sqrt(Math.max(0,vaw*vaw-w*w)); return {va:vaw,w,var:var_,a:side.a??(volt>0?vaw/volt:null),pf}; }
+        return {w:vaw,a:side.a??(volt>0?vaw/volt:null),va:null,var:null,pf:null};
       };
+      const capRow=calcConvPairRow(getN('inCap_a'),getN('inCap_vaw'),getN('outCap_a'),getN('outCap_vaw'),inAcDc,outAcDc,v,outV2,eff,cpf);
+      const ldRow=calcConvPairRow(getN('inLd_a'),getN('inLd_vaw'),getN('outLd_a'),getN('outLd_vaw'),inAcDc,outAcDc,v,outV2,eff,cpf);
       const inData={type,status,convRole:'in',description:desc+' (IN)',refDes,voltage,acDc:inAcDc,
-        capacity:mkC(inCapV,inAcDc,v),existingLoad:mkL(inLdV,inAcDc,v,inAcDc==='ac'?cpf:1.0),
+        capacity:mkCap(capRow.in,inAcDc),existingLoad:mkLd(ldRow.in,inAcDc,v,inAcDc==='ac'?cpf:1.0),
         efficiency:eff,convPf:cpf,netChangeOverride:null};
       const inId=addNode(pid,inData);
       addNode(inId,{type,status,convRole:'out',description:desc+' (OUT)',refDes,voltage:outVoltage,acDc:outAcDc,
-        capacity:mkC(outCapV,outAcDc,outV2),existingLoad:mkL(outLdV,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null});
+        capacity:mkCap(capRow.out,outAcDc),existingLoad:mkLd(ldRow.out,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null});
     } else if (isLoad(type)) {
       let lv;
       if (acDc==='ac') lv=calcAcPowerGroup({a:getN('load_a'),va:getN('load_va'),w:getN('load_w'),var:getN('load_var'),pf:getN('load_pf')},v);
@@ -3265,14 +3316,21 @@ function doAddSave() {
       addNode(pid,{type,status,description:desc,refDes,voltage,acDc,loadValue:lv});
     } else {
       let cap=null;
-      if (acDc==='ac') {const cva=getN('cap_va'),ca=getN('cap_a');cap=cva!==null?{w:null,var:null,va:cva,a:v>0?cva/v:ca,pf:null}:(ca!==null?{w:null,var:null,va:v>0?ca*v:null,a:ca,pf:null}:null);}
-      else {const cw=getN('cap_w'),ca=getN('cap_a');cap=cw!==null?{w:cw,var:null,va:null,a:v>0?cw/v:ca,pf:null}:(ca!==null?deriveDcFromA(ca,v):null);}
-      let exLd;
-      if (acDc==='ac') exLd=calcAcPowerGroup({a:null,va:getN('ex_load_va'),w:getN('ex_load_w'),var:getN('ex_load_var'),pf:null},v);
-      else exLd=autoDc(getN('ex_load_a'),getN('ex_load_w'),v);
-      let ncOv=null;
-      if (acDc==='ac') {const lva=getN('load_va'),lw=getN('load_w'),lvar=getN('load_var');if (lw!==null) ncOv={w:lw}; else if (lva!==null) ncOv={w:lva};}
-      else {const lw=getN('load_w');if (lw!==null) ncOv={w:lw};}
+      if (acDc==='ac') {const ca=getN('cap_a'),cva=getN('cap_va');cap=cva!==null?{w:null,var:null,va:cva,a:v>0?cva/v:ca,pf:null}:(ca!==null?{w:null,var:null,va:v>0?ca*v:null,a:ca,pf:null}:null);}
+      else {const ca=getN('cap_a'),cw=getN('cap_w');cap=cw!==null?{w:cw,var:null,va:null,a:v>0?cw/v:ca,pf:null}:(ca!==null?deriveDcFromA(ca,v):null);}
+      // Existing Load (existing/removed status) and Net Change override (new status) are
+      // mutually exclusive per row — matches the Existing/Removed and New grids respectively,
+      // which never show both groups on the same row either.
+      let exLd,ncOv;
+      if (status==='new') {
+        exLd=mkPow(0,0,0,0,1);
+        if (acDc==='ac') ncOv=calcAcPowerGroup({a:getN('nc_a'),va:getN('nc_va'),w:getN('nc_w'),var:getN('nc_var'),pf:getN('nc_pf')},v);
+        else ncOv=autoDc(getN('nc_a'),getN('nc_w'),v);
+      } else {
+        if (acDc==='ac') exLd=calcAcPowerGroup({a:getN('exload_a'),va:getN('exload_va'),w:getN('exload_w'),var:getN('exload_var'),pf:getN('exload_pf')},v);
+        else exLd=autoDc(getN('exload_a'),getN('exload_w'),v);
+        ncOv=null;
+      }
       addNode(pid,{type,status,description:desc,refDes,voltage,acDc,capacity:cap,existingLoad:exLd,netChangeOverride:ncOv});
     }
   });
@@ -4224,7 +4282,7 @@ function initEvents() {
   };
   document.getElementById('af-type'  ).addEventListener('change',e=>{afLastType=e.target.value;afRecheck();afRenderTable();});
   document.getElementById('af-acdc'  ).addEventListener('change',afRenderTable);
-  document.getElementById('af-status').addEventListener('change',e=>{afLastStatus=e.target.value;});
+  document.getElementById('af-status').addEventListener('change',e=>{afLastStatus=e.target.value;afRenderTable();});
   document.getElementById('af-add-row').addEventListener('click',()=>{afCapture();afRows.push(++afRowCtr);afRenderTable();});
 
   // Edit-form: auto-clear sibling fields on first keystroke per section per dialog open
