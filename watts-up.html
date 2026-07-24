@@ -819,6 +819,13 @@ const CONV_SET   = new Set(NT.CONVERSION);
 const LOAD_SET   = new Set(NT.LOAD);
 const CONV_IN_ACDC  = { TRU:'ac', Inverter:'dc', Transformer:'ac', 'DC-DC Converter':'dc', 'Frequency Converter':'ac' };
 const CONV_OUT_ACDC = { TRU:'dc', Inverter:'ac', Transformer:'ac', 'DC-DC Converter':'dc', 'Frequency Converter':'ac' };
+// Only TRU is offered for *new* items (2026-07-24) — the other conversion types are rare
+// enough in practice that they're not worth actively supporting right now. Deliberately not
+// removed from NT.CONVERSION/CONV_IN_ACDC/CONV_OUT_ACDC/convPfDefault: those stay fully
+// generic and type-agnostic, so a node of a non-TRU conversion type already present in loaded
+// data (an older save, a JSON import) keeps calculating and exporting correctly — only
+// fillTypeSelect()'s dropdown is filtered. Reversing this is a one-line change here.
+const SELECTABLE_CONVERSION_TYPES = ['TRU'];
 
 function typeGroup(t) { for (const [g,ts] of Object.entries(NT)) if (ts.includes(t)) return g; return null; }
 const isConv = t => CONV_SET.has(t);
@@ -2438,14 +2445,20 @@ function collectEfRefs() {
 // ── MODAL SHARED ─────────────────────────────────────────────────────────────
 let mMode=null, mNode=null, mBlocked=false;
 
-function fillTypeSelect(sel,includeRoot) {
+// `extraType`: include this type in the Conversion group even if it's not normally
+// selectable (SELECTABLE_CONVERSION_TYPES) — used when editing a node that already has a
+// non-TRU conversion type, so opening Edit on it doesn't make its own type vanish from the
+// dropdown. Omit when adding new items; there's nothing existing to preserve.
+function fillTypeSelect(sel,includeRoot,extraType) {
   sel.innerHTML='';
   if (includeRoot) {
     const og=document.createElement('optgroup');og.label='Aircraft';
     const o=document.createElement('option');o.value='Root';o.textContent='Total Aircraft Load';
     og.appendChild(o);sel.appendChild(og);
   }
-  [['Generation',NT.GENERATION],['Conversion',NT.CONVERSION],
+  const convTypes=(extraType&&isConv(extraType)&&!SELECTABLE_CONVERSION_TYPES.includes(extraType))
+    ? [...SELECTABLE_CONVERSION_TYPES,extraType] : SELECTABLE_CONVERSION_TYPES;
+  [['Generation',NT.GENERATION],['Conversion',convTypes],
    ['Distribution',NT.DISTRIBUTION],['Protection',NT.PROTECTION],['Load',NT.LOAD]
   ].forEach(([lbl,types])=>{
     const og=document.createElement('optgroup');og.label=lbl;
@@ -2761,14 +2774,16 @@ function openEdit(nodeId) {
   document.getElementById('ef-parent-group').classList.remove('hidden');
   fillParentSelect('ef-parent',nodeId,n.parentId);
 
-  // Type: include Root option only when no parent (req 4)
+  // Type: include Root option only when no parent (req 4); extraType keeps this node's own
+  // current type selectable even if it's a non-TRU conversion type no longer offered for
+  // new items.
   const ftype=document.getElementById('ef-type');
-  fillTypeSelect(ftype,!n.parentId);
+  fillTypeSelect(ftype,!n.parentId,n.type);
   ftype.value=n.type;ftype.disabled=false;
   document.getElementById('ef-parent').onchange=()=>{
     const cur=ftype.value;
     const pid=document.getElementById('ef-parent').value||null;
-    fillTypeSelect(ftype,!pid);
+    fillTypeSelect(ftype,!pid,n.type);
     if (ftype.querySelector(`option[value="${cur}"]`)) ftype.value=cur;
     else ftype.value=ftype.options[0]?.value||'';
     efReshow();

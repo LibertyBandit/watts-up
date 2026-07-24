@@ -55,6 +55,16 @@ Power conversion input formulas:
 convPf applies to **all** AC conv-item calculations (capacity, existing load, load, net change,
 new load). convPf field is visible in the dialog for TRU, Inverter, and Frequency Converter.
 
+**Only TRU is offered for new items** *(2026-07-24)* — the other four conversion types are rare
+enough in practice that they're no longer actively supported for new item creation. This is a
+dropdown-level filter only (`SELECTABLE_CONVERSION_TYPES`): the table above, the IN/OUT AC-DC
+lookups, `convPfDefault()`, and every conversion calculation remain fully generic and
+type-agnostic — a node of a non-TRU conversion type already present in loaded data (an older
+save, a JSON import) still calculates, renders, and exports correctly, and opening Edit on it
+keeps its own type selectable in the dropdown (it just won't appear when creating a *new*
+item). Restoring a type for new-item use is a one-line change to
+`SELECTABLE_CONVERSION_TYPES`.
+
 ### 3.4 Distribution / Protection
 - Feeder
 - Bus
@@ -1005,7 +1015,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§32).
+enhancement (§33).
 
 ---
 
@@ -1507,7 +1517,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§32).
+multi-interval load analysis still listed under Future Enhancements (§33).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1733,7 +1743,39 @@ Duplicate/Delete still working unchanged.
 
 ---
 
-## 32. Future Enhancements
+## 32. Revision 27 Follow-Up (Round 5) — Non-TRU Conversion Types Hidden from New-Item Creation
+
+*Last updated: 2026-07-24*
+
+Prompted by an unrelated warning-block hit while testing an Inverter in Round 4, which led to
+reconsidering whether the other four conversion types (Inverter, Transformer, DC-DC Converter,
+Frequency Converter) are worth actively supporting at all, given TRU is by far the most common
+in practice. Decided to hide them from new-item creation rather than remove them, since an
+inverter-type device (standby/emergency AC off a DC battery bus) is still a real aircraft
+component that might matter for some fleets — see §3.3 for the resulting behavior.
+
+Investigated the actual code shape before implementing: the conversion-pair machinery
+(`calcConvPairRow`, the Edit modal's conversion-pair section, `doEditSave`/`doAddSave`'s
+conversion branches, `convPfDefault()`) is entirely generic, driven by two small lookup tables
+(`CONV_IN_ACDC`/`CONV_OUT_ACDC`) rather than per-type branches — there was never a distinct
+"Inverter-specific" chunk of code to sequester. This made the right implementation obvious:
+leave `NT.CONVERSION`, the lookup tables, and every calculation untouched (so any non-TRU
+conversion node already present in loaded data keeps working exactly as before), and filter
+only `fillTypeSelect()`'s dropdown-building via a new `SELECTABLE_CONVERSION_TYPES = ['TRU']`
+list. `fillTypeSelect()` gained an optional `extraType` parameter so opening Edit on an existing
+non-TRU conversion node still shows its own type as a selectable (and selected) option — only
+the Add modal, and Edit's dropdown for *other* items, are filtered.
+
+Verified: the Add modal's Conversion optgroup now shows only TRU; the Edit modal's dropdown
+shows only TRU when editing a regular item; a simulated pre-existing Inverter node still shows
+"Inverter" as its own selected option when Edit is opened on it directly; and that same node's
+`isConv()`, `convRole`, `acDc`, `_newLoad` calculation, and the §11 capacity-warning check all
+continue to work identically to before this change. Reverting (making a type selectable again)
+is a one-line addition to `SELECTABLE_CONVERSION_TYPES`.
+
+---
+
+## 33. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
