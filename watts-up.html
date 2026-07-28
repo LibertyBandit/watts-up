@@ -1816,13 +1816,13 @@ function renderLoadAnalysisDetailAlt() {
   // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/
   // Remaining ever go negative (shown as a positive value in parens), matching the existing
   // report's buildRptRow convention exactly.
-  function valueCellsForGroup(groupId,src,cols,activeSet) {
+  function valueCellsForGroup(groupId,src,cols,activeSet,overloaded) {
     return cols.map(col=>{
       if (!activeSet.has(col.k)) return `<td class="rpt-num"></td>`;
       let val=src?src[col.k]:null,isNeg=false;
       if ((groupId==='nc'||groupId==='newload'||groupId==='rem')&&val!=null&&val<0) {isNeg=true;val=Math.abs(val);}
       if (val==null) return `<td class="rpt-num">—</td>`;
-      return rptTd(val,col.isPf||false,isNeg,'',false);
+      return rptTd(val,col.isPf||false,isNeg,overloaded?'rpt-over-val':'',false);
     }).join('');
   }
   // Non-load children use Net Change values; Load children use Load values — per the source
@@ -1854,9 +1854,13 @@ function renderLoadAnalysisDetailAlt() {
     const rows=[];
 
     const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
+    // No "Removed" banner for a Removed-status parent's own row (matches the existing Load
+    // Analysis Detail report, which never labels a subject row this way either — only its
+    // italic styling indicates removed). A New-status parent instead gets "Added" in the
+    // modifier column, since a banner row above the parent didn't fit this transposed layout.
     const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
     const itemAnnot=annotateGroup(n,null); if (itemAnnot) blockNotes.push(...itemAnnot.notes);
-    rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:3px">${pathHtml}${descWrap}</td>${cbCellHtml(n)}<td></td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
+    rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:3px">${pathHtml}${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Added':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
 
     { const a=annotateGroup(n,'cap'); if (a) blockNotes.push(...a.notes);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
@@ -1873,7 +1877,10 @@ function renderLoadAnalysisDetailAlt() {
       const kAnnot=annotateAll(k); if (kAnnot) blockNotes.push(...kAnnot.notes);
       const kDesc=esc((k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:''));
       const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
-      const modifier=k.status==='existing'?'(Net Change)':'';
+      // Load children don't have a Net Change concept of their own (a Load's net change is
+      // always 0 while existing — the modifier would misleadingly label a Load value as a net
+      // change), so this only applies to non-load existing children.
+      const modifier=(k.status==='existing'&&!isLoad(k.type))?'(Net Change)':'';
       rows.push(`<tr style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}<td>${modifier}</td>${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
     });
 
@@ -1882,7 +1889,12 @@ function renderLoadAnalysisDetailAlt() {
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Net Change</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('nc',n._netChange,cols,ncSet)}</tr>`);
     }
     { const a=annotateGroup(n,'newload'); if (a) blockNotes.push(...a.notes);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
+      // Overload warning (new load exceeds capacity) belongs on the New Load row specifically
+      // in this transposed layout — matches the existing report's rpt-over/rpt-warn row tint
+      // plus rpt-over-val cell emphasis, just anchored to this one row instead of the whole item.
+      const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3'); const wn=ws.length>0&&!ov;
+      const rowCls=ov?' class="rpt-over"':wn?' class="rpt-warn"':'';
+      rows.push(`<tr${rowCls} style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet,ov)}</tr>`); }
     { const a=annotateGroup(n,'rem'); if (a) blockNotes.push(...a.notes);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Remaining</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
 

@@ -1892,12 +1892,18 @@ applicable" rather than a literal blank/N/A row.
 
 **Columns:** description (no CB rating inline) → dedicated CB/fuse rating column, shown
 unconditionally for Protection-type rows regardless of whether Amps is a selected value column
-(§1.2.2.2.1) → a modifier column showing "(Net Change)" for existing-status child rows only →
-Notes (present only when at least one node anywhere has a note/ref) → the union of whichever
-unit keys (A/VA/W/VAR/pf) are active for *any* of the six value-groups in Print/Export settings,
-each row populating only the columns its own group has active (`activeKeySet(groupId, cfgSide)`)
-and leaving the rest blank. Verified this union matches the source document's own worked example
-exactly: default AC settings produce VA/W/VAR/pf.
+(§1.2.2.2.1) → a modifier column → Notes (present only when at least one node anywhere has a
+note/ref) → the union of whichever unit keys (A/VA/W/VAR/pf) are active for *any* of the six
+value-groups in Print/Export settings, each row populating only the columns its own group has
+active (`activeKeySet(groupId, cfgSide)`) and leaving the rest blank. Verified this union matches
+the source document's own worked example exactly: default AC settings produce VA/W/VAR/pf.
+
+The modifier column carries two distinct labels, confirmed with the user: "Added" on the table
+subject's own row when the subject's status is `new` (there's no banner row above the subject
+itself in this transposed layout, so this is where that indicator lives instead — see below); and
+"(Net Change)" on an existing-status *non-load* child row only — a Load child never gets this
+label, since a Load's own net change is always 0 while existing and the value actually shown for
+it is a Load value, not a net-change figure, so the label would misdescribe what's displayed.
 
 **Child row values:** non-load children use their own Net Change (`_netChange`); Load children
 use their own Load value (`loadValue`) — applied uniformly regardless of the child's own status,
@@ -1915,24 +1921,29 @@ the same note can be renumbered differently in two different tables if a node ap
 child in its parent's table and as its own table's subject — this matches the existing report's
 established (not new) behavior, not a regression.
 
-**Deliberately out of scope / assumptions made, flagged for the user to weigh in on:**
-- No "Added"/"Removed" banner row above a New/Removed-status *parent's own* row (unlike the
-  existing report, which inserts one) — the source document's row list for this format doesn't
-  describe one, only bold/italic text styling on the Parent Item row itself.
-- The "(Net Change)" modifier is shown for *every* existing-status child row, including Load
-  children (whose displayed value is actually their Load value, not a net-change figure) — the
-  more literal reading of source §1.2.3.2, though arguably the modifier's intent was non-load
-  items specifically. Easy to narrow later if wrong.
-- No overload/warning row highlighting (the existing report's `rpt-over`/`rpt-warn` row tinting)
-  carried over yet — not mentioned in the source request, and there's no single obvious row to
-  anchor it to in this transposed layout (would most naturally belong on the New Load row).
+**No "Removed" indicator on a Removed-status parent's own row anywhere** (not a banner, not in
+the modifier column) — matches the existing Load Analysis Detail report, which likewise never
+labels a Removed subject's own row beyond its italic styling. Confirmed with the user.
+
+**Overload warning highlighting**, added as a same-day follow-up refinement: the New Load row
+gets the existing report's `rpt-over`/`rpt-warn` row tint (from the table subject's own
+`_warnings`, specifically whether `W3` — new load exceeds capacity — is present) plus
+`rpt-over-val` emphasis on that row's own value cells when overloaded. Confirmed with the user
+this is the one row it logically belongs to in this transposed layout, since Capacity/Existing
+Load/Net Change/Remaining aren't themselves what "new load exceeds capacity" is about. Not
+extended to child rows (children only ever get a single collapsed row here, and this wasn't asked
+for) or to any other group row.
 
 Verified live with a seeded DC tree (Existing bus, an Existing/Removed/New child each, a
-grandchild Load under both the Removed and New children) and a seeded AC bus: every row's values,
-the CB rating column, the per-status modifier/styling, per-group column activation on both AC and
-DC defaults, group-scoped note placement and footnote numbering, and the empty-state message all
-checked out against hand-computed expected values. Confirmed no regression in the existing Load
-Analysis Detail / Load Analysis Summary / Power Distribution Summary tabs.
+grandchild Load under both the Removed and New children; a separate New-status overloaded bus
+with an existing non-load child, an existing Load child, and a new Load child pushing New Load
+over capacity) and a seeded AC bus: every row's values, the CB rating column, the per-status
+modifier/styling (including the Load-vs-non-load "(Net Change)" distinction and the New-status
+"Added" modifier), the New Load row's overload tint and cell emphasis, per-group column activation
+on both AC and DC defaults, group-scoped note placement and footnote numbering, and the
+empty-state message all checked out against hand-computed expected values. Confirmed no
+regression in the existing Load Analysis Detail / Load Analysis Summary / Power Distribution
+Summary tabs.
 
 ## 36. Future Enhancements
 
