@@ -406,6 +406,8 @@ Parent pre-set to "No Parent (New Root)".
 | User adds children to a Load or Removed item | Warn |
 | User adds children after manually entering a net change override | Warn |
 | Non-load Removed item | Existing load entered as negative net change |
+| Non-load Existing or Removed item has no existing load entered (existing load reads as zero — the data model can't distinguish "never entered" from an explicit 0, so 0 is treated as blank, same convention as the blank-capacity case above) | Warn |
+| An Existing-status item's immediate Existing/Removed children's existing loads (existing load for non-load children, load value for Load children) sum to more than the item's own existing load | Warn |
 
 ---
 
@@ -1775,7 +1777,42 @@ is a one-line addition to `SELECTABLE_CONVERSION_TYPES`.
 
 ---
 
-## 33. Future Enhancements
+## 33. Revision 33 (Phase 1) — Existing Load and Child-Sum Warnings
+
+*Last updated: 2026-07-27*
+
+First phase of a larger request (an alternate, row-oriented Load Analysis Detail format, plus
+group-scoped notes) — see Future Enhancements (§34) for the remaining phases. This phase adds
+two warnings to §11's table, referenced there as the "existing load not entered" and "child sum
+exceeds parent" rows.
+
+The "existing load not entered" warning (2.1 in the source request) could not be implemented as
+literally specified: `calcAcPowerGroup`/`autoDc`, the functions that populate `existingLoad` from
+the Edit modal, deliberately collapse an all-blank entry to an explicit zero rather than leaving
+it `null` — there is no stored "never entered" state to distinguish from a genuine zero. Resolved
+by treating an existing-load reading of exactly zero as the blank signal, for non-load Existing
+or Removed status items — the same convention already used for the blank-capacity/W3 check.
+Confirmed with the user before implementing.
+
+The child-sum warning (2.2) required `warnNode()` to gain access to the node map (it previously
+only ever inspected the node passed to it), since it needs to walk immediate children via the
+existing `children(id, nodes)` helper. Only one call site exists (`recalc()`), updated to pass
+`state.nodes`. For an Existing-status item, sums each immediate Existing/Removed child's
+contribution — `existingLoad` for non-load children, `loadValue` for Load children — and warns if
+that sum exceeds the item's own `existingLoad`.
+
+Both warnings surface through the existing generic warning plumbing (`allWarnings()`,
+`renderWarnings()`, the Print Report/Word warnings list) with no changes needed there — they
+were already message-list-agnostic to warning code.
+
+Verified live: created an Existing-status Bus with no existing load entered → W4 fired; gave it
+an explicit existing load → W4 cleared; added two Existing-status child breakers whose existing
+loads summed to more than the bus's own existing load → W5 fired alongside the (separately
+triggered, expected) W3 overload warning from the test setup's unset capacity.
+
+---
+
+## 34. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

@@ -1090,7 +1090,7 @@ function calcNC(node,nodes) {
   return deriveDcFromA(sumA,v);
 }
 
-function warnNode(node) {
+function warnNode(node,nodes) {
   const w=[];
   if (isLoad(node.type)) {
     const lv=node.loadValue?.w;
@@ -1110,6 +1110,28 @@ function warnNode(node) {
     const capV=(capVRaw===null||capVRaw===undefined)?0:capVRaw;
     if (nlV!==null&&nlV!==undefined&&nlV>capV)
       w.push({code:'W3',message:`Overloaded: new load exceeds capacity — "${esc(node.description)}".`});
+    // Existing Load fields collapse blank entry to an explicit zero on save (calcAcPowerGroup/
+    // autoDc), so there's no stored "never entered" state to distinguish from a real zero —
+    // zero is treated as the blank signal here, same convention as the capacity check above.
+    if ((node.status==='existing'||node.status==='removed')) {
+      const elV=node.acDc==='ac'?node.existingLoad?.va:node.existingLoad?.w;
+      if (elV===null||elV===undefined||elV===0)
+        w.push({code:'W4',message:`Existing load not entered — "${esc(node.description)}".`});
+    }
+  }
+  if (hasCap(node.type)&&node.status==='existing'&&nodes) {
+    const v=node.voltage||0;
+    let sum=0;
+    children(node.id,nodes).forEach(c=>{
+      if (c.status!=='existing'&&c.status!=='removed') return;
+      const cv=isLoad(c.type)?(c.acDc==='ac'?c.loadValue?.va:c.loadValue?.w)
+                             :(c.acDc==='ac'?c.existingLoad?.va:c.existingLoad?.w);
+      sum+=cv||0;
+    });
+    const ownV=node.acDc==='ac'?node.existingLoad?.va:node.existingLoad?.w;
+    const ownExisting=ownV||0;
+    if (sum>ownExisting+1e-6)
+      w.push({code:'W5',message:`Children's existing/removed load exceeds this item's existing load — "${esc(node.description)}".`});
   }
   return w;
 }
@@ -1124,7 +1146,7 @@ function recalc() {
       n._newLoad=addPow(n.existingLoad||mkPow(0,0,0,0,1),n._netChange,n.acDc,v);
       n._remainingCapacity=n.capacity?subPow(n.capacity,n._newLoad,n.acDc,v):null;
     } else {n._newLoad=null;n._remainingCapacity=null;}
-    n._warnings=warnNode(n);
+    n._warnings=warnNode(n,state.nodes);
   });
 }
 
