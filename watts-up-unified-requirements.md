@@ -1025,7 +1025,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§33).
+enhancement (§36).
 
 ---
 
@@ -1527,7 +1527,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§33).
+multi-interval load analysis still listed under Future Enhancements (§36).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1790,9 +1790,9 @@ is a one-line addition to `SELECTABLE_CONVERSION_TYPES`.
 *Last updated: 2026-07-27*
 
 First phase of a larger request (an alternate, row-oriented Load Analysis Detail format, plus
-group-scoped notes) — see §34 for Phase 2 (group-scoped notes) and Future Enhancements (§35) for
-the remaining Phase 3 (the Alternate report itself). This phase adds two warnings to §11's table,
-referenced there as the "existing load not entered" and "child sum
+group-scoped notes) — see §34 for Phase 2 (group-scoped notes) and §35 for Phase 3 (the Alternate
+report itself). This phase adds two warnings to §11's table, referenced there as the "existing
+load not entered" and "child sum
 exceeds parent" rows.
 
 The "existing load not entered" warning (2.1 in the source request) could not be implemented as
@@ -1825,9 +1825,9 @@ triggered, expected) W3 overload warning from the test setup's unset capacity.
 
 *Last updated: 2026-07-27*
 
-Second phase of the Revision 33 request (see §33 for Phase 1, and Future Enhancements/§35 for the
-remaining Phase 3 — the Alternate Load Analysis Detail report itself, which will consume this
-phase's group scoping for its own Notes column).
+Second phase of the Revision 33 request (see §33 for Phase 1, and §35 for Phase 3 — the Alternate
+Load Analysis Detail report itself, which consumes this phase's group scoping for its own Notes
+column).
 
 **Data model:** `rowNotes` entries changed from bare strings to `{text, group}`; `rowRefs` entries
 gained a `group` field alongside the existing `key`/`comment`. `group` is `null` (the item itself)
@@ -1869,7 +1869,72 @@ Load/Remaining) for a New-status Bus; a note saved with `group:'nc'` persists co
 surfaces under the item's own row via `buildAnnotationMap()`; a simulated legacy save (bare-string
 notes, ref missing `group`) migrates correctly via `migrateLegacy()`.
 
-## 35. Future Enhancements
+## 35. Revision 33 (Phase 3) — Analysis Detail – Alternate Report
+
+*Last updated: 2026-07-27*
+
+Final phase of the Revision 33 request (§33 Phase 1: warnings; §34 Phase 2: group-scoped notes).
+Adds a new RH sub-tab, "Analysis Detail – Alternate" (`rh-subtab-ladalt`/`ladalt-container`,
+`renderLoadAnalysisDetailAlt()`), alongside the existing Load Analysis Detail tab rather than
+replacing it — screen-only for now, not wired into Print Report or Word export, confirmed with
+the user upfront.
+
+**Shape:** one table per eligible parent (same eligibility as the existing report: non-Load,
+not a Conversion-IN node, has children), transposing that report's column-groups into rows:
+Parent Item → CAPACITY → EXISTING LOAD (existing-status parent only) → immediate children
+(existing first, then an italic "Removed" divider + removed children, then a bold "Added"
+divider + new children) → Net Change (existing-status parent only) → New Load → Remaining.
+"Not applicable for new items" (source §1.2.1.2.3.1/.2.5.1) is implemented as: skip the Existing
+Load and Net Change rows entirely when the parent's own status is `new` — a new-status parent's
+Existing Load is always 0 by construction, which would make Net Change and New Load identical
+and the Existing Load row a row of zeros, so skipping both is a simplification of "not
+applicable" rather than a literal blank/N/A row.
+
+**Columns:** description (no CB rating inline) → dedicated CB/fuse rating column, shown
+unconditionally for Protection-type rows regardless of whether Amps is a selected value column
+(§1.2.2.2.1) → a modifier column showing "(Net Change)" for existing-status child rows only →
+Notes (present only when at least one node anywhere has a note/ref) → the union of whichever
+unit keys (A/VA/W/VAR/pf) are active for *any* of the six value-groups in Print/Export settings,
+each row populating only the columns its own group has active (`activeKeySet(groupId, cfgSide)`)
+and leaving the rest blank. Verified this union matches the source document's own worked example
+exactly: default AC settings produce VA/W/VAR/pf.
+
+**Child row values:** non-load children use their own Net Change (`_netChange`); Load children
+use their own Load value (`loadValue`) — applied uniformly regardless of the child's own status,
+per source §1.2.5.2/.2.5.3. Removed values render negative, in parens. Font size 1pt smaller than
+parent/group rows (7.5pt vs 8.5pt); indented one level deeper than the CAPACITY/EXISTING LOAD
+labels.
+
+**Notes (built on §34's group scoping):** the table subject's own notes/refs are split out by
+`group` across its own rows — item-level (`group:null`) on the Parent Item row, `cap`-scoped on
+the CAPACITY row, and so on. A child's notes all attach to its single collapsed row regardless of
+`group` — a child only ever gets one row in someone else's table (it gets its own full per-group
+breakdown only in its *own* table, if it's independently eligible). Local note/reference
+numbering restarts per this report, same convention as the existing Load Analysis Detail report;
+the same note can be renumbered differently in two different tables if a node appears both as a
+child in its parent's table and as its own table's subject — this matches the existing report's
+established (not new) behavior, not a regression.
+
+**Deliberately out of scope / assumptions made, flagged for the user to weigh in on:**
+- No "Added"/"Removed" banner row above a New/Removed-status *parent's own* row (unlike the
+  existing report, which inserts one) — the source document's row list for this format doesn't
+  describe one, only bold/italic text styling on the Parent Item row itself.
+- The "(Net Change)" modifier is shown for *every* existing-status child row, including Load
+  children (whose displayed value is actually their Load value, not a net-change figure) — the
+  more literal reading of source §1.2.3.2, though arguably the modifier's intent was non-load
+  items specifically. Easy to narrow later if wrong.
+- No overload/warning row highlighting (the existing report's `rpt-over`/`rpt-warn` row tinting)
+  carried over yet — not mentioned in the source request, and there's no single obvious row to
+  anchor it to in this transposed layout (would most naturally belong on the New Load row).
+
+Verified live with a seeded DC tree (Existing bus, an Existing/Removed/New child each, a
+grandchild Load under both the Removed and New children) and a seeded AC bus: every row's values,
+the CB rating column, the per-status modifier/styling, per-group column activation on both AC and
+DC defaults, group-scoped note placement and footnote numbering, and the empty-state message all
+checked out against hand-computed expected values. Confirmed no regression in the existing Load
+Analysis Detail / Load Analysis Summary / Power Distribution Summary tabs.
+
+## 36. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
