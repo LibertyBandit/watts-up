@@ -341,6 +341,7 @@
     .nr-note-item{display:flex;gap:.35rem;align-items:center}
     .nr-note-item input{flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit}
     .nr-note-item input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .nr-note-item select{flex-shrink:0;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.2rem .3rem;font-size:.76rem;font-family:inherit}
     .nr-ref-item{padding:.28rem .45rem;border-radius:4px;border:1px solid var(--border);background:var(--bg-primary);display:flex;flex-direction:column;gap:.2rem}
     .nr-ref-item>label{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--text-secondary);cursor:pointer}
     .nr-ref-item>label input[type=checkbox]{cursor:pointer;flex-shrink:0}
@@ -348,6 +349,7 @@
     .nr-ref-comment span{font-size:.72rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
     .nr-ref-comment input{flex:1;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.18rem .4rem;font-size:.76rem;font-family:inherit}
     .nr-ref-comment input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .nr-ref-comment select{flex-shrink:0;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.16rem .3rem;font-size:.72rem;font-family:inherit}
     .nr-empty-hint{font-size:.76rem;color:var(--text-muted);font-style:italic;padding:.15rem 0}
     /* ── PRINT: NOTES ADDITIONS ── */
     @media print{
@@ -1027,7 +1029,13 @@ function migrateLegacy(p) {
   }
   Object.values(p.nodes||{}).forEach(n=>{
     if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
+    // Revision 33: rowNotes entries gained an optional `group` (which value-group a note is
+    // scoped to — null means the item itself). Old saves store bare strings; migrate in place
+    // so every entry has the {text,group} shape, defaulting group to null (item itself) per the
+    // documented backward-compatibility rule.
+    n.rowNotes=n.rowNotes.map(o=>typeof o==='string'?{text:o,group:null}:{text:o.text||'',group:o.group||null});
     if (!Array.isArray(n.rowRefs))  n.rowRefs=[];
+    n.rowRefs=n.rowRefs.map(r=>({key:r.key,comment:r.comment||'',group:r.group||null}));
     if (!n.acDc) n.acDc='dc';
     if (n.voltage===undefined) n.voltage=null;
     if (isConv(n.type)&&n.convPf===undefined) n.convPf=(n.type==='TRU'?0.95:1.0);
@@ -1602,12 +1610,15 @@ function renderLoadAnalysisDetail() {
   const refKeyToNum={},refKeyToDocNo={};
   refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
   let noteCounter=0;
+  // Group-scoped notes (Revision 33) still all attach to the item's own row here, for
+  // compatibility with this report's existing layout — only the new Alternate report splits
+  // notes out by group.
   function annotateNode(n) {
-    const rn=(n.rowNotes||[]).filter(t=>t.trim());
+    const rn=(n.rowNotes||[]).filter(o=>o.text.trim());
     const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
     if (!rn.length&&!rr.length) return null;
     const nums=[]; const notes=[];
-    rn.forEach(text=>{const num=++noteCounter;notes.push({num,text});nums.push(num);});
+    rn.forEach(({text})=>{const num=++noteCounter;notes.push({num,text});nums.push(num);});
     rr.forEach(r=>{
       const refNum=refKeyToNum[r.key],docNo=refKeyToDocNo[r.key],comment=(r.comment||'').trim();
       const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
@@ -1615,7 +1626,7 @@ function renderLoadAnalysisDetail() {
     });
     return {marker:nums.join(','),notes};
   }
-  const hasAnyAnnot=Object.values(nodes).some(n=>(n.rowNotes||[]).some(t=>t.trim())||(n.rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined));
+  const hasAnyAnnot=Object.values(nodes).some(n=>(n.rowNotes||[]).some(o=>o.text.trim())||(n.rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined));
 
   const allOrdered=preOrder(state.rootIds,nodes);
   function eligibleIds(acDc) {
@@ -2396,28 +2407,43 @@ function updateSaveEl() {
 }
 function renderAll(){renderDocPanel();renderTree();renderTable();renderPowerDistSummary();renderLoadAnalysisDetail();renderExRemGrid();renderNewGrid();renderWarnings();updateSaveEl();}
 // ── NOTES & REFS MODAL HELPERS ───────────────────────────────────────────────
+// Revision 33: notes/refs can optionally be scoped to a specific value-group instead of the
+// item itself (null = item itself, the backward-compatible default). Legal groups depend on the
+// node's type/status — Load items and Removed-status items are restricted to item-only, since
+// they don't have the Existing Load/Net Change distinction the other groups represent.
+const NOTE_GROUP_LABELS={cap:'Capacity',exload:'Existing Load',nc:'Net Change',newload:'New Load',rem:'Remaining'};
+function noteGroupsFor(node) {
+  if (isLoad(node.type)||node.status==='removed') return [];
+  if (node.status==='new') return ['cap','newload','rem'];
+  return ['cap','exload','nc','newload','rem'];
+}
 function renderEfNotesRefs(n) {
   const notesEl=document.getElementById('ef-row-notes');
   const refsEl=document.getElementById('ef-row-refs');
   if (!notesEl||!refsEl) return;
+  const groups=noteGroupsFor(n);
+  const groupSelectHtml=(selected)=>groups.length?`<select data-group title="Applies to"><option value="">Item</option>${groups.map(g=>`<option value="${g}"${g===selected?' selected':''}>${NOTE_GROUP_LABELS[g]}</option>`).join('')}</select>`:'';
 
   // Row Notes — render from live array stored on the DOM element
-  notesEl._data=(n.rowNotes||[]).slice();
+  notesEl._data=(n.rowNotes||[]).map(o=>({text:o.text||'',group:o.group||null}));
   function redrawNotes() {
     notesEl.innerHTML='';
-    notesEl._data.forEach((txt,i)=>{
+    notesEl._data.forEach((entry,i)=>{
       const div=document.createElement('div');div.className='nr-note-item';
-      div.innerHTML=`<input type="text" value="${esc(txt)}" placeholder="Note text">
+      div.innerHTML=`<input type="text" value="${esc(entry.text)}" placeholder="Note text">
+        ${groupSelectHtml(entry.group)}
         <button type="button" class="btn-node" style="color:var(--accent-red);padding:.12rem .38rem">✕</button>`;
-      div.querySelector('input').addEventListener('input',e=>{notesEl._data[i]=e.target.value;});
+      div.querySelector('input').addEventListener('input',e=>{notesEl._data[i].text=e.target.value;});
+      const sel=div.querySelector('select[data-group]');
+      if (sel) sel.addEventListener('change',e=>{notesEl._data[i].group=e.target.value||null;});
       div.querySelector('button').addEventListener('click',()=>{notesEl._data.splice(i,1);redrawNotes();});
       notesEl.appendChild(div);
     });
   }
   redrawNotes();
   document.getElementById('ef-add-note').onclick=()=>{
-    notesEl._data.push('');redrawNotes();
-    const inputs=notesEl.querySelectorAll('input');
+    notesEl._data.push({text:'',group:null});redrawNotes();
+    const inputs=notesEl.querySelectorAll('input[type=text]');
     if(inputs.length)inputs[inputs.length-1].focus();
   };
 
@@ -2433,6 +2459,7 @@ function renderEfNotesRefs(n) {
     const match=existing.find(r=>r.key===ref.key);
     const checked=!!match;
     const comment=match?.comment||'';
+    const group=match?.group||null;
     const div=document.createElement('div');div.className='nr-ref-item';
     const shortTitle=(ref.title||'').length>55?(ref.title||'').slice(0,55)+'…':(ref.title||'');
     div.innerHTML=`<label>
@@ -2442,6 +2469,7 @@ function renderEfNotesRefs(n) {
       <div class="nr-ref-comment"${checked?'':' style="display:none"'}>
         <span>Comment:</span>
         <input type="text" value="${esc(comment)}" placeholder="Optional comment for this citation">
+        ${groupSelectHtml(group)}
       </div>`;
     const chk=div.querySelector('input[type=checkbox]');
     const commentRow=div.querySelector('.nr-ref-comment');
@@ -2451,15 +2479,22 @@ function renderEfNotesRefs(n) {
 }
 
 function collectEfNotes() {
-  return Array.from(document.querySelectorAll('#ef-row-notes .nr-note-item input'))
-    .map(el=>el.value.trim()).filter(Boolean);
+  return Array.from(document.querySelectorAll('#ef-row-notes .nr-note-item'))
+    .map(div=>{
+      const text=div.querySelector('input[type=text]').value.trim();
+      const sel=div.querySelector('select[data-group]');
+      return {text,group:(sel&&sel.value)?sel.value:null};
+    })
+    .filter(o=>o.text);
 }
 
 function collectEfRefs() {
   const result=[];
   document.querySelectorAll('#ef-row-refs input[type=checkbox]:checked').forEach(chk=>{
-    const commentInp=chk.closest('.nr-ref-item')?.querySelector('.nr-ref-comment input');
-    result.push({key:chk.dataset.refkey,comment:commentInp?.value||''});
+    const item=chk.closest('.nr-ref-item');
+    const commentInp=item?.querySelector('.nr-ref-comment input[type=text]');
+    const groupSel=item?.querySelector('select[data-group]');
+    result.push({key:chk.dataset.refkey,comment:commentInp?.value||'',group:(groupSel&&groupSel.value)?groupSel.value:null});
   });
   return result;
 }
@@ -3076,6 +3111,17 @@ function doEditSave() {
   }
   data.rowNotes=collectEfNotes();
   data.rowRefs=collectEfRefs();
+  // The group picker's options reflect whatever Status/Type the modal had when it was opened —
+  // if the user changes Status or Type in this same edit before saving, a previously-picked
+  // group could now be illegal for the item being saved (e.g. an Existing-only "Net Change"
+  // pick, saved after switching Status to New). Clamp against the final type/status here as a
+  // correctness backstop, rather than trying to keep every group <select> live-in-sync with
+  // every Status/Type change handler.
+  {
+    const allowedGroups=new Set(noteGroupsFor({type:data.type,status:data.status}));
+    data.rowNotes=data.rowNotes.map(o=>allowedGroups.has(o.group)?o:{...o,group:null});
+    data.rowRefs=data.rowRefs.map(r=>allowedGroups.has(r.group)?r:{...r,group:null});
+  }
   updateNode(mNode,data);
   closeModal();
 }
@@ -3601,12 +3647,15 @@ function buildAnnotationMap() {
   const notesList=[];  // [{num, text}] — row notes and ref citations unified
   preOrder(state.rootIds,state.nodes).forEach(id=>{
     const n=state.nodes[id];if(!n)return;
-    const rn=(n.rowNotes||[]).filter(t=>t.trim());
+    // Group-scoped notes (Revision 33) still all attach to the item's own row here — Print
+    // Report and Word export keep their existing per-item annotation behavior regardless of
+    // which value-group a note is scoped to.
+    const rn=(n.rowNotes||[]).filter(o=>o.text.trim());
     const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
     if(!rn.length&&!rr.length)return;
     const nums=[];
     // Plain row notes
-    rn.forEach(text=>{const num=++noteCounter;notesList.push({num,text});nums.push(num);});
+    rn.forEach(({text})=>{const num=++noteCounter;notesList.push({num,text});nums.push(num);});
     // Reference citations merged in as numbered notes
     rr.forEach(r=>{
       const refNum=refKeyToNum[r.key];

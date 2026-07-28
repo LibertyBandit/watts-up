@@ -563,10 +563,15 @@ state to display.
 ### 14.3 New per-node fields
 
 Added to every node:
-- `rowNotes` — ordered array of strings (0–N short notes tied to this row)
-- `rowRefs` — ordered array of `{ key: "<uuid>", comment: "<string>" }` objects
+- `rowNotes` — ordered array of `{ text: "<string>", group: "<group id>"|null }` objects (0–N
+  short notes tied to this row). `group` is `null` when the note is scoped to the item itself,
+  or one of `cap`/`exload`/`nc`/`newload`/`rem` when scoped to a specific value-group (Revision
+  33 Phase 2, §34 — see there for the legal-group rules and where group scoping is consumed).
+- `rowRefs` — ordered array of `{ key: "<uuid>", comment: "<string>", group: "<group id>"|null }`
+  objects
   - `key` references an entry in `meta.references`
   - `comment` is optional; blank = no comment
+  - `group` follows the same rules as `rowNotes.group` (Revision 33 Phase 2, §34)
 
 ### 14.4 Top-level tab layout
 
@@ -608,15 +613,18 @@ Four sub-sections within the Document tab:
 
 New collapsible section **"Notes & References"** added below numeric fields:
 
-**Row Notes:** `+ Add Note` list — each entry is a text input with a remove button.
+**Row Notes:** `+ Add Note` list — each entry is a text input with a remove button, plus (Revision
+33 Phase 2) a "Applies to" group `<select>` next to the text input — present only when the item's
+type/status allows group-scoped notes at all (see §34); options are "Item" (the default, `group:
+null`) plus whichever value-groups are legal for this item.
 
 **Row References:** checklist of all entries in `meta.references`, shown as:
 ```
 ☑  [1] Gulfstream GC514696308 — Supplementary Electrical Load Analysis
-        Comment: [Load calculated using values from Table 3-2          ]
+        Comment: [Load calculated using values from Table 3-2          ]  Applies to: [Item ▾]
 ☐  [2] Nextant NT0078-ELA0-0200 — ELA Supplement for SpaceX Starlink
 ```
-- Comment field appears only when the checkbox is checked
+- Comment field (and, when applicable, the group picker) appears only when the checkbox is checked
 - If no references exist in `meta`, shows dimmed message:
   *"No references defined — add them in the Document tab."*
 
@@ -1782,8 +1790,9 @@ is a one-line addition to `SELECTABLE_CONVERSION_TYPES`.
 *Last updated: 2026-07-27*
 
 First phase of a larger request (an alternate, row-oriented Load Analysis Detail format, plus
-group-scoped notes) — see Future Enhancements (§34) for the remaining phases. This phase adds
-two warnings to §11's table, referenced there as the "existing load not entered" and "child sum
+group-scoped notes) — see §34 for Phase 2 (group-scoped notes) and Future Enhancements (§35) for
+the remaining Phase 3 (the Alternate report itself). This phase adds two warnings to §11's table,
+referenced there as the "existing load not entered" and "child sum
 exceeds parent" rows.
 
 The "existing load not entered" warning (2.1 in the source request) could not be implemented as
@@ -1812,7 +1821,55 @@ triggered, expected) W3 overload warning from the test setup's unset capacity.
 
 ---
 
-## 34. Future Enhancements
+## 34. Revision 33 (Phase 2) — Group-Scoped Notes and References
+
+*Last updated: 2026-07-27*
+
+Second phase of the Revision 33 request (see §33 for Phase 1, and Future Enhancements/§35 for the
+remaining Phase 3 — the Alternate Load Analysis Detail report itself, which will consume this
+phase's group scoping for its own Notes column).
+
+**Data model:** `rowNotes` entries changed from bare strings to `{text, group}`; `rowRefs` entries
+gained a `group` field alongside the existing `key`/`comment`. `group` is `null` (the item itself)
+by default — existing saves migrate automatically (`migrateLegacy`), converting bare-string notes
+to `{text, group:null}` and defaulting `group:null` on any ref missing it, satisfying the source
+request's explicit backward-compatibility requirement.
+
+**Legal groups** (`noteGroupsFor(node)`), mirroring the restrictions from the Revision 33 source
+document exactly:
+- Load-type items, and any Removed-status item — item-only (no group picker shown at all).
+- New-status non-load items — item itself, or Capacity / New Load / Remaining.
+- Existing-status non-load items — item itself, or Capacity / Existing Load / Net Change / New
+  Load / Remaining.
+
+These are the same six ids as the report column-groups (`AC_GROUPS`/`DC_GROUPS`: `cap`, `exload`,
+`added`, `nc`, `newload`, `rem`) minus `added` (the Load-value group) — since Load items are
+always restricted to item-only notes, there's never a case where `added` would be a legal note
+group.
+
+**Edit modal UI:** each note/reference row gained an "Applies to" `<select>` (omitted entirely
+when the item has no legal groups beyond "Item"), defaulting to whatever the entry's stored
+`group` is. A save-time clamp (`doEditSave`, just before `updateNode`) re-validates every note's
+and reference's `group` against the *final* type/status being saved and resets any now-illegal
+selection back to `null` — this covers the case where a user changes Status or Item Type in the
+same edit session after the group pickers were rendered, without needing to wire a live refresh
+into every Status/Type change handler (which would risk discarding in-progress, unsaved note
+edits if implemented as a full re-render).
+
+**Backward compatibility for the existing reports:** the old Load Analysis Detail report, the
+Print Report, and Word export all continue to attach every note/reference to the item's own row
+regardless of `group` — `annotateNode()` (both the copy local to `renderLoadAnalysisDetail` and
+the shared `buildAnnotationMap()`) simply reads `.text` instead of the old bare string and ignores
+`.group` entirely. Only the future Alternate report (Phase 3) will actually split notes out by
+group.
+
+Verified live: group picker renders with the correct 5 options for an Existing-status Bus, hides
+entirely for a Load item and for a Removed-status item, shows the New-status subset (Capacity/New
+Load/Remaining) for a New-status Bus; a note saved with `group:'nc'` persists correctly and still
+surfaces under the item's own row via `buildAnnotationMap()`; a simulated legacy save (bare-string
+notes, ref missing `group`) migrates correctly via `migrateLegacy()`.
+
+## 35. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
