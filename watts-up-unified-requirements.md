@@ -433,7 +433,7 @@ All AC groups offer A, VA, W, VAR, pf for selection.
 
 | Group | Default units selected |
 |---|---|
-| Rating / Capacity | VA |
+| Capacity | VA |
 | Existing Load | VA, W, VAR, pf |
 | Added (Removed) | W, VAR |
 | Net Change | W, VAR |
@@ -441,11 +441,11 @@ All AC groups offer A, VA, W, VAR, pf for selection.
 | Remaining | VA |
 
 ### 13.3 DC Report Column Groups and Defaults
-A and W selected by default for all groups: Rating/Capacity, Existing Load, Added (Removed),
+A and W selected by default for all groups: Capacity, Existing Load, Added (Removed),
 Net Change, New Load, Remaining.
 
 ### 13.4 Ampere Rating in Name (Protection Devices)
-If the user deselects "A" from Rating/Capacity, Circuit Breakers and Fuses still show their
+If the user deselects "A" from Capacity, Circuit Breakers and Fuses still show their
 ampere rating right-justified within the description cell: `FWD UPPER CB [581CB1]  (7.5 A)`.
 The amp text floats to the right side of the cell.
 
@@ -1025,7 +1025,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§36).
+enhancement (§37).
 
 ---
 
@@ -1527,7 +1527,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§36).
+multi-interval load analysis still listed under Future Enhancements (§37).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1945,7 +1945,62 @@ empty-state message all checked out against hand-computed expected values. Confi
 regression in the existing Load Analysis Detail / Load Analysis Summary / Power Distribution
 Summary tabs.
 
-## 36. Future Enhancements
+## 36. Revision 36 (Phase 1) — Quick Wins
+
+*Last updated: 2026-07-28*
+
+First phase of an 8-item request ("Watts Up Revision 36 (+).txt"). This phase covers the five
+smaller, independent items (§3-5, §7-8 of the source document); the larger notes/references
+rework (§1), the "New"/"Added" → "Installed" terminology sweep (§2), and the two warning fixes
+(§6) are deferred to later phases.
+
+**+Child default item type by parent type** (source §3): new `defaultChildTypeFor(parent)` —
+Total Aircraft Load/Generation/Conversion parents default to Bus, Distribution parents to Circuit
+Breaker, Protection parents to Load. Wired into both `gridAddChildRow` (previously always
+defaulted to Load) and the LH tree's `openAdd` (previously always defaulted to `afLastType`,
+initially "Generator") — but only when `openAdd` is opening for a genuine child (a real parent
+id); adding a brand-new root still uses the remembered last-used type, since no parent-type rule
+applies there. Supersedes the "New child defaults to type Load" line in §23.3 for the grids' own
++Child button specifically (the Add Item(s) modal opened via the LH tree's +Child is a separate
+code path, also updated here).
+
+**Dup button focuses the new item's description** (source §4): `gridDuplicateRow` previously left
+focus wherever it was after duplicating; now matches `gridAddChildRow`'s existing convention —
+scrolls the new row into view and focuses+selects its description input (still defaulting to
+"<original> (copy)").
+
+**Existing/Removed grid +Child no longer zero-fills Existing Load** (source §5): `makeNode()`
+seeds `existingLoad:mkPow(0,0,0,0,1)` (explicit zero, pf=1) for every hasCap node regardless of
+status — shared by the Add Item(s) modal and `ensureTypeFields()`, so changing `makeNode()` itself
+would have affected those too, which wasn't requested. Fixed narrowly: `gridAddChildRow` resets
+`existingLoad` back to fully blank (`mkPow()`) immediately after creation, but only when the
+grid's `defaultStatus` is `'existing'` (the Existing/Removed grid specifically, not the New grid).
+W4 (§33, "existing load reads as zero") already treats `null` the same as an explicit `0`, so this
+doesn't change when that warning fires — a truly-blank field and a zero-value field both still
+warn.
+
+**"Rating / Capacity" → "Capacity"** (source §7): reverted the `cap` group's `label` in
+`AC_GROUPS`/`DC_GROUPS` (§13.2/§13.3), plus three hardcoded copies of the old text in the Print /
+Export Settings dialog markup and one in the §13.4 Ampere-Rating-in-Name description. Flows
+through automatically to Print Report, Word export, the original Load Analysis Detail report, and
+Power Distribution Summary — confirmed via each rendering "Capacity" live. `renderLoadAnalysisDetailAlt`
+already hardcodes "CAPACITY" as its own row label (never read `AC_GROUPS`'s label), so it was
+already correct and untouched.
+
+**Analysis Detail – Alternate: breadcrumb moved into the header row** (source §8): `detailBlockAlt`
+already built `pathHtml` and its local `headerHtml(cols,hasAnnot,leftCellContent)` already accepted
+a `leftCellContent` param — it was just being called with `''` while `pathHtml` was separately (and
+incorrectly, per this clarification) prepended inline to the Parent Item row's own description
+cell. Now passed into `headerHtml` instead, matching the original Load Analysis Detail report's
+convention exactly.
+
+Verified live: default child types for Root/Generator/TRU/Bus/Circuit-Breaker parents; Dup on a
+childless node focuses+selects "X (copy)"; a fresh Existing/Removed +Child row shows genuinely
+blank Existing Load cells (not "0.00"/pf "1.00"); "Capacity" renders correctly in Load Analysis
+Detail and Power Distribution Summary headers; the Alternate report's breadcrumb now appears in
+the header row instead of inline in the Parent Item row.
+
+## 37. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

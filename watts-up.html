@@ -764,7 +764,7 @@
       <div class="modal-body" style="overflow-y:auto">
         <div class="section-label">AC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
-          <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Rating / Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-ac-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-pf"> pf</label></td></tr>
+          <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-ac-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Added (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-added-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-added-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-ac-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-pf"> pf</label></td></tr>
@@ -773,7 +773,7 @@
         </table>
         <div class="section-label" style="margin-top:.75rem">DC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
-          <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Rating / Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-dc-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-cap-w"> W</label></td></tr>
+          <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-dc-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-cap-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-dc-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-exload-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Added (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-dc-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-added-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-dc-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-nc-w"> W</label></td></tr>
@@ -1860,7 +1860,7 @@ function renderLoadAnalysisDetailAlt() {
     // modifier column, since a banner row above the parent didn't fit this transposed layout.
     const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
     const itemAnnot=annotateGroup(n,null); if (itemAnnot) blockNotes.push(...itemAnnot.notes);
-    rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:3px">${pathHtml}${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Added':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
+    rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Added':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
 
     { const a=annotateGroup(n,'cap'); if (a) blockNotes.push(...a.notes);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
@@ -1899,7 +1899,7 @@ function renderLoadAnalysisDetailAlt() {
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Remaining</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
 
     const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
-    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${headerHtml(cols,hasAnyAnnot,'')}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
+    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${headerHtml(cols,hasAnyAnnot,pathHtml)}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
   }
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
@@ -1926,6 +1926,16 @@ function gridAvailableTypes(n){ return (n.convRole||n.type==='Root') ? [n.type] 
 // Matches fillTypeSelect's Edit-modal convention (and Print/Word reports' displayType-adjacent
 // handling) so the root row doesn't show the literal internal type string "Root" anywhere.
 function typeOptionLabel(t){ return t==='Root'?'Total Aircraft Load':t; }
+// Revision 36: +Child's default item type is now driven by the parent's own type, instead of
+// always defaulting to Load — Bus is the common next step under a source/conversion node, a
+// Circuit Breaker under a distribution node, and a Load under a protection node.
+function defaultChildTypeFor(parent){
+  const t=parent?.type;
+  if (t==='Root'||NT.GENERATION.includes(t)||NT.CONVERSION.includes(t)) return 'Bus';
+  if (NT.DISTRIBUTION.includes(t)) return 'Circuit Breaker';
+  if (NT.PROTECTION.includes(t)) return 'Load';
+  return 'Load';
+}
 // After a type change, make sure whatever fields the new type needs actually exist (with the
 // same defaults makeNode would have used), without touching/clearing fields the old type left
 // behind — those simply go unused, since rendering already conditions on hasCap/isLoad.
@@ -2139,8 +2149,14 @@ function gridResetGroup(id,field,renderFn){
 // Inserts a blank, immediately-editable child row instead of opening the Add Item(s) modal.
 function gridAddChildRow(parentId,defaultStatus,renderFn){
   const parent=state.nodes[parentId]; if (!parent) return;
-  const type=ALL_TYPES.includes('Load')?'Load':ALL_TYPES[0];
+  const type=defaultChildTypeFor(parent);
   const newId=addNode(parentId,{type,status:defaultStatus,acDc:parent.acDc||'dc',voltage:parent.voltage??null,description:'',refDes:''});
+  // Revision 36: in the Existing/Removed grid specifically, a freshly created non-load item
+  // should read as genuinely blank (no pf=1/zero pre-fill) until the user actually enters a
+  // value or triggers Calculate/Save — makeNode()'s default (mkPow(0,0,0,0,1)) is left alone for
+  // every other creation path (Add Item(s) modal, the Installed/New grid), since only this one
+  // was reported as prematurely defaulting.
+  if (defaultStatus==='existing'&&hasCap(type)) state.nodes[newId].existingLoad=mkPow();
   batchCommit();
   renderAll();
   // Unlike every other grid action (which now preserves scroll position by default, see
@@ -2397,9 +2413,17 @@ async function gridDuplicateRow(id,renderFn){
     if (!choice) return;
     branch=choice==='branch';
   }
-  if (branch) duplicateBranch(id); else duplicateNodeById(id);
+  const newId=branch?duplicateBranch(id):duplicateNodeById(id);
   batchCommit();
   renderAll();
+  // Revision 36: match +Child's cursor-focus behavior — the description still defaults to
+  // "<original> (copy)", but the field is focused/selected so it's ready for immediate editing.
+  const newRow=newId&&document.querySelector(`tr[data-nid="${newId}"]`);
+  if (newRow) {
+    newRow.scrollIntoView({block:'center'});
+    const descInput=newRow.querySelector('[data-field="description"]');
+    if (descInput) { descInput.focus(); if (descInput.select) descInput.select(); }
+  }
 }
 function wireGridEvents(el,renderFn,defaultChildStatus){
   el.querySelectorAll('input[data-field],select[data-field]').forEach(inp=>{
@@ -3543,7 +3567,10 @@ function openAdd(parentId) {
   fillParentSelect('af-parent',null,parentId);
   const aftype=document.getElementById('af-type');
   fillTypeSelect(aftype,parentId===null);
-  aftype.value=afLastType||'Generator';
+  // Revision 36: a genuine +Child (a real parent selected) defaults the type based on that
+  // parent's own type; adding a brand-new root keeps remembering the last-used type instead,
+  // since no parent-type rule applies there.
+  aftype.value=parentId!=null?defaultChildTypeFor(state.nodes[parentId]):(afLastType||'Generator');
   if (!aftype.querySelector(`option[value="${aftype.value}"]`)) aftype.value=aftype.options[0]?.value||'';
   document.getElementById('af-status').value=afLastStatus||'existing';
   const pid0=parentId||null;
@@ -3746,7 +3773,7 @@ function rptTd(val,isPf,isNeg,ec,gf){return `<td class="rpt-num${ec?' '+ec:''}${
 
 const AC_ALL_KEYS=[{k:'a',l:'A'},{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}];
 const AC_GROUPS=[
-  {id:'cap',    label:'Rating / Capacity', keys:AC_ALL_KEYS},
+  {id:'cap',    label:'Capacity',          keys:AC_ALL_KEYS},
   {id:'exload', label:'Existing Load',     keys:AC_ALL_KEYS},
   {id:'added',  label:'Added (Removed)',   keys:AC_ALL_KEYS},
   {id:'nc',     label:'Net Change',        keys:AC_ALL_KEYS},
@@ -3754,7 +3781,7 @@ const AC_GROUPS=[
   {id:'rem',    label:'Remaining',         keys:AC_ALL_KEYS},
 ];
 const DC_GROUPS=[
-  {id:'cap',    label:'Rating / Capacity', keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
+  {id:'cap',    label:'Capacity',          keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'exload', label:'Existing Load',     keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'added',  label:'Added (Removed)',   keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'nc',     label:'Net Change',        keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
