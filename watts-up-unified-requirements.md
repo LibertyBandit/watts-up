@@ -1025,7 +1025,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§37).
+enhancement (§38).
 
 ---
 
@@ -1527,7 +1527,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§37).
+multi-interval load analysis still listed under Future Enhancements (§38).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2000,7 +2000,43 @@ blank Existing Load cells (not "0.00"/pf "1.00"); "Capacity" renders correctly i
 Detail and Power Distribution Summary headers; the Alternate report's breadcrumb now appears in
 the header row instead of inline in the Parent Item row.
 
-## 37. Future Enhancements
+## 37. Revision 36 (Phase 2) — Warning Fixes
+
+*Last updated: 2026-07-28*
+
+Second phase of the Revision 36 request (§6 of the source document). Items 1, 2 remain deferred
+(see §36 for the overall phase breakdown).
+
+**W5 (§11, §33): AC children now compared on W and VAR, not VA.** The original implementation
+summed each child's own `.va` (a vector magnitude, `sqrt(w²+var²)`) for AC nodes, and compared
+that arithmetic sum against the parent's own `.va`. Since VA isn't additive the way real (W) and
+reactive (VAR) power are, this comparison could miss genuine overages whenever the parent's own
+existing load had a non-trivial VAR component inflating its VA figure relative to its W — a
+parent at W=100/VAR=200 (VA≈223.6) would never trigger even if children summed to W=120,
+because 120 < 223.6. `warnNode()`'s W5 block now sums children's W and (for AC only) VAR
+separately and warns if *either* algebraic sum exceeds the parent's corresponding value — both
+quantities are genuinely additive across parallel loads, unlike VA. DC is unaffected (was already
+comparing `.w`).
+
+**LAD-Alt (§35): warning highlights moved back to the items themselves.** Reverses the Revision
+33 Phase 3 follow-up decision to highlight the New Load row specifically. New shared
+`warnRowCls(node)` helper (`rpt-over`/`rpt-warn`, same convention as the original Load Analysis
+Detail report) is now applied to the Parent Item row and to each child row, based on that node's
+own `_warnings` — not to any of the six value-group rows (Capacity/Existing Load/Net
+Change/New Load/Remaining), which stay unstyled regardless of warnings. The `overloaded` param
+on `valueCellsForGroup` (added for the prior New-Load-row approach) was removed since nothing
+calls it anymore.
+
+Verified live: an AC parent with W=100/VAR=200 (VA≈223.6) and two existing children summing to
+W=120 correctly triggers W5 (a case the old VA-based comparison would have missed); reducing
+children back under both W and VAR thresholds clears the warning; pushing VAR alone over 200
+(with W held under 100) triggers W5 independently of W. A W3-overloaded parent with two
+also-overloaded children (no capacity entered, so blank-as-zero) showed `rpt-over` on the Parent
+Item row and both child rows, with the CAPACITY/Net Change/New Load/Remaining rows unstyled.
+Confirmed no regression in Load Analysis Detail, Load Analysis Summary, and Power Distribution
+Summary.
+
+## 38. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

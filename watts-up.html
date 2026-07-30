@@ -1130,17 +1130,20 @@ function warnNode(node,nodes) {
     }
   }
   if (hasCap(node.type)&&node.status==='existing'&&nodes) {
-    const v=node.voltage||0;
-    let sum=0;
+    // AC: compare W and VAR algebraically (both additive) rather than VA — VA is a vector sum
+    // (sqrt(W²+VAR²)), so summing children's VA values is almost always smaller than the
+    // parent's own VA even when the real (W/VAR) contributions genuinely exceed it.
+    const isAc=node.acDc==='ac';
+    let sumW=0,sumVar=0;
     children(node.id,nodes).forEach(c=>{
       if (c.status!=='existing'&&c.status!=='removed') return;
-      const cv=isLoad(c.type)?(c.acDc==='ac'?c.loadValue?.va:c.loadValue?.w)
-                             :(c.acDc==='ac'?c.existingLoad?.va:c.existingLoad?.w);
-      sum+=cv||0;
+      const src=isLoad(c.type)?c.loadValue:c.existingLoad;
+      sumW+=src?.w||0;
+      if (isAc) sumVar+=src?.var||0;
     });
-    const ownV=node.acDc==='ac'?node.existingLoad?.va:node.existingLoad?.w;
-    const ownExisting=ownV||0;
-    if (sum>ownExisting+1e-6)
+    const ownW=node.existingLoad?.w||0;
+    const ownVar=isAc?(node.existingLoad?.var||0):0;
+    if (sumW>ownW+1e-6||(isAc&&sumVar>ownVar+1e-6))
       w.push({code:'W5',message:`Children's existing/removed load exceeds this item's existing load — "${esc(node.description)}".`});
   }
   return w;
@@ -1813,16 +1816,22 @@ function renderLoadAnalysisDetailAlt() {
     if (!hasAnyAnnot) return '';
     return annot?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>';
   }
+  // Warning highlights apply to the items themselves (the Parent Item row and each child row),
+  // not to any value-group row — same rpt-over/rpt-warn convention as the existing report.
+  function warnRowCls(node) {
+    const ws=node._warnings||[]; const ov=ws.some(w=>w.code==='W3'); const wn=ws.length>0&&!ov;
+    return ov?' class="rpt-over"':wn?' class="rpt-warn"':'';
+  }
   // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/
   // Remaining ever go negative (shown as a positive value in parens), matching the existing
   // report's buildRptRow convention exactly.
-  function valueCellsForGroup(groupId,src,cols,activeSet,overloaded) {
+  function valueCellsForGroup(groupId,src,cols,activeSet) {
     return cols.map(col=>{
       if (!activeSet.has(col.k)) return `<td class="rpt-num"></td>`;
       let val=src?src[col.k]:null,isNeg=false;
       if ((groupId==='nc'||groupId==='newload'||groupId==='rem')&&val!=null&&val<0) {isNeg=true;val=Math.abs(val);}
       if (val==null) return `<td class="rpt-num">—</td>`;
-      return rptTd(val,col.isPf||false,isNeg,overloaded?'rpt-over-val':'',false);
+      return rptTd(val,col.isPf||false,isNeg,'',false);
     }).join('');
   }
   // Non-load children use Net Change values; Load children use Load values — per the source
@@ -1860,7 +1869,10 @@ function renderLoadAnalysisDetailAlt() {
     // modifier column, since a banner row above the parent didn't fit this transposed layout.
     const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
     const itemAnnot=annotateGroup(n,null); if (itemAnnot) blockNotes.push(...itemAnnot.notes);
-    rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Added':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
+    // Warning highlights (Revision 36 §6.2) belong on the items themselves — the Parent Item row
+    // and each child row — rather than on any individual value-group row, reversing the prior
+    // New-Load-row-specific approach.
+    rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Added':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
 
     { const a=annotateGroup(n,'cap'); if (a) blockNotes.push(...a.notes);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
@@ -1881,7 +1893,7 @@ function renderLoadAnalysisDetailAlt() {
       // always 0 while existing — the modifier would misleadingly label a Load value as a net
       // change), so this only applies to non-load existing children.
       const modifier=(k.status==='existing'&&!isLoad(k.type))?'(Net Change)':'';
-      rows.push(`<tr style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}<td>${modifier}</td>${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
+      rows.push(`<tr${warnRowCls(k)} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}<td>${modifier}</td>${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
     });
 
     if (n.status!=='new') {
@@ -1889,12 +1901,7 @@ function renderLoadAnalysisDetailAlt() {
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Net Change</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('nc',n._netChange,cols,ncSet)}</tr>`);
     }
     { const a=annotateGroup(n,'newload'); if (a) blockNotes.push(...a.notes);
-      // Overload warning (new load exceeds capacity) belongs on the New Load row specifically
-      // in this transposed layout — matches the existing report's rpt-over/rpt-warn row tint
-      // plus rpt-over-val cell emphasis, just anchored to this one row instead of the whole item.
-      const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3'); const wn=ws.length>0&&!ov;
-      const rowCls=ov?' class="rpt-over"':wn?' class="rpt-warn"':'';
-      rows.push(`<tr${rowCls} style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet,ov)}</tr>`); }
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
     { const a=annotateGroup(n,'rem'); if (a) blockNotes.push(...a.notes);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Remaining</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
 
