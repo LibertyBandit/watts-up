@@ -339,8 +339,9 @@
     .nr-toggle-arrow.open{transform:rotate(90deg)}
     .nr-body{display:flex;flex-direction:column;gap:.5rem;margin-top:.4rem}
     .nr-note-item{display:flex;gap:.35rem;align-items:center}
-    .nr-note-item input{flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit}
-    .nr-note-item input:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
+    .nr-note-item input[type=checkbox]{cursor:pointer;flex-shrink:0}
+    .nr-note-item input[type=text]{flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.22rem .4rem;font-size:.8rem;font-family:inherit}
+    .nr-note-item input[type=text]:focus{outline:1px solid var(--accent-blue);border-color:var(--accent-blue)}
     .nr-note-item select{flex-shrink:0;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:.2rem .3rem;font-size:.76rem;font-family:inherit}
     .nr-ref-item{padding:.28rem .45rem;border-radius:4px;border:1px solid var(--border);background:var(--bg-primary);display:flex;flex-direction:column;gap:.2rem}
     .nr-ref-item>label{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--text-secondary);cursor:pointer}
@@ -432,6 +433,12 @@
       <div class="doc-section-title">General Notes</div>
       <div id="doc-note-list" class="doc-list"></div>
       <button id="doc-add-note" class="btn-default doc-add-btn">+ Add Note</button>
+    </div>
+    <div>
+      <div class="doc-section-title">Row Notes</div>
+      <div class="doc-empty-hint" style="margin-bottom:.4rem">Shared notes that can be attached to multiple items or item value-groups from the Edit Item dialog's Notes &amp; References section — editing the text here updates it everywhere it's used.</div>
+      <div id="doc-rownote-list" class="doc-list"></div>
+      <button id="doc-add-rownote" class="btn-default doc-add-btn">+ Add Row Note</button>
     </div>
     <div>
       <div class="doc-section-title">Section Text</div>
@@ -998,10 +1005,17 @@ function freshState() {
   const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115});
   return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',interval:'Continuous',
     documentNumber:'',revisionLevel:'',preparedBy:'',revisionDate:'',revisionDescription:'Initial Release.',
-    introText:'',generalNotes:[],complianceText:'',references:[]},
+    introText:'',generalNotes:[],complianceText:'',references:[],rowNoteDefs:[]},
     nodes:{[rid]:root},rootIds:[rid],lastSaved:null};
 }
 
+// Creates a new shared note-bank entry and returns its key — used both by legacy-note migration
+// and by the Edit modal's "+ Add New Note" (Revision 36).
+function mkNoteDefKey(m,text) {
+  const key=uid();
+  m.rowNoteDefs.push({key,text});
+  return key;
+}
 function migrateLegacy(p) {
   if (p.rootId&&!p.rootIds) {p.rootIds=[p.rootId];delete p.rootId;}
   if (!p.rootIds||!p.rootIds.length) {
@@ -1020,6 +1034,7 @@ function migrateLegacy(p) {
   if (!m.complianceText)  m.complianceText='';
   if (!Array.isArray(m.generalNotes)) m.generalNotes=[];
   if (!Array.isArray(m.references))   m.references=[];
+  if (!Array.isArray(m.rowNoteDefs))  m.rowNoteDefs=[];
   // Rev Date became a native date picker (stores ISO YYYY-MM-DD); reformat any pre-existing
   // free-text "MMM-DD-YYYY" value so it still populates the picker instead of appearing blank.
   if (m.revisionDate && !/^\d{4}-\d{2}-\d{2}$/.test(m.revisionDate)) {
@@ -1036,11 +1051,17 @@ function migrateLegacy(p) {
   }
   Object.values(p.nodes||{}).forEach(n=>{
     if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
-    // Revision 33: rowNotes entries gained an optional `group` (which value-group a note is
-    // scoped to — null means the item itself). Old saves store bare strings; migrate in place
-    // so every entry has the {text,group} shape, defaulting group to null (item itself) per the
-    // documented backward-compatibility rule.
-    n.rowNotes=n.rowNotes.map(o=>typeof o==='string'?{text:o,group:null}:{text:o.text||'',group:o.group||null});
+    // Revision 36: rowNotes entries now reference a shared note-text bank (meta.rowNoteDefs)
+    // instead of storing text inline, so the same note can be cited by multiple items/groups
+    // without duplicating its text at render time — mirrors how rowRefs already references
+    // meta.references by key. Old saves (bare strings, or Revision 33's {text,group} shape)
+    // migrate by creating one bank entry per existing note (no attempt to merge identical-
+    // looking text across different items — safer default, user can consolidate manually).
+    n.rowNotes=n.rowNotes.map(o=>{
+      if (typeof o==='string') return {key:mkNoteDefKey(m,o),group:null};
+      if ('text' in o) return {key:mkNoteDefKey(m,o.text||''),group:o.group||null};
+      return {key:o.key,group:o.group||null};
+    });
     if (!Array.isArray(n.rowRefs))  n.rowRefs=[];
     n.rowRefs=n.rowRefs.map(r=>({key:r.key,comment:r.comment||'',group:r.group||null}));
     if (!n.acDc) n.acDc='dc';
@@ -1600,6 +1621,57 @@ function renderPowerDistSummary() {
   el.innerHTML=html;
 }
 
+// Revision 36: shared note/reference annotation resolver, used by buildAnnotationMap (Print/
+// Word), renderLoadAnalysisDetail, and renderLoadAnalysisDetailAlt. Replaces each caller's own
+// `++counter` scheme with dedup by note key (meta.rowNoteDefs) / reference key+comment — the
+// same note or reference cited by multiple items/groups now resolves to the same footnote
+// number and a single printed line, instead of a fresh duplicate every time. A reference cited
+// with no per-item comment renders as a plain "[N]" bracket pointing at the References list
+// directly, consuming no footnote number at all (source §1.1.1) — only a commented reference or
+// a plain note ever adds a line to `notesList`.
+function makeAnnotator() {
+  const refs=state.meta.references||[];
+  const refKeyToNum={},refKeyToDocNo={};
+  refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
+  const noteDefsByKey={};
+  (state.meta.rowNoteDefs||[]).forEach(d=>{noteDefsByKey[d.key]=d.text||'';});
+  let noteCounter=0;
+  const notesList=[]; // [{num,text}] — every footnote-consuming entry, in first-seen order
+  const seen=new Map(); // dedupe key -> assigned footnote num
+
+  // rowNotes: [{key,group}], rowRefs: [{key,comment,group}] — already filtered by the caller to
+  // whichever subset applies to the row being annotated. Returns {marker, entries} or null.
+  // `entries` ([{num,text}]) is only the subset newly touched by this call, for callers that
+  // build their own per-table footer list and need to dedupe within that footer too.
+  function annotate(rowNotes,rowRefs) {
+    const tokens=[],entries=[];
+    (rowNotes||[]).forEach(o=>{
+      const text=(noteDefsByKey[o.key]||'').trim(); if (!text) return;
+      const dedupeKey='note:'+o.key;
+      let num=seen.get(dedupeKey);
+      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text}); }
+      tokens.push(String(num)); entries.push({num,text});
+    });
+    (rowRefs||[]).forEach(r=>{
+      if (!r.key||refKeyToNum[r.key]===undefined) return;
+      const refNum=refKeyToNum[r.key],comment=(r.comment||'').trim();
+      if (!comment) { tokens.push(`[${refNum}]`); return; }
+      const docNo=refKeyToDocNo[r.key];
+      const text=`ref [${refNum}]${docNo?' '+docNo:''}: ${comment}`;
+      const dedupeKey='ref:'+r.key+'|'+comment;
+      let num=seen.get(dedupeKey);
+      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text}); }
+      tokens.push(String(num)); entries.push({num,text});
+    });
+    if (!tokens.length) return null;
+    return {marker:tokens.join(','),entries};
+  }
+  function hasText(rowNotes,rowRefs) {
+    return (rowNotes||[]).some(o=>(noteDefsByKey[o.key]||'').trim())||(rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined);
+  }
+  return {annotate,hasText,get notesList(){return notesList;}};
+}
+
 // ── LOAD ANALYSIS DETAIL (one table per non-Load node: itself + immediate children) ──
 function acDcVoltageLabel(acDc){
   const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??Object.values(state.nodes).find(nn=>nn.acDc===acDc&&nn.voltage!=null);
@@ -1616,27 +1688,12 @@ function renderLoadAnalysisDetail() {
 
   // Local note/reference numbering, restarted and assigned in this report's own top-to-bottom
   // presentation order (rather than reusing the global buildAnnotationMap's full-tree order).
-  const refs=state.meta.references||[];
-  const refKeyToNum={},refKeyToDocNo={};
-  refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
-  let noteCounter=0;
   // Group-scoped notes (Revision 33) still all attach to the item's own row here, for
-  // compatibility with this report's existing layout — only the new Alternate report splits
-  // notes out by group.
-  function annotateNode(n) {
-    const rn=(n.rowNotes||[]).filter(o=>o.text.trim());
-    const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
-    if (!rn.length&&!rr.length) return null;
-    const nums=[]; const notes=[];
-    rn.forEach(({text})=>{const num=++noteCounter;notes.push({num,text});nums.push(num);});
-    rr.forEach(r=>{
-      const refNum=refKeyToNum[r.key],docNo=refKeyToDocNo[r.key],comment=(r.comment||'').trim();
-      const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
-      const num=++noteCounter;notes.push({num,text});nums.push(num);
-    });
-    return {marker:nums.join(','),notes};
-  }
-  const hasAnyAnnot=Object.values(nodes).some(n=>(n.rowNotes||[]).some(o=>o.text.trim())||(n.rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined));
+  // compatibility with this report's existing layout — only the Alternate report splits notes
+  // out by group.
+  const annotator=makeAnnotator();
+  function annotateNode(n) { return annotator.annotate(n.rowNotes,n.rowRefs); }
+  const hasAnyAnnot=Object.values(nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
 
   const allOrdered=preOrder(state.rootIds,nodes);
   function eligibleIds(acDc) {
@@ -1677,9 +1734,10 @@ function renderLoadAnalysisDetail() {
     const pathHtml=path?`<span class="rpt-detail-path-inline">${path}</span>`:'';
     const ncols=cols.length+1+(hasAnyAnnot?1:0);
 
-    const am={}; const blockNotes=[];
-    const selfAnnot=annotateNode(n); if (selfAnnot) { am[n.id]={marker:selfAnnot.marker}; blockNotes.push(...selfAnnot.notes); }
-    kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker}; blockNotes.push(...a.notes); } });
+    const am={}; const blockNotes=[]; const blockSeenNums=new Set();
+    const pushEntries=(entries)=>entries.forEach(e=>{ if (!blockSeenNums.has(e.num)) { blockSeenNums.add(e.num); blockNotes.push(e); } });
+    const selfAnnot=annotateNode(n); if (selfAnnot) { am[n.id]={marker:selfAnnot.marker}; pushEntries(selfAnnot.entries); }
+    kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker}; pushEntries(a.entries); } });
 
     const rows=[];
     if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Installed</td></tr>`);
@@ -1694,6 +1752,10 @@ function renderLoadAnalysisDetail() {
       rows.push(buildRptRow(k,1,cols,cfg,false,am));
     });
 
+    // Numbers are assigned in whole-report order (not reset per table), so a table can end up
+    // reusing an earlier, lower number after already having created a higher one of its own —
+    // sort so the printed list still reads in ascending order.
+    blockNotes.sort((a,b)=>a.num-b.num);
     const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
     return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${buildRptHeader(cols,hasAnyAnnot,pathHtml)}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
   }
@@ -1725,43 +1787,20 @@ function renderLoadAnalysisDetailAlt() {
 
   // Local note/reference numbering, restarted per this report — same convention as the existing
   // Load Analysis Detail report (not the shared buildAnnotationMap's full-tree numbering).
-  const refs=state.meta.references||[];
-  const refKeyToNum={},refKeyToDocNo={};
-  refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
-  let noteCounter=0;
+  const annotator=makeAnnotator();
   // A parent's own notes/refs are split out by which value-group they're scoped to (group=null
   // is the item itself) — this is the one place group-scoped notes (Revision 33 Phase 2) are
   // actually surfaced against the row they belong to, rather than collapsed onto the item row.
   function annotateGroup(n,group) {
-    const rn=(n.rowNotes||[]).filter(o=>(o.group||null)===group&&o.text.trim());
-    const rr=(n.rowRefs||[]).filter(r=>(r.group||null)===group&&r.key&&refKeyToNum[r.key]!==undefined);
-    if (!rn.length&&!rr.length) return null;
-    const nums=[]; const notes=[];
-    rn.forEach(({text})=>{const num=++noteCounter;notes.push({num,text});nums.push(num);});
-    rr.forEach(r=>{
-      const refNum=refKeyToNum[r.key],docNo=refKeyToDocNo[r.key],comment=(r.comment||'').trim();
-      const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
-      const num=++noteCounter;notes.push({num,text});nums.push(num);
-    });
-    return {marker:nums.join(','),notes};
+    const rn=(n.rowNotes||[]).filter(o=>(o.group||null)===group);
+    const rr=(n.rowRefs||[]).filter(r=>(r.group||null)===group);
+    return annotator.annotate(rn,rr);
   }
   // Child rows only ever get one collapsed row in a parent's table (unlike the table's own
   // subject, which gets a full group breakdown), so a child's notes all attach to that single
   // row regardless of which group they're scoped to.
-  function annotateAll(n) {
-    const rn=(n.rowNotes||[]).filter(o=>o.text.trim());
-    const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
-    if (!rn.length&&!rr.length) return null;
-    const nums=[]; const notes=[];
-    rn.forEach(({text})=>{const num=++noteCounter;notes.push({num,text});nums.push(num);});
-    rr.forEach(r=>{
-      const refNum=refKeyToNum[r.key],docNo=refKeyToDocNo[r.key],comment=(r.comment||'').trim();
-      const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
-      const num=++noteCounter;notes.push({num,text});nums.push(num);
-    });
-    return {marker:nums.join(','),notes};
-  }
-  const hasAnyAnnot=Object.values(nodes).some(n=>(n.rowNotes||[]).some(o=>o.text.trim())||(n.rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined));
+  function annotateAll(n) { return annotator.annotate(n.rowNotes,n.rowRefs); }
+  const hasAnyAnnot=Object.values(nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
 
   const allOrdered=preOrder(state.rootIds,nodes);
   function eligibleIds(acDc) {
@@ -1863,7 +1902,8 @@ function renderLoadAnalysisDetailAlt() {
     const capSet=activeKeySet('cap',cfgSide),exSet=activeKeySet('exload',cfgSide),
           ncSet=activeKeySet('nc',cfgSide),nlSet=activeKeySet('newload',cfgSide),
           remSet=activeKeySet('rem',cfgSide),addedSet=activeKeySet('added',cfgSide);
-    const blockNotes=[];
+    const blockNotes=[]; const blockSeenNums=new Set();
+    const pushEntries=(entries)=>entries.forEach(e=>{ if (!blockSeenNums.has(e.num)) { blockSeenNums.add(e.num); blockNotes.push(e); } });
     const parentFs='8.5pt',childFs='7.5pt';
     const rows=[];
 
@@ -1873,17 +1913,17 @@ function renderLoadAnalysisDetailAlt() {
     // italic styling indicates removed). An Installed-status parent instead gets "Installed" in
     // the modifier column, since a banner row above the parent didn't fit this transposed layout.
     const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
-    const itemAnnot=annotateGroup(n,null); if (itemAnnot) blockNotes.push(...itemAnnot.notes);
+    const itemAnnot=annotateGroup(n,null); if (itemAnnot) pushEntries(itemAnnot.entries);
     // Warning highlights (Revision 36 §6.2) belong on the items themselves — the Parent Item row
     // and each child row — rather than on any individual value-group row, reversing the prior
     // New-Load-row-specific approach.
     rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Installed':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
 
-    { const a=annotateGroup(n,'cap'); if (a) blockNotes.push(...a.notes);
+    { const a=annotateGroup(n,'cap'); if (a) pushEntries(a.entries);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
 
     if (n.status!=='new') {
-      const a=annotateGroup(n,'exload'); if (a) blockNotes.push(...a.notes);
+      const a=annotateGroup(n,'exload'); if (a) pushEntries(a.entries);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">EXISTING LOAD</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('exload',n.existingLoad,cols,exSet)}</tr>`);
     }
 
@@ -1891,7 +1931,7 @@ function renderLoadAnalysisDetailAlt() {
     kids.forEach(k=>{
       if (k.status==='removed'&&!shownRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:28px">Removed</td></tr>`); shownRemoved=true; }
       else if (k.status==='new'&&!shownAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Installed</td></tr>`); shownAdded=true; }
-      const kAnnot=annotateAll(k); if (kAnnot) blockNotes.push(...kAnnot.notes);
+      const kAnnot=annotateAll(k); if (kAnnot) pushEntries(kAnnot.entries);
       const kDesc=esc((k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:''));
       const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
       // Load children don't have a Net Change concept of their own (a Load's net change is
@@ -1902,14 +1942,15 @@ function renderLoadAnalysisDetailAlt() {
     });
 
     if (n.status!=='new') {
-      const a=annotateGroup(n,'nc'); if (a) blockNotes.push(...a.notes);
+      const a=annotateGroup(n,'nc'); if (a) pushEntries(a.entries);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Net Change</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('nc',n._netChange,cols,ncSet)}</tr>`);
     }
-    { const a=annotateGroup(n,'newload'); if (a) blockNotes.push(...a.notes);
+    { const a=annotateGroup(n,'newload'); if (a) pushEntries(a.entries);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
-    { const a=annotateGroup(n,'rem'); if (a) blockNotes.push(...a.notes);
+    { const a=annotateGroup(n,'rem'); if (a) pushEntries(a.entries);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Remaining</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
 
+    blockNotes.sort((a,b)=>a.num-b.num);
     const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
     return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${headerHtml(cols,hasAnyAnnot,pathHtml)}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
   }
@@ -2639,10 +2680,43 @@ function renderNoteList() {
   });
 }
 
+// Revision 36: shared bank of reusable per-item notes (meta.rowNoteDefs) — distinct from
+// General Notes above (document-wide narrative text). Editing/reordering/removing here is
+// immediate (matches References/General Notes), same as the Edit modal's own live text editing
+// of these same entries. Removing an entry doesn't check whether any item still references its
+// key — a dangling reference just stops rendering any text/marker, same as removing a Reference.
+function renderRowNoteList() {
+  if (!state) return;
+  const el=document.getElementById('doc-rownote-list');if(!el)return;
+  const defs=state.meta.rowNoteDefs||[];
+  if (!defs.length){el.innerHTML='<div class="doc-empty-hint">No row notes yet. Click "+ Add Row Note" to add one.</div>';return;}
+  el.innerHTML='';
+  defs.forEach((def,i)=>{
+    const item=document.createElement('div');item.className='doc-list-item';
+    item.innerHTML=`<div class="doc-list-item-row">
+      <span class="doc-item-num">${i+1}.</span>
+      <textarea rows="2" placeholder="Note text" style="flex:1">${esc(def.text)}</textarea>
+      <div class="doc-list-btns">
+        <button class="rownote-up">↑</button><button class="rownote-dn">↓</button>
+        <button class="rownote-del" style="color:var(--accent-red)">✕</button>
+      </div></div>`;
+    const inp=item.querySelector('textarea');
+    inp.addEventListener('input',()=>{def.text=inp.value;persist();});
+    item.querySelector('.rownote-up').addEventListener('click',()=>{if(i===0)return;[defs[i-1],defs[i]]=[defs[i],defs[i-1]];persist();renderRowNoteList();});
+    item.querySelector('.rownote-dn').addEventListener('click',()=>{if(i>=defs.length-1)return;[defs[i],defs[i+1]]=[defs[i+1],defs[i]];persist();renderRowNoteList();});
+    item.querySelector('.rownote-del').addEventListener('click',()=>{
+      if(!confirm(`Remove row note ${i+1}? Any items currently using it will no longer show it.`))return;
+      defs.splice(i,1);persist();renderRowNoteList();
+    });
+    el.appendChild(item);
+  });
+}
+
 function renderDocPanel() {
   renderMeta();
   renderRefList();
   renderNoteList();
+  renderRowNoteList();
   const intro=document.getElementById('doc-intro');
   const comp=document.getElementById('doc-compliance');
   const revdesc=document.getElementById('doc-revdesc');
@@ -2675,27 +2749,49 @@ function renderEfNotesRefs(n) {
   const groups=noteGroupsFor(n);
   const groupSelectHtml=(selected)=>groups.length?`<select data-group title="Applies to"><option value="">Item</option>${groups.map(g=>`<option value="${g}"${g===selected?' selected':''}>${NOTE_GROUP_LABELS[g]}</option>`).join('')}</select>`:'';
 
-  // Row Notes — render from live array stored on the DOM element
-  notesEl._data=(n.rowNotes||[]).map(o=>({text:o.text||'',group:o.group||null}));
+  // Row Notes — checklist against the shared note bank (meta.rowNoteDefs), Revision 36 — same
+  // paradigm as the References checklist below: check to associate with this item, pick a group.
+  // Note TEXT itself edits live (persisted immediately), matching the Document tab's own
+  // References/General Notes editors — it's shared document-level data, not a per-item field, so
+  // it isn't tied to this modal's own Save/Cancel. Only the checkbox (item association) and
+  // group selection stay deferred to Save, exactly like the References checklist's comment field.
   function redrawNotes() {
+    const defs=state.meta.rowNoteDefs||[];
+    const existing=n.rowNotes||[];
+    notesEl._newlyAdded=notesEl._newlyAdded||new Set();
     notesEl.innerHTML='';
-    notesEl._data.forEach((entry,i)=>{
+    if (!defs.length) {
+      notesEl.innerHTML='<div class="nr-empty-hint">No notes defined yet — use "+ Add New Note" below.</div>';
+      return;
+    }
+    defs.forEach(def=>{
+      const match=existing.find(o=>o.key===def.key);
+      const checked=!!match||notesEl._newlyAdded.has(def.key);
+      const group=match?.group||null;
       const div=document.createElement('div');div.className='nr-note-item';
-      div.innerHTML=`<input type="text" value="${esc(entry.text)}" placeholder="Note text">
-        ${groupSelectHtml(entry.group)}
-        <button type="button" class="btn-node" style="color:var(--accent-red);padding:.12rem .38rem">✕</button>`;
-      div.querySelector('input').addEventListener('input',e=>{notesEl._data[i].text=e.target.value;});
+      div.innerHTML=`<input type="checkbox" data-notekey="${esc(def.key)}"${checked?' checked':''}>
+        <input type="text" class="nr-note-text-input" value="${esc(def.text)}" placeholder="Note text">
+        ${groupSelectHtml(group)}`;
+      const chk=div.querySelector('input[type=checkbox]');
       const sel=div.querySelector('select[data-group]');
-      if (sel) sel.addEventListener('change',e=>{notesEl._data[i].group=e.target.value||null;});
-      div.querySelector('button').addEventListener('click',()=>{notesEl._data.splice(i,1);redrawNotes();});
+      if (sel) sel.style.display=checked?'':'none';
+      chk.addEventListener('change',()=>{ if(sel) sel.style.display=chk.checked?'':'none'; });
+      div.querySelector('.nr-note-text-input').addEventListener('input',e=>{
+        const d=state.meta.rowNoteDefs.find(x=>x.key===def.key); if(d){d.text=e.target.value;persist();}
+      });
       notesEl.appendChild(div);
     });
   }
   redrawNotes();
   document.getElementById('ef-add-note').onclick=()=>{
-    notesEl._data.push({text:'',group:null});redrawNotes();
-    const inputs=notesEl.querySelectorAll('input[type=text]');
-    if(inputs.length)inputs[inputs.length-1].focus();
+    const key=uid();
+    state.meta.rowNoteDefs.push({key,text:''});
+    persist();
+    notesEl._newlyAdded.add(key);
+    redrawNotes();
+    const newRow=notesEl.querySelector(`[data-notekey="${key}"]`)?.closest('.nr-note-item');
+    const newInput=newRow?.querySelector('.nr-note-text-input');
+    if (newInput) newInput.focus();
   };
 
   // Row References — checklist from meta.references
@@ -2731,12 +2827,12 @@ function renderEfNotesRefs(n) {
 
 function collectEfNotes() {
   return Array.from(document.querySelectorAll('#ef-row-notes .nr-note-item'))
+    .filter(div=>div.querySelector('input[type=checkbox]').checked)
     .map(div=>{
-      const text=div.querySelector('input[type=text]').value.trim();
+      const key=div.querySelector('input[type=checkbox]').dataset.notekey;
       const sel=div.querySelector('select[data-group]');
-      return {text,group:(sel&&sel.value)?sel.value:null};
-    })
-    .filter(o=>o.text);
+      return {key,group:(sel&&sel.value)?sel.value:null};
+    });
 }
 
 function collectEfRefs() {
@@ -3893,34 +3989,19 @@ function buildSectionRows(acDc,cols,cfg){
   return rows.join('');
 }
 function buildAnnotationMap() {
-  const refs=state.meta.references||[];
-  const refKeyToNum={};const refKeyToDocNo={};
-  refs.forEach((r,i)=>{refKeyToNum[r.key]=i+1;refKeyToDocNo[r.key]=r.docNumber||'';});
-  let noteCounter=0;
+  // Group-scoped notes (Revision 33) still all attach to the item's own row here — Print Report
+  // and Word export keep their existing per-item annotation behavior regardless of which
+  // value-group a note is scoped to. Dedup (Revision 36) is document-wide here, matching this
+  // function's single whole-document notes list (no per-table scoping needed, unlike the two
+  // Load Analysis Detail reports).
+  const annotator=makeAnnotator();
   const annotMap={};  // nodeId → {marker}
-  const notesList=[];  // [{num, text}] — row notes and ref citations unified
   preOrder(state.rootIds,state.nodes).forEach(id=>{
     const n=state.nodes[id];if(!n)return;
-    // Group-scoped notes (Revision 33) still all attach to the item's own row here — Print
-    // Report and Word export keep their existing per-item annotation behavior regardless of
-    // which value-group a note is scoped to.
-    const rn=(n.rowNotes||[]).filter(o=>o.text.trim());
-    const rr=(n.rowRefs||[]).filter(r=>r.key&&refKeyToNum[r.key]!==undefined);
-    if(!rn.length&&!rr.length)return;
-    const nums=[];
-    // Plain row notes
-    rn.forEach(({text})=>{const num=++noteCounter;notesList.push({num,text});nums.push(num);});
-    // Reference citations merged in as numbered notes
-    rr.forEach(r=>{
-      const refNum=refKeyToNum[r.key];
-      const docNo=refKeyToDocNo[r.key];
-      const comment=(r.comment||'').trim();
-      const text=`ref [${refNum}]${docNo?' '+docNo:''}${comment?': '+comment:''}`;
-      const num=++noteCounter;notesList.push({num,text});nums.push(num);
-    });
-    annotMap[id]={marker:nums.join(',')};
+    const a=annotator.annotate(n.rowNotes,n.rowRefs);
+    if(a) annotMap[id]={marker:a.marker};
   });
-  return{annotMap,notesList};
+  return{annotMap,notesList:annotator.notesList};
 }
 
 function buildRptHeader(cols,hasAnnot,leftCellContent){
@@ -4587,6 +4668,14 @@ function initEvents() {
     persist();renderNoteList();
     const items=document.querySelectorAll('#doc-note-list .doc-list-item');
     if(items.length)items[items.length-1].querySelector('input')?.focus();
+  });
+  document.getElementById('doc-add-rownote').addEventListener('click',()=>{
+    if (!state) return;
+    if (!state.meta.rowNoteDefs) state.meta.rowNoteDefs=[];
+    state.meta.rowNoteDefs.push({key:uid(),text:''});
+    persist();renderRowNoteList();
+    const items=document.querySelectorAll('#doc-rownote-list .doc-list-item');
+    if(items.length)items[items.length-1].querySelector('textarea')?.focus();
   });
   document.getElementById('modal-close' ).addEventListener('click',closeModal);
   document.getElementById('btn-cancel'  ).addEventListener('click',closeModal);

@@ -563,15 +563,21 @@ state to display.
 ### 14.3 New per-node fields
 
 Added to every node:
-- `rowNotes` — ordered array of `{ text: "<string>", group: "<group id>"|null }` objects (0–N
-  short notes tied to this row). `group` is `null` when the note is scoped to the item itself,
-  or one of `cap`/`exload`/`nc`/`newload`/`rem` when scoped to a specific value-group (Revision
-  33 Phase 2, §34 — see there for the legal-group rules and where group scoping is consumed).
+- `rowNotes` — ordered array of `{ key: "<uuid>", group: "<group id>"|null }` objects (0–N note
+  associations tied to this row). `key` references an entry in `meta.rowNoteDefs` — the shared
+  note-text bank (Revision 36, §39) — rather than storing text inline, so the same note can be
+  associated with multiple items/groups without duplicating its text. `group` is `null` when the
+  note is scoped to the item itself, or one of `cap`/`exload`/`nc`/`newload`/`rem` when scoped to
+  a specific value-group (Revision 33 Phase 2, §34 — see there for the legal-group rules).
 - `rowRefs` — ordered array of `{ key: "<uuid>", comment: "<string>", group: "<group id>"|null }`
   objects
   - `key` references an entry in `meta.references`
   - `comment` is optional; blank = no comment
   - `group` follows the same rules as `rowNotes.group` (Revision 33 Phase 2, §34)
+
+`meta.rowNoteDefs` — ordered array of `{ key: "<uuid>", text: "<string>" }`, the shared note-text
+bank (Revision 36, §39). Managed in the Document tab (§14.5) and via the Edit Item dialog's
+Notes & References checklist (§14.6).
 
 ### 14.4 Top-level tab layout
 
@@ -585,7 +591,7 @@ Document tab. The toolbar (New, Import, Export JSON, Print Report) remains alway
 
 ### 14.5 Document tab layout
 
-Four sub-sections within the Document tab:
+Five sub-sections within the Document tab:
 
 **A. Aircraft & Document Identity** — compact inline fields:
 `Make` | `Model` | `Designation` | `Serial #` | `Flight Phase` | `Doc #` | `Rev` | `Prepared by` | `Approved by` | `Rev Date`
@@ -605,7 +611,15 @@ Four sub-sections within the Document tab:
 **C. General Notes** — managed ordered list of text inputs with `[↑] [↓] [✕]` controls.
 `+ Add Note` button. Notes are bulleted (not numbered) in the report.
 
-**D. Section Text** — two labeled textareas:
+**D. Row Notes** (Revision 36, §39) — managed ordered list of `meta.rowNoteDefs`, structurally
+identical to General Notes (`[↑] [↓] [✕]`, `+ Add Row Note`), but semantically distinct: these
+are the shared bank of *per-item* notes attachable from the Edit Item dialog (§14.6), not
+document-wide narrative text. Editing/reordering/removing here is immediate (matches References
+and General Notes) — the same live-commit convention the Edit modal's own checklist uses for
+editing a note's text. Removing an entry here doesn't check whether any item still references its
+key; a dangling reference just stops rendering, same as removing a Reference.
+
+**E. Section Text** — two labeled textareas:
 - `Introduction` (maps to `introText`)
 - `Compliance Statement` (maps to `complianceText`)
 
@@ -613,10 +627,24 @@ Four sub-sections within the Document tab:
 
 New collapsible section **"Notes & References"** added below numeric fields:
 
-**Row Notes:** `+ Add Note` list — each entry is a text input with a remove button, plus (Revision
-33 Phase 2) a "Applies to" group `<select>` next to the text input — present only when the item's
-type/status allows group-scoped notes at all (see §34); options are "Item" (the default, `group:
-null`) plus whichever value-groups are legal for this item.
+**Row Notes** (Revision 36, §39 — redesigned from the original per-item text list): checklist of
+all entries in `meta.rowNoteDefs` (the shared note-text bank), shown as:
+```
+☑  [Shared note text...................................]  Applies to: [Item ▾]
+☐  [Brand new note.....................................]
+```
+- Check to associate this note with the item; the "Applies to" group `<select>` (same rules as
+  before — see §34 — present only when the item's type/status allows group-scoped notes at all)
+  appears only once checked.
+- The note *text* itself is a live-editable field, not deferred to this dialog's own Save/Cancel —
+  editing it here updates the shared bank entry immediately (persisted right away), exactly like
+  editing a note in the Document tab's Row Notes list (§14.5), since it's shared document-level
+  data rather than a per-item field.
+- `+ Add New Note` appends a new, blank bank entry, checks it for the current item, and focuses
+  its text field — satisfying the "select an existing note or add a new one" requirement from a
+  single control, without needing a separate dialog.
+- If no row notes exist yet in `meta.rowNoteDefs`, shows dimmed message:
+  *"No notes defined yet — use '+ Add New Note' below."*
 
 **Row References:** checklist of all entries in `meta.references`, shown as:
 ```
@@ -1025,7 +1053,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§39).
+enhancement (§40).
 
 ---
 
@@ -1527,7 +1555,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§39).
+multi-interval load analysis still listed under Future Enhancements (§40).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2082,7 +2110,69 @@ Word export's equivalent line was confirmed by direct source inspection (the sam
 round-trip check used in earlier revisions wasn't run this time, since it needs the JSZip CDN and
 this was a single, simple, directly-verified text-literal change).
 
-## 39. Future Enhancements
+## 39. Revision 36 (Phase 4) — Shared Note Bank and Reference Dedup
+
+*Last updated: 2026-07-28*
+
+Final phase of the Revision 36 request (§1 of the source document) — the one flagged upfront as
+the largest change. Confirmed with the user before starting: the Edit modal's Notes section
+becomes an in-place checklist (not a separate dialog).
+
+**Problem:** the same note or reference cited by multiple items (or item value-groups) generated
+a completely separate footnote instance every time, with no dedup anywhere — `buildAnnotationMap`
+(Print/Word), the local annotator in Load Analysis Detail, and the `annotateGroup`/`annotateAll`
+pair in Analysis Detail – Alternate each did a bare `++counter` per instance.
+
+**Data model:** new `meta.rowNoteDefs` — `[{key,text}]`, a shared note-text bank structured
+exactly like `meta.references` (§14.3). `rowNotes` entries change from `{text,group}` to
+`{key,group}`, referencing the bank instead of storing text inline — mirroring how `rowRefs`
+already references `meta.references` by key. Existing saves migrate by creating one bank entry
+per existing note (no attempt to merge identical-looking text across different items — safer
+default; the user can consolidate manually via the new Document tab section, §14.5).
+
+**References (source §1.1.1):** a citation with no per-item comment now renders as a plain
+`[N]` directly in the Notes column — pointing straight at the reference's own number in the
+References list — and consumes no footnote number at all. A citation *with* a comment keeps
+generating a footnote (`ref [N] docNo: comment`), unchanged from before. This alone doesn't fully
+solve the duplication problem (per the source document's own caveat), but meaningfully reduces it
+for the common case, at effectively no added complexity.
+
+**Dedup (all three footnote builders now share one `makeAnnotator()` factory):** within a given
+scope — the whole document for `buildAnnotationMap`, or each individual table for the two Load
+Analysis Detail reports — the same note key, or the same reference key **and** comment together,
+resolves to one footnote number and one printed line; every citing row's marker reuses that same
+number. Two citations of the same reference with *different* comments still get separate numbers,
+since the printed text genuinely differs. Numbering itself is unchanged from before (one counter
+per report/whole-document, not reset per table) — only *reuse* of an already-assigned number for
+a repeated key is new; a table's own footer list is sorted by number before rendering, since a
+reused (lower) number can be encountered after a freshly-created (higher) one within that table.
+
+**Edit Item dialog (§14.6):** the Notes section is now a checklist against `meta.rowNoteDefs`,
+mirroring the References checklist exactly (check to associate, plus a group picker once
+checked). Note text itself is live-editable and commits immediately (like Document-tab meta
+edits), not deferred to this dialog's Save/Cancel — editing a note's text from any item that uses
+it updates the shared bank everywhere. `+ Add New Note` creates a blank bank entry, auto-checks it
+for the current item, and focuses its text field.
+
+**Document tab (§14.5):** new "Row Notes" management section, structurally identical to General
+Notes (ordered list, `[↑][↓][✕]`, `+ Add Row Note`) but managing the per-item note bank instead of
+document-wide narrative text.
+
+Verified live: the same note key cited by two different items in one table produces exactly one
+footnote entry, with both items' markers showing the same number (confirmed in Load Analysis
+Detail, Analysis Detail – Alternate, and `buildAnnotationMap` independently); a no-comment
+reference citation renders as a bare `[N]` with zero footnote entries created; the same
+reference+comment cited twice dedupes to one footnote, while the same reference with two
+*different* comments correctly gets two; the Edit modal's checklist correctly shows existing
+associations checked, toggling the checkbox shows/hides the group picker, "+ Add New Note"
+creates-and-focuses a new bank entry end-to-end through the actual UI (not just direct state
+manipulation), and a second item can then check that same new note and dedupe against it; the
+Document tab's Row Notes section adds/edits/reorders/deletes correctly with live persistence; a
+full JSON export→migrateLegacy→import round-trip preserves the new shape unchanged. Confirmed no
+regression across Load Analysis Summary, Power Distribution Summary, both Load Analysis Detail
+reports, both grids, and the Document tab.
+
+## 40. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
