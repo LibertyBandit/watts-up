@@ -384,7 +384,7 @@
   <div id="tab-bar">
     <button id="tab-document" class="tab-btn">Document</button>
     <button id="tab-exrem" class="tab-btn rh-subtab-existing">Existing / Removed</button>
-    <button id="tab-new" class="tab-btn rh-subtab-new">New</button>
+    <button id="tab-new" class="tab-btn rh-subtab-new">Installed</button>
     <button id="tab-analysis" class="tab-btn active">Analysis</button>
   </div>
 
@@ -505,7 +505,7 @@
               <label>Status</label>
               <select id="ef-status">
                 <option value="existing">Existing</option>
-                <option value="new">New</option>
+                <option value="new">Installed</option>
                 <option value="removed">Removed</option>
               </select>
             </div>
@@ -730,7 +730,7 @@
               <label>Status</label>
               <select id="af-status">
                 <option value="existing">Existing</option>
-                <option value="new">New</option>
+                <option value="new">Installed</option>
                 <option value="removed">Removed</option>
               </select>
             </div>
@@ -766,7 +766,7 @@
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
           <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-ac-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-pf"> pf</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Added (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-added-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-added-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Installed (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-added-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-added-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-ac-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">New Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-newload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Remaining</td><td><label class="po-chk"><input type="checkbox" id="po-ac-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-pf"> pf</label></td></tr>
@@ -775,7 +775,7 @@
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
           <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-dc-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-cap-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-dc-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-exload-w"> W</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Added (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-dc-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-added-w"> W</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Installed (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-dc-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-added-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-dc-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-nc-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">New Load</td><td><label class="po-chk"><input type="checkbox" id="po-dc-newload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-newload-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Remaining</td><td><label class="po-chk"><input type="checkbox" id="po-dc-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-rem-w"> W</label></td></tr>
@@ -882,6 +882,11 @@ function evalFormula(raw) {
   return raw;
 }
 const STATUS_ORDER={existing:0,removed:1,new:2};
+// Revision 36: display label only — the internal status value stays 'new' everywhere (too many
+// comparisons/persisted saves depend on the literal string to rename safely), but every
+// user-facing rendering of it now reads "Installed" instead of "New".
+const STATUS_LABEL={existing:'Existing',removed:'Removed',new:'Installed'};
+function statusLabel(status){ return STATUS_LABEL[status]||status; }
 function children(pid, nodes) {
   const p=nodes[pid];
   const ids=(p&&Array.isArray(p.childIds))?p.childIds:[];
@@ -1343,11 +1348,11 @@ function buildTreeLi(node,nodes) {
   row.innerHTML=`<button class="${toggleCls}" data-id="${node.id}">▼</button>
     ${badgeHtml(node)}
     <span class="${descCls}" title="${esc(descTitle)}">${descLabel}</span>
-    <span class="status-badge s-${node.status}">${node.status}</span>
+    <span class="status-badge s-${node.status}">${statusLabel(node.status)}</span>
     ${ncDisplay}
     <div class="node-actions">
-      <button class="btn-node btn-up" data-id="${node.id}" title="Move up within ${node.status} siblings" ${canUp?'':'disabled'}>&uarr;</button>
-      <button class="btn-node btn-down" data-id="${node.id}" title="Move down within ${node.status} siblings" ${canDown?'':'disabled'}>&darr;</button>
+      <button class="btn-node btn-up" data-id="${node.id}" title="Move up within ${statusLabel(node.status).toLowerCase()} siblings" ${canUp?'':'disabled'}>&uarr;</button>
+      <button class="btn-node btn-down" data-id="${node.id}" title="Move down within ${statusLabel(node.status).toLowerCase()} siblings" ${canDown?'':'disabled'}>&darr;</button>
       <button class="btn-node btn-edit" data-id="${node.id}">Edit</button>
       ${addBtn}
     </div>`;
@@ -1440,7 +1445,7 @@ function renderTable() {
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
         <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
-        <td><span class="status-badge s-${n.status}">${n.status}</span></td>
+        <td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td>
         <td style="text-align:right">${vStr}</td>
         ${capA}${capW}${exA}${exW}${ldA}${ldW}${ncA}${ncW}${nlA}${nlW}${remA}${remW}
         <td>${flag}</td></tr>`;
@@ -1480,7 +1485,7 @@ function renderTable() {
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
         <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
-        <td><span class="status-badge s-${n.status}">${n.status}</span></td>
+        <td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td>
         <td style="text-align:right">${vStr}</td>
         ${capA}${capVA}${exA}${exVA}${exW}${exVAR}${exPF}
         ${ldA}${ldVA}${ldW}${ldVAR}${ldPF}
@@ -1677,15 +1682,15 @@ function renderLoadAnalysisDetail() {
     kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker}; blockNotes.push(...a.notes); } });
 
     const rows=[];
-    if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Added</td></tr>`);
+    if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Installed</td></tr>`);
     rows.push(buildRptRow(n,0,cols,cfg,false,am));
-    // If the subject itself is already under an "Added" label, an all-new set of children
+    // If the subject itself is already under an "Installed" label, an all-new set of children
     // doesn't need it repeated — mirrors how Print/Word already suppress this via their
     // recursive inAdd tracking.
     let seenRemoved=false,seenAdded=(n.status==='new');
     kids.forEach(k=>{
       if (k.status==='removed'&&!seenRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:14px">Removed</td></tr>`); seenRemoved=true; }
-      else if (k.status==='new'&&!seenAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:14px">Added</td></tr>`); seenAdded=true; }
+      else if (k.status==='new'&&!seenAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:14px">Installed</td></tr>`); seenAdded=true; }
       rows.push(buildRptRow(k,1,cols,cfg,false,am));
     });
 
@@ -1865,14 +1870,14 @@ function renderLoadAnalysisDetailAlt() {
     const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
     // No "Removed" banner for a Removed-status parent's own row (matches the existing Load
     // Analysis Detail report, which never labels a subject row this way either — only its
-    // italic styling indicates removed). A New-status parent instead gets "Added" in the
-    // modifier column, since a banner row above the parent didn't fit this transposed layout.
+    // italic styling indicates removed). An Installed-status parent instead gets "Installed" in
+    // the modifier column, since a banner row above the parent didn't fit this transposed layout.
     const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
     const itemAnnot=annotateGroup(n,null); if (itemAnnot) blockNotes.push(...itemAnnot.notes);
     // Warning highlights (Revision 36 §6.2) belong on the items themselves — the Parent Item row
     // and each child row — rather than on any individual value-group row, reversing the prior
     // New-Load-row-specific approach.
-    rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Added':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
+    rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Installed':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
 
     { const a=annotateGroup(n,'cap'); if (a) blockNotes.push(...a.notes);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
@@ -1885,7 +1890,7 @@ function renderLoadAnalysisDetailAlt() {
     let shownRemoved=false,shownAdded=false;
     kids.forEach(k=>{
       if (k.status==='removed'&&!shownRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:28px">Removed</td></tr>`); shownRemoved=true; }
-      else if (k.status==='new'&&!shownAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Added</td></tr>`); shownAdded=true; }
+      else if (k.status==='new'&&!shownAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Installed</td></tr>`); shownAdded=true; }
       const kAnnot=annotateAll(k); if (kAnnot) blockNotes.push(...kAnnot.notes);
       const kDesc=esc((k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:''));
       const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
@@ -2161,7 +2166,7 @@ function gridAddChildRow(parentId,defaultStatus,renderFn){
   // Revision 36: in the Existing/Removed grid specifically, a freshly created non-load item
   // should read as genuinely blank (no pf=1/zero pre-fill) until the user actually enters a
   // value or triggers Calculate/Save — makeNode()'s default (mkPow(0,0,0,0,1)) is left alone for
-  // every other creation path (Add Item(s) modal, the Installed/New grid), since only this one
+  // every other creation path (Add Item(s) modal, the Installed grid), since only this one
   // was reported as prematurely defaulting.
   if (defaultStatus==='existing'&&hasCap(type)) state.nodes[newId].existingLoad=mkPow();
   batchCommit();
@@ -2298,11 +2303,11 @@ function gridVoltAcdcCells(n,forceDisabled){
 }
 
 function gridStatusToggleCell(n,otherStatus){
-  const label=n.status[0].toUpperCase()+n.status.slice(1);
+  const label=statusLabel(n.status);
   return `<td class="grid-col-status"><button type="button" class="status-badge s-${n.status} grid-status-toggle" data-act="toggle-status" data-toggle-to="${otherStatus}" title="Click to toggle">${label}</button></td>`;
 }
 function gridStatusDisplayCell(n){
-  const label=n.status[0].toUpperCase()+n.status.slice(1);
+  const label=statusLabel(n.status);
   return `<td class="grid-col-status"><span class="status-badge s-${n.status}">${label}</span></td>`;
 }
 function buildExRemRow(n,depth){
@@ -3057,7 +3062,7 @@ function efRenderSiblings(parentId,excludeId) {
   body.innerHTML=`<table class="sibling-table"><thead><tr><th>Type</th><th>Description</th><th>Status</th></tr></thead>
     <tbody>${sibs.map(n=>{
       const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
-      return `<tr data-id="${n.id}"><td>${badgeHtml(n)||esc(displayType(n))}</td><td>${esc(n.description||'')+rdHtml}</td><td><span class="status-badge s-${n.status}">${n.status}</span></td></tr>`;
+      return `<tr data-id="${n.id}"><td>${badgeHtml(n)||esc(displayType(n))}</td><td>${esc(n.description||'')+rdHtml}</td><td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td></tr>`;
     }).join('')}</tbody></table>`;
   body.querySelectorAll('tr[data-id]').forEach(r=>r.addEventListener('click',()=>{closeModal();openEdit(r.dataset.id);}));
 }
@@ -3435,7 +3440,7 @@ function afCols(type,acDc,status) {
         cols.push({key:'exload_w',label:'Ex Ld (W)',itype:'text',ph:'opt.',w:'70px',group:'exload'});
       }
     } else {
-      // status==='new': matches the New grid's Net Change override group (every row here
+      // status==='new': matches the Installed grid's Net Change override group (every row here
       // is childless at creation, so it's always eligible — see gridDisplayCells §27.7).
       if (acDc==='ac') {
         cols.push({key:'nc_a',  label:'Net Chg (A)',  itype:'text',ph:'auto',w:'70px',group:'nc',calc:'ac'});
@@ -3651,7 +3656,7 @@ function doAddSave() {
       if (acDc==='ac') {const ca=getN('cap_a'),cva=getN('cap_va');cap=cva!==null?{w:null,var:null,va:cva,a:v>0?cva/v:ca,pf:null}:(ca!==null?{w:null,var:null,va:v>0?ca*v:null,a:ca,pf:null}:null);}
       else {const ca=getN('cap_a'),cw=getN('cap_w');cap=cw!==null?{w:cw,var:null,va:null,a:v>0?cw/v:ca,pf:null}:(ca!==null?deriveDcFromA(ca,v):null);}
       // Existing Load (existing/removed status) and Net Change override (new status) are
-      // mutually exclusive per row — matches the Existing/Removed and New grids respectively,
+      // mutually exclusive per row — matches the Existing/Removed and Installed grids respectively,
       // which never show both groups on the same row either.
       let exLd,ncOv;
       if (status==='new') {
@@ -3698,7 +3703,7 @@ function buildPrint() {
         const fA=(p,k)=>fmtP(p,k);
         const ncSign=v=>{if(!v||v.va===null) return '—';const s=v.va>=0?'+':'';return s+fmtN(v.va)+' VA';};
         return `<tr class="${rCls}">
-          <td>${indent}${dl}</td><td>${esc(typeStr)}</td><td>${esc(n.status)}</td><td class="right">${vStr}</td>
+          <td>${indent}${dl}</td><td>${esc(typeStr)}</td><td>${esc(statusLabel(n.status))}</td><td class="right">${vStr}</td>
           <td class="right">${hasCap(n.type)?fA(n.capacity,'va'):'—'}</td>
           <td class="right">${hasCap(n.type)?fA(n.existingLoad,'va'):'—'}</td>
           <td class="right">${isLoad(n.type)?fA(n.loadValue,'va'):'—'}</td>
@@ -3710,7 +3715,7 @@ function buildPrint() {
         const fW=(p,k)=>fmtP(p,k);
         const ncSign=v=>{if(!v||v.w===null) return '—';const s=v.w>=0?'+':'';return s+fmtN(v.w)+' W';};
         return `<tr class="${rCls}">
-          <td>${indent}${dl}</td><td>${esc(typeStr)}</td><td>${esc(n.status)}</td><td class="right">${vStr}</td>
+          <td>${indent}${dl}</td><td>${esc(typeStr)}</td><td>${esc(statusLabel(n.status))}</td><td class="right">${vStr}</td>
           <td class="right">${hasCap(n.type)?fW(n.capacity,'w'):'—'}</td>
           <td class="right">${hasCap(n.type)?fW(n.existingLoad,'w'):'—'}</td>
           <td class="right">${isLoad(n.type)?fW(n.loadValue,'w'):'—'}</td>
@@ -3782,7 +3787,7 @@ const AC_ALL_KEYS=[{k:'a',l:'A'},{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'}
 const AC_GROUPS=[
   {id:'cap',    label:'Capacity',          keys:AC_ALL_KEYS},
   {id:'exload', label:'Existing Load',     keys:AC_ALL_KEYS},
-  {id:'added',  label:'Added (Removed)',   keys:AC_ALL_KEYS},
+  {id:'added',  label:'Installed (Removed)',keys:AC_ALL_KEYS},
   {id:'nc',     label:'Net Change',        keys:AC_ALL_KEYS},
   {id:'newload',label:'New Load',          keys:AC_ALL_KEYS},
   {id:'rem',    label:'Remaining',         keys:AC_ALL_KEYS},
@@ -3790,7 +3795,7 @@ const AC_GROUPS=[
 const DC_GROUPS=[
   {id:'cap',    label:'Capacity',          keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'exload', label:'Existing Load',     keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
-  {id:'added',  label:'Added (Removed)',   keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
+  {id:'added',  label:'Installed (Removed)',keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'nc',     label:'Net Change',        keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'newload',label:'New Load',          keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'rem',    label:'Remaining',         keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
@@ -3878,7 +3883,7 @@ function buildSectionRows(acDc,cols,cfg){
     prevDepth=depth;
     if(!inRem&&!inAdd){
       if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);nowInRem=true;}
-      else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
+      else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Installed</td></tr>`);nowInAdd=true;}
     }
     rows.push(buildRptRow(n,depth,cols,cfg,topBorder));
     const children=(childrenOf[id]||[]).slice().sort((a,b)=>(statusOrd[nodes[a]?.status]??0)-(statusOrd[nodes[b]?.status]??0));
@@ -3997,7 +4002,7 @@ function buildSectionRows(acDc,cols,cfg,annotMap){
     prevDepth=depth;
     if(!inRem&&!inAdd){
       if(n.status==='removed'&&!emRem.has(pid)){emRem.add(pid);rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:${depth*14}px">Removed</td></tr>`);nowInRem=true;}
-      else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Added</td></tr>`);nowInAdd=true;}
+      else if(n.status==='new'&&!emAdd.has(pid)){emAdd.add(pid);rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:${depth*14}px">Installed</td></tr>`);nowInAdd=true;}
     }
     rows.push(buildRptRow(n,depth,cols,cfg,topBorder,annotMap));
     const kids=childrenOf[id]||[];
@@ -4222,7 +4227,7 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,notesW,colWidths,hasAnnot}
         nowInRem=true;
       }else if(n.status==='new'&&!emAdd.has(pid)){
         emAdd.add(pid);
-        rows.push(wxTr(wxTc(wxPar(wxRun('Added',{b:true,sz:6.5}),{ind:depth*200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+        rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:6.5}),{ind:depth*200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined})));
         nowInAdd=true;
       }
     }

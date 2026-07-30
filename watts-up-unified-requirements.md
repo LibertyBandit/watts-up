@@ -333,19 +333,19 @@ pass — see §7.7).
 
 *Revised 2026-07-23 (Round 4):* the column set, order, and units-of-measure now match
 whichever grid corresponds to the row's Status — Existing/Removed grid's columns for
-existing/removed status, New grid's columns for new status — with inapplicable columns
-omitted entirely rather than shown disabled, since every row here is a distinct new item, not
-a shared editing form. All row types still include Description and Ref Des first.
+existing/removed status, Installed grid's columns for installed status — with inapplicable
+columns omitted entirely rather than shown disabled, since every row here is a distinct new item,
+not a shared editing form. All row types still include Description and Ref Des first.
 
 | Item / Status | Columns (in order) |
 |---|---|
 | Non-load, existing/removed | Capacity (A, VA or A, W) + **Existing Load** (A, VA, W, VAR, pf or A, W) |
-| Non-load, new | Capacity (A, VA or A, W) + **Net Change** (A, VA, W, VAR, pf or A, W) — every row is childless at creation, so this is always available for a new non-load item |
+| Non-load, installed | Capacity (A, VA or A, W) + **Net Change** (A, VA, W, VAR, pf or A, W) — every row is childless at creation, so this is always available for a new non-load item |
 | Load, any status | **Load** (A, VA, W, VAR, pf or A, W) |
 | Conversion item, any status | Eff., OUT Volts, then **IN Cap**, **IN Load**, **OUT Cap**, **OUT Load** in that order, each group showing (A) first followed by (VA) for an AC side or (W) for a DC side |
 
 Existing Load and Net Change are mutually exclusive on the same row — matching how the
-Existing/Removed and New grids never show both groups either.
+Existing/Removed and Installed grids never show both groups either.
 
 **Calculation** *(added 2026-07-23, Round 4)*: every AC group that includes W/VAR/pf
 (Existing Load, Load, Net Change) and every conversion Cap/Load pair no longer auto-calculates
@@ -481,10 +481,10 @@ from the root node voltage; falls back to "AC Summary" / "DC Summary" if no root
 ### 13.10 Tree Grouping, Layout, and Visual Hierarchy
 
 Within each parent's children, items are ordered: existing first, then a "Removed" label row
-followed by removed items, then an "Added" label row followed by new items. Label rows span
+followed by removed items, then an "Installed" label row followed by new items. Label rows span
 the full table width at the same indentation as the items they introduce.
 
-**Label suppression**: once a "Removed" or "Added" label has been emitted for a given parent,
+**Label suppression**: once a "Removed" or "Installed" label has been emitted for a given parent,
 all descendants in that branch inherit the label context — no additional labels are inserted
 for their children.
 
@@ -495,7 +495,7 @@ depth ≥ 4). The font size applies to the entire row — description and all nu
 **Branch-transition spacer rows**: when the tree traversal returns to a shallower depth (a new
 sibling branch starts), a blank spacer row is inserted before the first node at the shallower
 level. Spacer height = max(1.5, 7 − depth × 1.5) pt; bottom border weight =
-max(0.75, 3 − depth × 0.5) pt solid. Spacer rows are not inserted before "Removed" or "Added"
+max(0.75, 3 − depth × 0.5) pt solid. Spacer rows are not inserted before "Removed" or "Installed"
 label rows.
 
 **Parent-child separator border**: when a parent node and its first child both have non-zero
@@ -1025,7 +1025,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§38).
+enhancement (§39).
 
 ---
 
@@ -1527,7 +1527,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§38).
+multi-interval load analysis still listed under Future Enhancements (§39).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2036,7 +2036,53 @@ Item row and both child rows, with the CAPACITY/Net Change/New Load/Remaining ro
 Confirmed no regression in Load Analysis Detail, Load Analysis Summary, and Power Distribution
 Summary.
 
-## 38. Future Enhancements
+## 38. Revision 36 (Phase 3) — "New"/"Added" → "Installed" Terminology
+
+*Last updated: 2026-07-28*
+
+Third phase of the Revision 36 request (§2 of the source document). Item 1 (the notes/
+references rework) remains deferred.
+
+**Display text only — the internal `status` value stays `'new'`.** Renaming the actual code
+value would touch dozens of comparisons, saved-file compatibility, and every status-ordering
+helper for no user-visible benefit; instead, a new shared `STATUS_LABEL`/`statusLabel(status)`
+(`existing`→"Existing", `removed`→"Removed", `new`→"Installed") is the single source of truth for
+how a status is *displayed*, and every rendering site now goes through it instead of using the
+raw status string or a naive capitalize-first-letter transform.
+
+**"New Load" is unchanged.** It's the computed value-group name (`existingLoad + netChange`,
+shown regardless of an item's own status), not the item-status label — a different meaning
+entirely, confirmed with the user before implementing.
+
+**Everywhere the rename applies:**
+- Status badges/dropdowns: the LH tree row badge, both Load Analysis Summary table variants
+  (AC/DC), the Existing/Removed and Installed grids' status cells (`gridStatusToggleCell`/
+  `gridStatusDisplayCell`, previously a naive `status[0].toUpperCase()+status.slice(1)`), the
+  Edit Item modal's sibling list, and the Edit/Add modal's own Status `<select>` (option `value`
+  stays `"new"`, visible text becomes "Installed"). The tree's up/down sibling-reorder button
+  tooltips ("Move up within *installed* siblings") also go through `statusLabel(...).toLowerCase()`.
+- The "New" grid tab is now labeled "Installed" (`#tab-new`'s button text — the internal id/CSS
+  class/render-function names are unchanged).
+- Report "Added" pseudo-header rows/banners → "Installed": the original Load Analysis Detail
+  report, the Analysis Detail – Alternate report (both its child pseudo-header and its modifier-
+  column label on a New-status parent's own row), Print Report, and Word export.
+- The `added` value-group's label (`AC_GROUPS`/`DC_GROUPS`, §13.2/§13.3) → "Installed (Removed)",
+  including its three hardcoded copies in the Print/Export Settings dialog markup.
+- Print Report's dead, never-called `buildPrint()`/`printRows()` (the real Print Report button
+  flow is `buildPrintR10()`/`buildSectionRows()` — see the Revision 20 note on this) was updated
+  for text consistency too, even though it isn't reachable.
+
+Verified live across every surface above with a seeded tree containing an Existing bus, a Removed
+child, an Installed (new-status) child with its own Installed (new-status) grandchild load:
+tree badge + tooltip, both Summary table variants, both grids, the Edit modal's Status dropdown
+and sibling list, the original Load Analysis Detail report (group header label and pseudo-header),
+the Alternate report (modifier-column label and child pseudo-header), and Print Report (group
+header label and pseudo-header/bolding) all read "Installed" where "New"/"Added" used to appear.
+Word export's equivalent line was confirmed by direct source inspection (the same JSZip-based
+round-trip check used in earlier revisions wasn't run this time, since it needs the JSZip CDN and
+this was a single, simple, directly-verified text-literal change).
+
+## 39. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
