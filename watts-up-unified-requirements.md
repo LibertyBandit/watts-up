@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§41).
+enhancement (§42).
 
 ---
 
@@ -1559,7 +1559,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§41).
+multi-interval load analysis still listed under Future Enhancements (§42).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -1581,7 +1581,8 @@ input); editing, reordering, and persistence all continue to work unchanged.
   cosmetic side effect of table cells not reliably honoring percentage heights; judged not
   worth a riskier fixed-row-height change to close entirely.)
 - Footer message gained a second line: "Use Analysis tab to add TRUs." — an interim stopgap,
-  not a new TRU-creation capability in the grids themselves.
+  not a new TRU-creation capability in the grids themselves. (Resolved in §41 — the grids gained
+  their own "+ Item" button and an in-row TRU trigger, and this footer line was removed.)
 
 ### 27.6 Grid AC groups: Calc-on-demand instead of calc-on-every-edit
 
@@ -2275,7 +2276,40 @@ Verified live: adding a note in one item, saving, then opening a second item sho
 unchecked; within the same modal session, adding a second new note and triggering an intervening
 redraw (toggling an unrelated checkbox) still leaves the first newly-added note checked.
 
-## 41. Future Enhancements
+## 41. Add TRUs (and Any Item) Directly From the Grids
+
+*Last updated: 2026-07-31*
+
+Resolves the "Use Analysis tab to add TRUs" stopgap noted when the grids' footer first gained
+that message (§27) — TRUs (and any other item) can now be added directly from either grid.
+
+**"+ Item" button** added to both grids' shared footer (`gridFooter()`), next to Cancel/Save —
+opens the Add Item(s) modal with no parent preselected, identical to the tree toolbar's existing
+"+ Root" button. This is the first entry point into Add Item(s) from inside either grid; the
+now-redundant "Use Analysis tab to add TRUs" footer hint was removed.
+
+**In-row "+ TRU (opens Add Item)" trigger:** the inline Item Type `<select>` (`gridTypeCell`)
+gains one extra option, `GRID_ADD_TRU_SENTINEL` (`'__add_tru__'`) — offered only on rows with a
+real switchable-type list (not the already-fixed/disabled Root/conversion-role rows, which have
+their own "+Child" for adding children). Selecting it is never treated as an actual type change:
+`gridFieldChanged`'s `'type'` branch intercepts the sentinel value before any node mutation,
+snaps the dropdown back to the row's real current type, opens the Add Item(s) modal with that
+row preselected as parent, sets the modal's own Item Type to TRU, and dispatches a real `change`
+event on it (so it goes through the exact same `afRecheck()`/`afRenderTable()` path a manual
+selection would) — the row itself never changes, no `recalc`/`persist`/`renderAll` runs for this
+branch.
+
+Scope is deliberately narrow: only TRU (matching `SELECTABLE_CONVERSION_TYPES`, §32) is offered
+via the sentinel — this is a new *UI path* to the existing Add Item(s) conversion-pair creation
+logic, not a new capability or a change to what's creatable.
+
+Verified live: "+ Item" button present in both grids, opens the modal with a blank parent;
+selecting the in-row TRU trigger on an existing row opens the modal with that row's id as parent
+and "TRU" as the preselected type, while the row's own dropdown and underlying node type are left
+completely unchanged; the sentinel option is confirmed absent from Root/conversion-role rows
+(their dropdown stays disabled, as before). Confirmed no regression across every tab.
+
+## 42. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

@@ -1983,6 +1983,12 @@ function sameShapeTypes(type){ for (const g of SAME_SHAPE_GROUPS) if (g.includes
 // meaning without also building/attaching the other half. Everything else is switchable.
 const GRID_SWITCHABLE_TYPES=[...NT.GENERATION,...NT.DISTRIBUTION,...NT.PROTECTION,...NT.LOAD];
 function gridAvailableTypes(n){ return (n.convRole||n.type==='Root') ? [n.type] : GRID_SWITCHABLE_TYPES; }
+// A TRU can't be created by switching a row's own type in place (it's a paired IN/OUT node
+// structure, not a single-node change) — this sentinel value is a trigger, not a real type: its
+// change handler (gridFieldChanged) intercepts it, opens the Add Item(s) modal with this row
+// preselected as parent and TRU preselected as type, and snaps the dropdown back to the row's
+// actual type. Never actually assigned to n.type.
+const GRID_ADD_TRU_SENTINEL='__add_tru__';
 // Matches fillTypeSelect's Edit-modal convention (and Print/Word reports' displayType-adjacent
 // handling) so the root row doesn't show the literal internal type string "Root" anywhere.
 function typeOptionLabel(t){ return t==='Root'?'Total Aircraft Load':t; }
@@ -2261,7 +2267,10 @@ function gridTypeCell(n,depth,editable=true){
   if (!editable) return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}</div></td>`;
   const shapes=gridAvailableTypes(n);
   const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(typeOptionLabel(t))}</option>`).join('');
-  return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}<select data-field="type" class="grid-type-select"${shapes.length<=1?' disabled':''}>${typeOpts}</select></div></td>`;
+  // Only offered on rows with a real switchable-type list (not the already-fixed/disabled
+  // Root/conversion-role rows) — those already have their own "+Child" for adding children.
+  const truOpt=shapes.length>1?`<option value="${GRID_ADD_TRU_SENTINEL}">+ TRU (opens Add Item)</option>`:'';
+  return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}<select data-field="type" class="grid-type-select"${shapes.length<=1?' disabled':''}>${typeOpts}${truOpt}</select></div></td>`;
 }
 function gridDescInputCell(n,editable=true){
   if (!editable) return `<td class="grid-col-desc"><span class="grid-desc-readonly" title="${esc(n.description||'unnamed')}">${esc(n.description||'unnamed')}</span></td>`;
@@ -2446,6 +2455,18 @@ function gridFieldChanged(e,renderFn){
   const el=e.target; const row=el.closest('tr[data-nid]'); if (!row) return;
   const id=row.dataset.nid; const n=state.nodes[id]; if (!n) return;
   const field=el.dataset.field;
+  if (field==='type'&&el.value===GRID_ADD_TRU_SENTINEL) {
+    // Not a real type change — snap the dropdown back to this row's actual type and open the
+    // Add Item(s) modal instead, with this row preselected as parent and TRU preselected as type
+    // (dispatching a real change event so it goes through the same afRecheck()/afRenderTable()
+    // path as picking TRU manually would).
+    el.value=n.type;
+    openAdd(n.id);
+    const aftype=document.getElementById('af-type');
+    aftype.value='TRU';
+    aftype.dispatchEvent(new Event('change',{bubbles:true}));
+    return;
+  }
   if (field==='description') n.description=el.value;
   else if (field==='refDes') n.refDes=el.value;
   else if (field==='status') n.status=el.value;
@@ -2565,6 +2586,10 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
       else if (act==='toggle-status') { const n=state.nodes[id]; if (n) { n.status=btn.dataset.toggleTo; recalc();persist();renderAll(); } }
     });
   });
+  const addBtn=el.querySelector('[data-grid-add]');
+  // First (and only, before this) way to open the Add Item(s) modal from inside a grid rather
+  // than the tree — same modal as the tree toolbar's "+ Root" button, no parent preselected.
+  if (addBtn) addBtn.addEventListener('click',()=>openAdd(null));
   const cancelBtn=el.querySelector('[data-grid-cancel]'), saveBtn=el.querySelector('[data-grid-save]');
   if (cancelBtn) cancelBtn.addEventListener('click',()=>{
     if (!gridSnapshot) return;
@@ -2582,7 +2607,8 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
 }
 function gridFooter(gridKey){
   return `<div class="grid-footer">
-    <span class="grid-footer-msg">Edits apply immediately. Cancel reverts everything changed since you opened this tab.<br>Use Analysis tab to add TRUs.</span>
+    <span class="grid-footer-msg">Edits apply immediately. Cancel reverts everything changed since you opened this tab.</span>
+    <button data-grid-add class="btn-default">+ Item</button>
     <button data-grid-cancel class="btn-default">Cancel</button>
     <button data-grid-save class="btn-primary">Save</button>
   </div>`;
