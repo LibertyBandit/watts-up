@@ -776,7 +776,7 @@
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Installed (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-added-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-added-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-ac-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-nc-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">New Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-newload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-newload-pf"> pf</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Remaining</td><td><label class="po-chk"><input type="checkbox" id="po-ac-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-pf"> pf</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Reserve</td><td><label class="po-chk"><input type="checkbox" id="po-ac-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-rem-pf"> pf</label></td></tr>
         </table>
         <div class="section-label" style="margin-top:.75rem">DC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
@@ -785,7 +785,7 @@
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Installed (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-dc-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-added-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Net Change</td><td><label class="po-chk"><input type="checkbox" id="po-dc-nc-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-nc-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">New Load</td><td><label class="po-chk"><input type="checkbox" id="po-dc-newload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-newload-w"> W</label></td></tr>
-          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Remaining</td><td><label class="po-chk"><input type="checkbox" id="po-dc-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-rem-w"> W</label></td></tr>
+          <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Reserve</td><td><label class="po-chk"><input type="checkbox" id="po-dc-rem-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-rem-w"> W</label></td></tr>
         </table>
         <div class="section-label" style="margin-top:.75rem">Options</div>
         <div style="display:flex;flex-direction:column;gap:.35rem;font-size:.82rem;margin-top:.3rem">
@@ -1118,7 +1118,11 @@ function calcNC(node,nodes) {
     const inW=outW/node.efficiency;
     const isAcIn=node.acDc==='ac';
     const inVA=isAcIn&&pf>0?inW/pf:inW;
-    const inVAR=Math.sqrt(Math.max(0,inVA*inVA-inW*inW));
+    // VAR's sign follows W's sign, same convention as deriveAcFromWVar's VA — a negative net
+    // change flowing through the converter (something removed on the output) must produce a
+    // negative VAR on the input side too, not a bare non-negative magnitude from sqrt.
+    const inVARMag=Math.sqrt(Math.max(0,inVA*inVA-inW*inW));
+    const inVAR=inW<0?-inVARMag:inVARMag;
     const inA=v>0?inVA/v:null;
     return {w:inW,var:inVAR,va:inVA,a:inA,pf:isAcIn?pf:null};
   }
@@ -1156,20 +1160,17 @@ function warnNode(node,nodes) {
     }
   }
   if (hasCap(node.type)&&node.status==='existing'&&nodes) {
-    // AC: compare W and VAR algebraically (both additive) rather than VA — VA is a vector sum
-    // (sqrt(W²+VAR²)), so summing children's VA values is almost always smaller than the
-    // parent's own VA even when the real (W/VAR) contributions genuinely exceed it.
-    const isAc=node.acDc==='ac';
-    let sumW=0,sumVar=0;
+    // W only — the VAR half of this check (comparing summed children VAR against the parent's
+    // own VAR) is disabled: rounding/derivation noise accumulated through the calculation chain
+    // produced too many spurious near-miss warnings in practice. See unified requirements §11.
+    let sumW=0;
     children(node.id,nodes).forEach(c=>{
       if (c.status!=='existing'&&c.status!=='removed') return;
       const src=isLoad(c.type)?c.loadValue:c.existingLoad;
       sumW+=src?.w||0;
-      if (isAc) sumVar+=src?.var||0;
     });
     const ownW=node.existingLoad?.w||0;
-    const ownVar=isAc?(node.existingLoad?.var||0):0;
-    if (sumW>ownW+1e-6||(isAc&&sumVar>ownVar+1e-6))
+    if (sumW>ownW+1e-6)
       w.push({code:'W5',message:`Children's existing/removed load exceeds this item's existing load — "${esc(node.description)}".`});
   }
   return w;
@@ -1524,7 +1525,7 @@ function renderTable() {
       <th class="group-hdr" colspan="2">Load</th>
       <th class="group-hdr" colspan="2">Net Chg</th>
       <th class="group-hdr" colspan="2">New Load</th>
-      <th class="group-hdr" colspan="2">Remaining</th>
+      <th class="group-hdr" colspan="2">Reserve</th>
       <th rowspan="2"></th>
     </tr>
     <tr>
@@ -1544,7 +1545,7 @@ function renderTable() {
       <th class="group-hdr" colspan="5">Load</th>
       <th class="group-hdr" colspan="5">Net Chg</th>
       <th class="group-hdr" colspan="5">New Load</th>
-      <th class="group-hdr" colspan="2">Remaining</th>
+      <th class="group-hdr" colspan="2">Reserve</th>
       <th rowspan="2"></th>
     </tr>
     <tr>
@@ -1739,9 +1740,15 @@ function renderLoadAnalysisDetail() {
     const selfAnnot=annotateNode(n); if (selfAnnot) { am[n.id]={marker:selfAnnot.marker}; pushEntries(selfAnnot.entries); }
     kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker}; pushEntries(a.entries); } });
 
+    // `am` is always a truthy object ({}) even when hasAnyAnnot is false, which previously made
+    // buildRptRow render an empty Notes <td> on every row regardless — while buildRptHeader
+    // correctly omits the Notes <th> whenever hasAnyAnnot is false, producing a header/row
+    // column-count mismatch (every value shifted one column right). Pass null instead of `am`
+    // when there's nothing to annotate, matching the header exactly.
+    const annotMapArg=hasAnyAnnot?am:null;
     const rows=[];
     if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Installed</td></tr>`);
-    rows.push(buildRptRow(n,0,cols,cfg,false,am));
+    rows.push(buildRptRow(n,0,cols,cfg,false,annotMapArg));
     // If the subject itself is already under an "Installed" label, an all-new set of children
     // doesn't need it repeated — mirrors how Print/Word already suppress this via their
     // recursive inAdd tracking.
@@ -1749,7 +1756,7 @@ function renderLoadAnalysisDetail() {
     kids.forEach(k=>{
       if (k.status==='removed'&&!seenRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:14px">Removed</td></tr>`); seenRemoved=true; }
       else if (k.status==='new'&&!seenAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:14px">Installed</td></tr>`); seenAdded=true; }
-      rows.push(buildRptRow(k,1,cols,cfg,false,am));
+      rows.push(buildRptRow(k,1,cols,cfg,false,annotMapArg));
     });
 
     // Numbers are assigned in whole-report order (not reset per table), so a table can end up
@@ -1772,7 +1779,7 @@ function renderLoadAnalysisDetail() {
 }
 
 // Revision 33 (Phase 3): "Analysis Detail – Alternate" — transposes the above report's value
-// groups (Capacity/Existing Load/Net Change/New Load/Remaining) into rows instead of columns,
+// groups (Capacity/Existing Load/Net Change/New Load/Reserve) into rows instead of columns,
 // with immediate children flattened into rows between the parent's Existing Load and Net Change
 // rows. Screen-only for now (not wired into Print Report or Word export). Deliberately
 // self-contained (its own eligibleIds/pathFor/annotation helpers) rather than sharing closures
@@ -1867,7 +1874,7 @@ function renderLoadAnalysisDetailAlt() {
     return ov?' class="rpt-over"':wn?' class="rpt-warn"':'';
   }
   // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/
-  // Remaining ever go negative (shown as a positive value in parens), matching the existing
+  // Reserve ever go negative (shown as a positive value in parens), matching the existing
   // report's buildRptRow convention exactly.
   function valueCellsForGroup(groupId,src,cols,activeSet) {
     return cols.map(col=>{
@@ -1948,7 +1955,7 @@ function renderLoadAnalysisDetailAlt() {
     { const a=annotateGroup(n,'newload'); if (a) pushEntries(a.entries);
       rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
     { const a=annotateGroup(n,'rem'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Remaining</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Reserve</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
 
     blockNotes.sort((a,b)=>a.num-b.num);
     const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
@@ -1988,6 +1995,18 @@ function defaultChildTypeFor(parent){
   if (NT.DISTRIBUTION.includes(t)) return 'Circuit Breaker';
   if (NT.PROTECTION.includes(t)) return 'Load';
   return 'Load';
+}
+// A Load item can never be Existing status — keeps the "Existing" <option> disabled whenever
+// Load is the currently selected type, and steers the select away from it if it was already
+// selected (e.g. opening Edit on a legacy item saved before this rule existed). Only touches the
+// form controls themselves; doesn't mutate any node data until the modal is actually saved.
+function inhibitLoadExisting(typeSelId,statusSelId){
+  const typeSel=document.getElementById(typeSelId),statusSel=document.getElementById(statusSelId);
+  if (!typeSel||!statusSel) return;
+  const isLoadType=typeSel.value==='Load';
+  const existingOpt=statusSel.querySelector('option[value="existing"]');
+  if (existingOpt) existingOpt.disabled=isLoadType;
+  if (isLoadType&&statusSel.value==='existing') statusSel.value='removed';
 }
 // After a type change, make sure whatever fields the new type needs actually exist (with the
 // same defaults makeNode would have used), without touching/clearing fields the old type left
@@ -2203,13 +2222,16 @@ function gridResetGroup(id,field,renderFn){
 function gridAddChildRow(parentId,defaultStatus,renderFn){
   const parent=state.nodes[parentId]; if (!parent) return;
   const type=defaultChildTypeFor(parent);
-  const newId=addNode(parentId,{type,status:defaultStatus,acDc:parent.acDc||'dc',voltage:parent.voltage??null,description:'',refDes:''});
+  // A Load can never be Existing status — a Load defaulted under an Existing/Removed-grid
+  // +Child (e.g. under a Circuit Breaker parent) defaults to Removed instead.
+  const status=(type==='Load'&&defaultStatus==='existing')?'removed':defaultStatus;
+  const newId=addNode(parentId,{type,status,acDc:parent.acDc||'dc',voltage:parent.voltage??null,description:'',refDes:''});
   // Revision 36: in the Existing/Removed grid specifically, a freshly created non-load item
   // should read as genuinely blank (no pf=1/zero pre-fill) until the user actually enters a
   // value or triggers Calculate/Save — makeNode()'s default (mkPow(0,0,0,0,1)) is left alone for
   // every other creation path (Add Item(s) modal, the Installed grid), since only this one
   // was reported as prematurely defaulting.
-  if (defaultStatus==='existing'&&hasCap(type)) state.nodes[newId].existingLoad=mkPow();
+  if (status==='existing'&&hasCap(type)) state.nodes[newId].existingLoad=mkPow();
   batchCommit();
   renderAll();
   // Unlike every other grid action (which now preserves scroll position by default, see
@@ -2345,6 +2367,9 @@ function gridVoltAcdcCells(n,forceDisabled){
 
 function gridStatusToggleCell(n,otherStatus){
   const label=statusLabel(n.status);
+  // A Load can never be Existing status, so toggling a Load row (always Removed in this grid)
+  // to the other side isn't valid here — show a plain, non-interactive badge instead.
+  if (isLoad(n.type)) return `<td class="grid-col-status"><span class="status-badge s-${n.status}">${label}</span></td>`;
   return `<td class="grid-col-status"><button type="button" class="status-badge s-${n.status} grid-status-toggle" data-act="toggle-status" data-toggle-to="${otherStatus}" title="Click to toggle">${label}</button></td>`;
 }
 function gridStatusDisplayCell(n){
@@ -2424,7 +2449,13 @@ function gridFieldChanged(e,renderFn){
   if (field==='description') n.description=el.value;
   else if (field==='refDes') n.refDes=el.value;
   else if (field==='status') n.status=el.value;
-  else if (field==='type') { n.type=el.value; ensureTypeFields(n); }
+  else if (field==='type') {
+    n.type=el.value; ensureTypeFields(n);
+    // A Load can never be Existing status — switching a row's type to Load inline forces its
+    // status to Removed if it was Existing (matches the +Child default and the Add/Edit dialogs'
+    // inhibited "Existing" status option for Load items).
+    if (isLoad(n.type)&&n.status==='existing') n.status='removed';
+  }
   else if (field==='voltage') n.voltage=parseF(evalFormula(el.value.trim()));
   else if (field==='acdc') n.acDc=el.value;
   else if (field==='efficiency') { const eff=parseF(evalFormula(el.value.trim())); if (eff!==null&&eff>0&&eff<=1) n.efficiency=eff; }
@@ -2736,7 +2767,7 @@ function renderAll(){renderDocPanel();renderTree();renderTable();renderPowerDist
 // item itself (null = item itself, the backward-compatible default). Legal groups depend on the
 // node's type/status — Load items and Removed-status items are restricted to item-only, since
 // they don't have the Existing Load/Net Change distinction the other groups represent.
-const NOTE_GROUP_LABELS={cap:'Capacity',exload:'Existing Load',nc:'Net Change',newload:'New Load',rem:'Remaining'};
+const NOTE_GROUP_LABELS={cap:'Capacity',exload:'Existing Load',nc:'Net Change',newload:'New Load',rem:'Reserve'};
 function noteGroupsFor(node) {
   if (isLoad(node.type)||node.status==='removed') return [];
   if (node.status==='new') return ['cap','newload','rem'];
@@ -3033,6 +3064,7 @@ function updateAfAcdcLock(parentId) {
 function efReshow() {
   const n=mNode&&state.nodes[mNode]?state.nodes[mNode]:null;
   const cr=n?n.convRole:null;
+  inhibitLoadExisting('ef-type','ef-status');
   const tp=document.getElementById('ef-type').value;
   const st=document.getElementById('ef-status').value;
   const hc=n?children(n.id,state.nodes).length>0:false;
@@ -3201,7 +3233,6 @@ function openEdit(nodeId) {
   document.getElementById('ef-voltage').value=n.voltage!==null&&n.voltage!==undefined?n.voltage:'';
   document.getElementById('ef-acdc').value=n.acDc||'dc';
   applyVoltageAcdcLock(n,n.parentId);
-  const acDc=document.getElementById('ef-acdc').value;
 
   // Capacity fields
   if (hasCap(n.type)&&!n.convRole) {
@@ -3297,8 +3328,11 @@ function openEdit(nodeId) {
   document.getElementById('ef-conv-pair-eff-msg').classList.add('hidden');
   setWarnBox('ef-warn-box',null);
 
-  const hasChildren=children(n.id,state.nodes).length>0;
-  efShowSections(n.type,n.convRole,n.status,hasChildren,acDc);
+  // efReshow() (rather than calling efShowSections directly with the node's raw type/status)
+  // also applies inhibitLoadExisting — needed here since a legacy item saved before that rule
+  // existed could still be Load+Existing, and the sections shown must match whatever the
+  // status <select> actually displays, not the node's stale saved value.
+  efReshow();
   efAttachDcDerive('ef-cap-a','ef-cap-w');
   efAttachDcDerive('ef-exld-a','ef-exld-w');
   efAttachDcDerive('ef-load-a','ef-load-w');
@@ -3681,6 +3715,7 @@ function openAdd(parentId) {
   aftype.value=parentId!=null?defaultChildTypeFor(state.nodes[parentId]):(afLastType||'Generator');
   if (!aftype.querySelector(`option[value="${aftype.value}"]`)) aftype.value=aftype.options[0]?.value||'';
   document.getElementById('af-status').value=afLastStatus||'existing';
+  inhibitLoadExisting('af-type','af-status');
   const pid0=parentId||null;
   updateAfAcdcLock(pid0);
   const warn=addWarnCheck(pid0,aftype.value);
@@ -3691,6 +3726,7 @@ function openAdd(parentId) {
     const cur=aftype.value;
     fillTypeSelect(aftype,!pid);
     if (!aftype.querySelector(`option[value="${cur}"]`)) aftype.value=aftype.options[0]?.value||'';
+    inhibitLoadExisting('af-type','af-status');
     updateAfAcdcLock(pid);
     const w=addWarnCheck(pid,aftype.value);
     setWarnBox('af-warn-box',w);mBlocked=!!(w?.block);
@@ -3823,7 +3859,7 @@ function buildPrint() {
     }).join('');
   }
 
-  const hdrCols=`<th class="left">Component</th><th>Type</th><th>Status</th><th class="right">V</th><th class="right">Cap</th><th class="right">Ex.Ld</th><th class="right">Load</th><th class="right">Net Chg</th><th class="right">New Load</th><th class="right">Remaining</th><th>Flags</th>`;
+  const hdrCols=`<th class="left">Component</th><th>Type</th><th>Status</th><th class="right">V</th><th class="right">Cap</th><th class="right">Ex.Ld</th><th class="right">Load</th><th class="right">Net Chg</th><th class="right">New Load</th><th class="right">Reserve</th><th>Flags</th>`;
   const acFirstPrint=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const dcPrint=dcIds.length?`<div class="print-section-heading">DC Summary (W)</div><table class="print-table"><thead><tr>${hdrCols}</tr></thead><tbody>${printRows(dcIds,'dc')}</tbody></table>`:'';
   const acPrint=acIds.length?`<div class="print-section-heading">AC Summary (VA)</div><table class="print-table"><thead><tr>${hdrCols}</tr></thead><tbody>${printRows(acIds,'ac')}</tbody></table>`:'';
@@ -3886,7 +3922,7 @@ const AC_GROUPS=[
   {id:'added',  label:'Installed (Removed)',keys:AC_ALL_KEYS},
   {id:'nc',     label:'Net Change',        keys:AC_ALL_KEYS},
   {id:'newload',label:'New Load',          keys:AC_ALL_KEYS},
-  {id:'rem',    label:'Remaining',         keys:AC_ALL_KEYS},
+  {id:'rem',    label:'Reserve',           keys:AC_ALL_KEYS},
 ];
 const DC_GROUPS=[
   {id:'cap',    label:'Capacity',          keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
@@ -3894,7 +3930,7 @@ const DC_GROUPS=[
   {id:'added',  label:'Installed (Removed)',keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'nc',     label:'Net Change',        keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
   {id:'newload',label:'New Load',          keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
-  {id:'rem',    label:'Remaining',         keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
+  {id:'rem',    label:'Reserve',           keys:[{k:'a',l:'A'},{k:'w',l:'W'}]},
 ];
 
 function activeCols(groups,cfgSec){
@@ -4368,7 +4404,7 @@ function buildRefsParas(){
   ).join('');
 }
 // Per-column widths: each column starts at an even share of the available width, but is
-// widened if needed so its group's longest unbreakable word (e.g. "Remaining") still fits
+// widened if needed so its group's longest unbreakable word (e.g. "Existing") still fits
 // on one line — multi-word labels may still wrap between words, which is acceptable.
 function computeColWidths(groups,cols,avail,pt){
   const naive=Math.floor(avail/cols.length);
@@ -4704,6 +4740,7 @@ function initEvents() {
 
   // Add form changes
   const afRecheck=()=>{
+    inhibitLoadExisting('af-type','af-status');
     const pid=document.getElementById('af-parent').value;
     const tp=document.getElementById('af-type').value;
     const warn=addWarnCheck(pid,tp);

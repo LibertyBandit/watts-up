@@ -79,7 +79,7 @@ Terminal node; has a Load Value field; no children allowed.
 ## 4. Power Units and Formulas
 
 ### 4.1 AC Items
-**Capacity and Remaining Capacity:** Amps (A), Volt-Amps (VA)
+**Capacity and Reserve:** Amps (A), Volt-Amps (VA)
 **All load columns (Existing Load, Load, Net Change, New Load):** A, VA, W, VAR, pf
 
 Formulas:
@@ -98,7 +98,7 @@ Default on save (if user did not provide sufficient info): VAR = 0, pf = 1.
 4. Recalculate pf = W / VA
 
 ### 4.2 DC Items
-**All columns (Capacity, Existing Load, Load, Net Change, New Load, Remaining):** Amps (A), Watts (W)
+**All columns (Capacity, Existing Load, Load, Net Change, New Load, Reserve):** Amps (A), Watts (W)
 
 Formulas: A = W / V; W = V × A
 
@@ -130,12 +130,12 @@ Formulas: A = W / V; W = V × A
 - Rows color-coded for warnings (yellow) and overload (red)
 
 ### 6.1 DC Summary columns
-| Capacity | Existing Load | Load | Net Change | New Load | Remaining |
+| Capacity | Existing Load | Load | Net Change | New Load | Reserve |
 |---|---|---|---|---|---|
 | A, W | A, W | A, W | A, W | A, W | A, W |
 
 ### 6.2 AC Summary columns
-| Capacity | Existing Load | Load | Net Change | New Load | Remaining |
+| Capacity | Existing Load | Load | Net Change | New Load | Reserve |
 |---|---|---|---|---|---|
 | A, VA | A, VA, W, VAR, pf | A, VA, W, VAR, pf | A, VA, W, VAR, pf | A, VA, W, VAR, pf | A, VA |
 
@@ -392,7 +392,7 @@ Parent pre-set to "No Parent (New Root)".
 
 ### 10.2 Derived totals
 - **New Load** = existingLoad + netChange
-- **Remaining Capacity** = capacity − newLoad
+- **Reserve** (formerly "Remaining Capacity") = capacity − newLoad
 
 ---
 
@@ -407,7 +407,7 @@ Parent pre-set to "No Parent (New Root)".
 | User adds children after manually entering a net change override | Warn |
 | Non-load Removed item | Existing load entered as negative net change |
 | Non-load Existing or Removed item has no existing load entered (existing load reads as zero — the data model can't distinguish "never entered" from an explicit 0, so 0 is treated as blank, same convention as the blank-capacity case above) | Warn |
-| An Existing-status item's immediate Existing/Removed children's existing loads (existing load for non-load children, load value for Load children) sum to more than the item's own existing load | Warn |
+| An Existing-status item's immediate Existing/Removed children's existing loads (existing load for non-load children, load value for Load children) sum to more than the item's own existing load — **W (real power) only.** The VAR half of this check (comparing summed children VAR against the parent's own VAR, AC items only) is **disabled** as of the Revision 36 cleanup round: rounding/derivation noise accumulated through the calculation chain produced too many spurious near-miss warnings in practice. A rounding-and-tolerance formula would be the better long-term fix; until then, only W is compared. | Warn |
 
 ---
 
@@ -435,14 +435,14 @@ All AC groups offer A, VA, W, VAR, pf for selection.
 |---|---|
 | Capacity | VA |
 | Existing Load | VA, W, VAR, pf |
-| Added (Removed) | W, VAR |
+| Installed (Removed) | W, VAR |
 | Net Change | W, VAR |
 | New Load | VA, W, VAR, pf |
-| Remaining | VA |
+| Reserve | VA |
 
 ### 13.3 DC Report Column Groups and Defaults
-A and W selected by default for all groups: Capacity, Existing Load, Added (Removed),
-Net Change, New Load, Remaining.
+A and W selected by default for all groups: Capacity, Existing Load, Installed (Removed),
+Net Change, New Load, Reserve.
 
 ### 13.4 Ampere Rating in Name (Protection Devices)
 If the user deselects "A" from Capacity, Circuit Breakers and Fuses still show their
@@ -513,7 +513,7 @@ on the child's row to visually separate the parent-child boundary.
 
 **Column suppression by status** (live summary table and print report):
 
-| Item status | Existing Load | New Load | Remaining |
+| Item status | Existing Load | New Load | Reserve |
 |---|---|---|---|
 | Existing | shown | shown | shown |
 | New | — | shown | shown |
@@ -1053,7 +1053,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§40).
+enhancement (§41).
 
 ---
 
@@ -1555,7 +1555,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§40).
+multi-interval load analysis still listed under Future Enhancements (§41).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2172,7 +2172,71 @@ full JSON export→migrateLegacy→import round-trip preserves the new shape unc
 regression across Load Analysis Summary, Power Distribution Summary, both Load Analysis Detail
 reports, both grids, and the Document tab.
 
-## 40. Future Enhancements
+## 40. Revision 36 Cleanup Round — W5 VAR Disabled, Load+Existing Inhibited, TRU VAR Sign, LAD Column Offset, "Remaining"→"Reserve"
+
+*Last updated: 2026-07-29*
+
+Five clean-up items reported after using the Revision 36 build.
+
+**1. W5's VAR check disabled (§11).** See §11's table — noted there rather than repeated here.
+
+**2. Load item-type + Existing status inhibited.** A Load can no longer be Existing status
+anywhere in the app:
+- Existing/Removed grid's `+Child` under a Circuit Breaker (or any parent that resolves to a
+  Load default via `defaultChildTypeFor`) now defaults the new child to Removed instead of
+  Existing, since Existing is no longer a legal status for a Load.
+- Add Item(s) and Edit Item dialogs: selecting Load as the item type disables the "Existing"
+  `<option>` in the Status dropdown; if Existing was already selected, the dropdown switches to
+  Removed. This only touches the form controls — no node data changes until the dialog is saved.
+  Opening Edit on a legacy item saved before this rule existed (Load + Existing) shows the
+  corrected "Removed" value in the dropdown immediately, but doesn't touch the saved node data
+  unless the dialog is actually saved.
+- Existing/Removed grid's own inline Item Type dropdown: switching a row's type to Load forces
+  its status to Removed if it was Existing. The inline status toggle button (Existing↔Removed)
+  is replaced with a plain, non-interactive badge for Load rows, since Existing is never a valid
+  toggle target for them.
+- The Installed grid needed no changes — its editable rows are always New status already, so
+  Load+Existing was never reachable there.
+
+**3. TRU conversion-IN VAR sign fixed.** `calcNC()`'s conversion-IN branch derived `inVAR` via a
+bare `Math.sqrt(Math.max(0,...))`, which is always non-negative regardless of the sign of
+`inW`/`inVA` — so a negative net change flowing through a converter (something removed on the
+output side) correctly produced negative A/VA/W on the input side, but VAR stayed positive. Fixed
+to match `deriveAcFromWVar`'s existing convention (VA's sign follows W's sign): `inVAR`'s sign now
+follows `inW`'s sign.
+
+**4. Load Analysis Detail column offset fixed.** `detailBlock()`'s local annotation map `am` was
+always a truthy object (`{}`) regardless of whether the report had any notes at all
+(`hasAnyAnnot`), so `buildRptRow()` always rendered an empty Notes `<td>` on every row — while
+`buildRptHeader()` correctly omitted the Notes `<th>` whenever `hasAnyAnnot` was false. Result:
+every value column was shifted one column right relative to the header, whenever the report had
+no notes anywhere. Fixed by passing `null` instead of `am` when `hasAnyAnnot` is false, matching
+the header exactly. (The Alternate report and `buildAnnotationMap`/Print/Word were unaffected —
+each already conditioned its own notes-column presence on the same flag consistently.)
+
+**5. "Remaining" → "Reserve" (user-facing).** The `rem` group's `label` in `AC_GROUPS`/`DC_GROUPS`
+(§4, §6, §13) — flows through to Load Analysis Summary, Power Distribution Summary, the original
+Load Analysis Detail report, Print Report, and Word export automatically. Plus its own hardcoded
+copies: the Analysis Detail – Alternate report's row label, `NOTE_GROUP_LABELS`, the dead
+`buildPrint()`/`printRows()` header, and the Print/Export Settings dialog's two checkbox-row
+labels. The internal `rem` group id and the `_remainingCapacity` field name are unchanged
+(neither is user-visible). Historical Revision-narrative sections describing what was true at the
+time keep the old "Remaining"/"Added (Removed)" wording, per this doc's established convention.
+
+Verified live: a parent at W=100/VAR=200 with a child summing VAR past 200 (but W under 100) no
+longer triggers W5; `+Child` from a Circuit Breaker in the Existing/Removed grid produces a
+Load+Removed row; selecting Load in the Add modal disables/switches away from Existing, and
+switching back to a non-Load type re-enables it; the grid's inline type-to-Load switch
+auto-flips an Existing row to Removed and replaces its toggle button with a plain badge; opening
+Edit on a simulated legacy Load+Existing node shows "Removed" in the dropdown and commits it on
+Save without having touched status directly; a TRU with a removed DC load on its output produced
+W=-105.3/VAR=-34.6/VA=-110.8/A=-0.96 — all consistently negative; a Load Analysis Detail table
+with zero notes anywhere now has matching header/data column counts (13/13), and still matches
+with one note added (14/14); "Reserve" confirmed rendering in Load Analysis Summary, Power
+Distribution Summary, both Load Analysis Detail reports, and Print Report. Confirmed no
+regression across every tab.
+
+## 41. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
