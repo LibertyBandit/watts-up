@@ -643,6 +643,10 @@ all entries in `meta.rowNoteDefs` (the shared note-text bank), shown as:
 - `+ Add New Note` appends a new, blank bank entry, checks it for the current item, and focuses
   its text field — satisfying the "select an existing note or add a new one" requirement from a
   single control, without needing a separate dialog.
+- A ✕ button deletes the entry from the shared bank entirely (not just this item's own
+  association) — warns with the count of *other* items still using it if any (e.g. "This note is
+  also used by 2 other items. Delete it for all of them?"), or a plain "Delete this row note?"
+  otherwise. Added same round as the cleanup items below (§40).
 - If no row notes exist yet in `meta.rowNoteDefs`, shows dimmed message:
   *"No notes defined yet — use '+ Add New Note' below."*
 
@@ -2235,6 +2239,23 @@ with zero notes anywhere now has matching header/data column counts (13/13), and
 with one note added (14/14); "Reserve" confirmed rendering in Load Analysis Summary, Power
 Distribution Summary, both Load Analysis Detail reports, and Print Report. Confirmed no
 regression across every tab.
+
+**Follow-up (same round): delete a row note from the Edit Item dialog (§14.6).** The Notes
+checklist (added in §39/Revision 36 Phase 4) had no way to remove a bank entry — only the
+Document tab's Row Notes section (§14.5) could. Added a ✕ button per entry, mirroring the
+Document tab's own delete button, but with a sharper warning: since deleting removes the note
+from the shared bank entirely (not just this item's association with it), the confirm message
+counts how many *other* items (excluding the one currently open in this dialog) still reference
+the note's key and names that count specifically — e.g. "This note is also used by 2 other items.
+Delete it for all of them?" — versus a plain "Delete this row note?" when no other item uses it.
+Deleting removes the entry from `meta.rowNoteDefs` and re-renders the checklist; any other item's
+now-dangling `rowNotes` reference simply stops rendering any text/marker, same as removing a
+Reference or deleting via the Document tab.
+
+Verified live: two items both referencing the same note — deleting from one item's Edit dialog
+correctly warns "used by 1 other item," declining leaves the bank entry untouched, confirming
+removes it from the bank and the checklist empties to the "no notes defined yet" hint; a note
+used by only the current item shows the plain warning instead.
 
 ## 41. Future Enhancements
 

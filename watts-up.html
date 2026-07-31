@@ -2802,13 +2802,27 @@ function renderEfNotesRefs(n) {
       const div=document.createElement('div');div.className='nr-note-item';
       div.innerHTML=`<input type="checkbox" data-notekey="${esc(def.key)}"${checked?' checked':''}>
         <input type="text" class="nr-note-text-input" value="${esc(def.text)}" placeholder="Note text">
-        ${groupSelectHtml(group)}`;
+        ${groupSelectHtml(group)}
+        <button type="button" class="btn-node" style="color:var(--accent-red);padding:.12rem .38rem" title="Delete this row note">✕</button>`;
       const chk=div.querySelector('input[type=checkbox]');
       const sel=div.querySelector('select[data-group]');
       if (sel) sel.style.display=checked?'':'none';
       chk.addEventListener('change',()=>{ if(sel) sel.style.display=chk.checked?'':'none'; });
       div.querySelector('.nr-note-text-input').addEventListener('input',e=>{
         const d=state.meta.rowNoteDefs.find(x=>x.key===def.key); if(d){d.text=e.target.value;persist();}
+      });
+      div.querySelector('button').addEventListener('click',()=>{
+        // Warn separately if OTHER items (not this one) also use the note — deleting removes it
+        // from the shared bank entirely, so those items would silently lose it too.
+        const otherUsers=Object.values(state.nodes).filter(other=>other.id!==n.id&&(other.rowNotes||[]).some(o=>o.key===def.key)).length;
+        const msg=otherUsers>0
+          ? `This note is also used by ${otherUsers} other item${otherUsers===1?'':'s'}. Delete it for all of them?`
+          : `Delete this row note?`;
+        if (!confirm(msg)) return;
+        const idx=state.meta.rowNoteDefs.findIndex(d=>d.key===def.key);
+        if (idx>=0) state.meta.rowNoteDefs.splice(idx,1);
+        persist();
+        redrawNotes();
       });
       notesEl.appendChild(div);
     });
