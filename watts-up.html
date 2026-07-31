@@ -2780,6 +2780,13 @@ function renderEfNotesRefs(n) {
   const groups=noteGroupsFor(n);
   const groupSelectHtml=(selected)=>groups.length?`<select data-group title="Applies to"><option value="">Item</option>${groups.map(g=>`<option value="${g}"${g===selected?' selected':''}>${NOTE_GROUP_LABELS[g]}</option>`).join('')}</select>`:'';
 
+  // notesEl is the persistent #ef-row-notes DOM element, reused across every modal open (not
+  // recreated) — this tracker must be reset to a fresh Set on every renderEfNotesRefs() call
+  // (once per modal open), not lazily created only if missing, otherwise a key added while
+  // editing one item stays flagged "newly added" and leaks into every other item's checklist as
+  // an unwanted pre-checked note.
+  notesEl._newlyAdded=new Set();
+
   // Row Notes — checklist against the shared note bank (meta.rowNoteDefs), Revision 36 — same
   // paradigm as the References checklist below: check to associate with this item, pick a group.
   // Note TEXT itself edits live (persisted immediately), matching the Document tab's own
@@ -2789,7 +2796,6 @@ function renderEfNotesRefs(n) {
   function redrawNotes() {
     const defs=state.meta.rowNoteDefs||[];
     const existing=n.rowNotes||[];
-    notesEl._newlyAdded=notesEl._newlyAdded||new Set();
     notesEl.innerHTML='';
     if (!defs.length) {
       notesEl.innerHTML='<div class="nr-empty-hint">No notes defined yet — use "+ Add New Note" below.</div>';

@@ -2257,6 +2257,24 @@ correctly warns "used by 1 other item," declining leaves the bank entry untouche
 removes it from the bank and the checklist empties to the "no notes defined yet" hint; a note
 used by only the current item shows the plain warning instead.
 
+**Follow-up bug fix (same day): a newly-added note leaked into every other item's checklist as
+pre-checked.** Reported after using the checklist: adding a note via "+ Add New Note" while
+editing one item, then opening a *different* item and expanding Notes & References, showed the
+new note pre-selected there too — a real bug dating back to the original Phase 4 checklist
+(§39), not something the delete-button follow-up introduced. Root cause: `renderEfNotesRefs()`'s
+"newly added this session" tracker (`notesEl._newlyAdded`) is stored on `#ef-row-notes`, the
+persistent DOM element reused across every modal open (never recreated) — it was only lazily
+created if missing (`notesEl._newlyAdded=notesEl._newlyAdded||new Set()`), so a key added while
+editing one item stayed flagged and carried straight into the next item's render. Fixed by always
+resetting it to a fresh `Set()` once per `renderEfNotesRefs()` call (i.e. once per modal open),
+while still *not* resetting it inside `redrawNotes()` itself (called repeatedly within the same
+modal session — e.g. after toggling a checkbox or adding a second note — where the earlier
+newly-added key must stay flagged as checked until Save).
+
+Verified live: adding a note in one item, saving, then opening a second item shows it correctly
+unchecked; within the same modal session, adding a second new note and triggering an intervening
+redraw (toggling an unrelated checkbox) still leaves the first newly-added note checked.
+
 ## 41. Future Enhancements
 
 - Three-phase AC circuit support
