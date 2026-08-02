@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§43).
+enhancement (§44).
 
 ---
 
@@ -1559,7 +1559,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§43).
+multi-interval load analysis still listed under Future Enhancements (§44).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2344,7 +2344,42 @@ the marker appears on the correct row in the correct (DC, in this case) section'
 footnote list at the end of the report shows the right numbered text. Confirmed no regression
 across every other tab.
 
-## 43. Future Enhancements
+## 43. Revision 42 (Phase 2) — Merge Load Analysis Detail into a Vertical/Horizontal Toggle
+
+*Last updated: 2026-07-31*
+
+Second phase of the Revision 42 request. Remaining items (the Vertical/Horizontal layout-specific
+content changes — removing the Vertical layout's modifier column, adding its Installed-status
+parent banner, and the Horizontal layout's new Rating column) are deferred to later phases.
+
+The separate "Analysis Detail – Alternate" RH sub-tab (§35) is removed. "Load Analysis Detail"
+is now the only RH sub-tab for this content, with a small "Vertical | Horizontal" toggle
+(`#lad-layout-toggle`, two buttons) in the tab's own panel header — Vertical (default) shows
+today's transposed/grouped-as-rows report (`ladalt-container`); Horizontal shows today's original
+column-oriented report (`lad-container`). The toggle only appears while the Load Analysis Detail
+sub-tab is active; switching to a different main sub-tab hides it and both LAD-family panels.
+
+Both `renderLoadAnalysisDetail()` and `renderLoadAnalysisDetailAlt()` continue to run
+unconditionally on every state change via `renderAll()`, same as every other report — the merge
+only changes which container is *visible*, never which is rendered, so toggling layout is a pure
+show/hide operation with no re-render needed. The layout choice (`ladLayout`, module-level,
+`'vertical'` default) is session-only, reset on page reload — not persisted to `localStorage`,
+matching how Print/Export column settings already behave — but *is* remembered for the rest of
+the session if the user switches to a different main tab and back to Load Analysis Detail.
+
+Verified live: only 3 RH sub-tab buttons remain (no more "Analysis Detail – Alternate"); opening
+Load Analysis Detail shows the toggle and defaults to Vertical; switching to Horizontal shows the
+original report's real content and updates the toggle's active state; switching to a different
+main sub-tab hides the toggle and both panels; returning to Load Analysis Detail restores
+whichever layout was last selected. (Verifying the "resets to Vertical on a fresh page load"
+behavior specifically required tracing the code rather than an actual browser reload — this
+session's browser tooling doesn't reset the JS execution context across `navigate`/`location.
+reload()` calls to this local file, confirmed via a `window` marker that survived several
+reload attempts; the code itself is a plain `let ladLayout='vertical'` module-level
+initialization, unconditionally correct on any genuine fresh script execution.) Confirmed no
+regression across every other tab.
+
+## 44. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

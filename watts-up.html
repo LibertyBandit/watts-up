@@ -55,6 +55,11 @@
     .rh-subtab-btn:hover{color:var(--text-primary)}
     .rh-subtab-btn.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue)}
     .rh-subtab-existing.active{color:var(--accent-yellow);border-bottom-color:var(--accent-yellow)}
+    #lad-layout-toggle{display:flex;gap:2px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:2px}
+    .lad-layout-btn{background:none;border:none;border-radius:4px;padding:.2rem .6rem;font-size:.68rem;font-weight:700;
+      letter-spacing:.4px;text-transform:uppercase;color:var(--text-secondary);cursor:pointer}
+    .lad-layout-btn:hover{color:var(--text-primary)}
+    .lad-layout-btn.active{background:var(--accent-blue);color:#fff}
     .rh-subtab-new.active{color:var(--accent-green);border-bottom-color:var(--accent-green)}
     .panel-controls{display:flex;gap:.3rem}
     .panel-controls button{padding:.15rem .45rem;font-size:.7rem;background:var(--bg-elevated);
@@ -477,7 +482,10 @@
           <button id="rh-subtab-las" class="rh-subtab-btn active">Load Analysis Summary</button>
           <button id="rh-subtab-pds" class="rh-subtab-btn">Power Distribution Summary</button>
           <button id="rh-subtab-lad" class="rh-subtab-btn">Load Analysis Detail</button>
-          <button id="rh-subtab-ladalt" class="rh-subtab-btn">Analysis Detail – Alternate</button>
+        </div>
+        <div id="lad-layout-toggle" class="hidden">
+          <button id="lad-layout-vertical" class="lad-layout-btn active">Vertical</button>
+          <button id="lad-layout-horizontal" class="lad-layout-btn">Horizontal</button>
         </div>
       </div>
       <div id="table-container"><div class="empty-state">No data to display.</div></div>
@@ -4703,22 +4711,46 @@ function initEvents() {
   });
 
   // RH pane sub-tab switching (Load Analysis Summary / Power Distribution Summary / Load Analysis Detail)
+  // Revision 42: "Load Analysis Detail" and "Analysis Detail – Alternate" are merged into one RH
+  // sub-tab with an internal Vertical/Horizontal layout toggle — Vertical (default) shows the
+  // transposed/grouped-as-rows report (ladalt-container), Horizontal shows the original
+  // column-oriented report (lad-container). Both containers are still rendered unconditionally
+  // on every state change via renderAll() (matching every other panel), so switching layout is
+  // purely a show/hide operation, never a re-render. Session-only — resets to Vertical on
+  // reload, not persisted, same as Print/Export column settings.
+  let ladLayout='vertical';
+  function ladPanelId(){ return ladLayout==='vertical'?'ladalt-container':'lad-container'; }
+  function ladOtherPanelId(){ return ladLayout==='vertical'?'lad-container':'ladalt-container'; }
+  function updateLadLayoutToggleUI(){
+    document.getElementById('lad-layout-vertical').classList.toggle('active',ladLayout==='vertical');
+    document.getElementById('lad-layout-horizontal').classList.toggle('active',ladLayout==='horizontal');
+  }
+  function showLadPanel(){
+    document.getElementById(ladOtherPanelId()).classList.add('hidden');
+    document.getElementById(ladPanelId()).classList.remove('hidden');
+    updateLadLayoutToggleUI();
+  }
+
   const RH_SUBTABS={
     'rh-subtab-las':{panel:'table-container',render:renderTable},
     'rh-subtab-pds':{panel:'pds-container',render:renderPowerDistSummary},
-    'rh-subtab-lad':{panel:'lad-container',render:renderLoadAnalysisDetail},
-    'rh-subtab-ladalt':{panel:'ladalt-container',render:renderLoadAnalysisDetailAlt},
+    'rh-subtab-lad':{panel:null,render:()=>{renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();}},
   };
   Object.keys(RH_SUBTABS).forEach(tabId=>{
     document.getElementById(tabId).addEventListener('click',()=>{
       Object.entries(RH_SUBTABS).forEach(([tid,cfg])=>{
         document.getElementById(tid).classList.toggle('active',tid===tabId);
-        document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
+        if (cfg.panel) document.getElementById(cfg.panel).classList.toggle('hidden',tid!==tabId);
       });
+      document.getElementById('lad-layout-toggle').classList.toggle('hidden',tabId!=='rh-subtab-lad');
+      if (tabId==='rh-subtab-lad') showLadPanel();
+      else { document.getElementById('lad-container').classList.add('hidden'); document.getElementById('ladalt-container').classList.add('hidden'); }
       const cfg=RH_SUBTABS[tabId];
       if (cfg.render) cfg.render();
     });
   });
+  document.getElementById('lad-layout-vertical').addEventListener('click',()=>{ if(ladLayout!=='vertical'){ladLayout='vertical';showLadPanel();} });
+  document.getElementById('lad-layout-horizontal').addEventListener('click',()=>{ if(ladLayout!=='horizontal'){ladLayout='horizontal';showLadPanel();} });
 
   // Document identity form
   let docIdT;
