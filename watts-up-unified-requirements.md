@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§45).
+enhancement (§46).
 
 ---
 
@@ -1559,7 +1559,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§45).
+multi-interval load analysis still listed under Future Enhancements (§46).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2417,7 +2417,60 @@ Flipping the same Bus to Removed-status confirmed no banner appears for it, whil
 child now correctly *does* get its own "Installed" divider again (parent no longer Installed).
 Confirmed no regression across every other tab.
 
-## 45. Future Enhancements
+## 45. Revision 42 (Phase 4) — Horizontal Layout Rating Column
+
+*Last updated: 2026-08-01*
+
+Fourth and final phase of the Revision 42 request (source §2.4). Completes the Rating-column
+change deferred at the end of §44.
+
+Adds a dedicated, unlabeled Rating column to the Horizontal layout (the original Load Analysis
+Detail report), inserted before the Notes column — matching the column the Vertical layout
+(`renderLoadAnalysisDetailAlt`) has had since Revision 33. For Circuit Breaker/Fuse item types with
+a capacity amp value set, the column shows `(N A)`; all other rows leave it blank. The CB/fuse
+rating is no longer appended inline inside the description cell (source §2.4.1.2).
+
+Per the "Apply everywhere" decision (confirmed via AskUserQuestion during planning), the change was
+made in the three places that render this report, since Print Report and the on-screen tab share
+code but Word export duplicates it:
+
+1. **On-screen Horizontal report / Print Report** (shared `buildRptHeader`/`buildRptRow`/
+   `buildSectionRows`/`buildColgroup` — the live, second-declared copies, since these functions are
+   each declared twice and the later declaration wins via hoisting): `buildRptHeader` gained an
+   unlabeled `rowspan="2"` `<th>` between the left header and the Notes header; `buildRptRow`
+   dropped the old `ampInline`/`ampSpan` inline-text logic in favor of a `ratingCell` inserted
+   between the description cell and the notes-annotation cell; the three `ncols` colspan
+   calculations that size divider/banner rows went from `+1` to `+2`; `buildColgroup` gained a 6%-
+   width Rating `<col>` (description width trimmed from 22% to 20% to make room). Print Report
+   picks this up automatically since `buildPrintR10()` calls the same live functions.
+2. **Word export** (`buildWordDataRow`/`buildWordTblHeader`/`buildWordSectionRows`/
+   `buildWordRptTable`/`buildTablesContent` — this logic is NOT shared with the HTML report and
+   needed its own parallel edit): added an `800`-DXA `ratingW` column (trimming `DESC_W` from 3600
+   to 2800 to compensate), threaded through the header's two vertically-merged blank cells, the
+   data row's own `ratingCell` (right-justified, same `(N A)` text, replacing the old inline
+   `ampInline`/`ampRun` run appended to the description), the `<w:tblGrid>` column list, and the
+   `totalCols`/`totalW` figures used for divider/banner spacer rows (now `2+...` instead of
+   `1+...`).
+
+The dead/shadowed first-declared copies of `buildRptHeader`/`buildRptRow` (~lines 4013-4052) were
+**not** updated to match — unlike previous phases' simple text renames, replicating a whole new
+column there would be nontrivial unreachable-code work for no behavioral benefit, and this pair is
+already flagged as safe-to-delete cruft.
+
+Verified live: seeded an AC Bus → Circuit Breaker (capacity.a=5) → Load test tree. Horizontal
+on-screen report showed `(5 A)` in the new column for the CB row only, blank elsewhere, and the
+description cell had no inline rating text; header/data cell counts matched exactly (16/16) once
+rowspan-covered header cells are accounted for. `buildPrintR10()` produced the same single
+continuous table with matching 16-cell rows throughout and the same `(5 A)` placement. Called
+`buildTablesContent()` directly to inspect the Word `document.xml` fragment: `<w:tblGrid>` showed
+the new `2800`/`800` leading column widths, and the CB row's dedicated Rating cell contained
+`(5 A)` with the description cell clean. No console errors at any point; full tab sweep (Document,
+Existing/Removed, Installed, Load Analysis Summary, PDS, LAD Vertical, LAD Horizontal) confirmed no
+regressions. Test data removed after verification.
+
+This completes Revision 42.
+
+## 46. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
