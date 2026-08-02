@@ -1577,13 +1577,14 @@ function pdsCellVal(n,col,ov) {
   if (group==='rem') { if (n.status==='removed'||n._remainingCapacity==null) return naTd(); return valPow(n._remainingCapacity,k,false); }
   return naTd();
 }
-function pdsThead(cols) {
+function pdsThead(cols,hasAnnot) {
   const runs=[];
   cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
-  return `<thead><tr><th class="left" rowspan="2">Component</th>${runs.map(g=>`<th class="group-hdr" colspan="${g.count}">${g.label}</th>`).join('')}</tr>
+  const annotTh=hasAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
+  return `<thead><tr><th class="left" rowspan="2">Component</th>${annotTh}${runs.map(g=>`<th class="group-hdr" colspan="${g.count}">${g.label}</th>`).join('')}</tr>
     <tr>${cols.map(c=>`<th class="sub-hdr">${c.l}</th>`).join('')}</tr></thead>`;
 }
-function pdsRows(ids,cols,dm) {
+function pdsRows(ids,cols,dm,annotator,hasAnyAnnot) {
   return ids.map(id=>{
     const n=state.nodes[id]; if (!n) return '';
     const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3');
@@ -1594,8 +1595,10 @@ function pdsRows(ids,cols,dm) {
     const dl=(esc(n.description)||'<em>unnamed</em>')+rdHtml;
     const d=dm[id]||0;
     const cells=cols.map(col=>pdsCellVal(n,col,ov)).join('');
+    const annot=annotator.annotate(n.rowNotes,n.rowRefs);
+    const annotCell=hasAnyAnnot?(annot?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>'):'';
     return `<tr class="${rCls}">
-      <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>${cells}</tr>`;
+      <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>${annotCell}${cells}</tr>`;
   }).join('');
 }
 function renderPowerDistSummary() {
@@ -1613,12 +1616,20 @@ function renderPowerDistSummary() {
   const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
   const acIds=allIds.filter(id=>state.nodes[id]?.acDc==='ac');
 
+  // Row notes/references (Revision 42, copied from Load Analysis Detail's approach): item-level
+  // only, no group-scoping — PDS rows are one-per-node, same shape as the original Load Analysis
+  // Detail report, not the Alternate report's per-group rows. One combined footnote list for the
+  // whole report (not per-table) since PDS only ever renders two tables total, not one per node.
+  const annotator=makeAnnotator();
+  const hasAnyAnnot=allIds.some(id=>annotator.hasText(state.nodes[id].rowNotes,state.nodes[id].rowRefs));
+
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const dcLbl=acDcVoltageLabel('dc'), acLbl=acDcVoltageLabel('ac');
-  const dcSection=dcIds.length?`<div class="table-section-heading">${dcLbl?`${dcLbl} Summary`:'DC Summary'}</div><table class="summary-table">${pdsThead(dcCols)}<tbody>${pdsRows(dcIds,dcCols,dm)}</tbody></table>`:'';
-  const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${pdsThead(acCols)}<tbody>${pdsRows(acIds,acCols,dm)}</tbody></table>`:'';
+  const dcSection=dcIds.length?`<div class="table-section-heading">${dcLbl?`${dcLbl} Summary`:'DC Summary'}</div><table class="summary-table">${pdsThead(dcCols,hasAnyAnnot)}<tbody>${pdsRows(dcIds,dcCols,dm,annotator,hasAnyAnnot)}</tbody></table>`:'';
+  const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${pdsThead(acCols,hasAnyAnnot)}<tbody>${pdsRows(acIds,acCols,dm,annotator,hasAnyAnnot)}</tbody></table>`:'';
   let html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No Generation, Conversion, or Distribution items to summarize.</div>';
+  else if (annotator.notesList.length) html+=`<ol class="rpt-detail-notes">${annotator.notesList.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`;
   el.innerHTML=html;
 }
 

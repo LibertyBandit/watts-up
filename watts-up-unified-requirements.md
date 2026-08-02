@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§42).
+enhancement (§43).
 
 ---
 
@@ -1559,7 +1559,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§42).
+multi-interval load analysis still listed under Future Enhancements (§43).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2309,7 +2309,42 @@ and "TRU" as the preselected type, while the row's own dropdown and underlying n
 completely unchanged; the sentinel option is confirmed absent from Root/conversion-role rows
 (their dropdown stays disabled, as before). Confirmed no regression across every tab.
 
-## 42. Future Enhancements
+## 42. Revision 42 (Phase 1) — Power Distribution Summary Row Notes
+
+*Last updated: 2026-07-31*
+
+First phase of a small multi-item request ("Watts Up Revision 42 (+).txt"). Remaining items
+(merging Load Analysis Detail into Vertical/Horizontal layout options) are deferred to later
+phases — see that plan for details. Confirmed with the user upfront: the CB/fuse rating column
+change (a later phase) applies to Print Report and Word export too, since the on-screen
+Horizontal layout shares `buildRptRow` with Print Report; the Vertical/Horizontal choice is
+presented as two small toggle buttons in the tab's own panel header, not persisted across
+reloads (matching how Print/Export column settings already behave) — not sub-tabs.
+
+Power Distribution Summary had no notes/annotation support at all until now — the only report
+that hadn't gotten it. Reuses the shared `makeAnnotator()` factory directly (the same one
+`buildAnnotationMap`, Load Analysis Detail, and Analysis Detail – Alternate already use), scoped
+item-level only — no group-scoping, since PDS rows are one-per-node, the same shape as the
+original Load Analysis Detail report, not the Alternate report's per-group rows. One combined
+footnote list at the end of the whole report (not per-table), since PDS only ever renders two
+tables total (AC/DC summary), not one per node the way Load Analysis Detail does.
+
+`pdsThead(cols,hasAnnot)` and `pdsRows(ids,cols,dm,annotator,hasAnyAnnot)` both gained a new
+param; the "has any notes" check is scoped to only the nodes PDS actually displays (Root/
+Generation/Conversion/Distribution via `PDS_TYPES`), not the whole document, so the Notes column
+doesn't appear based on a note that lives on some Protection/Load item PDS never shows anyway.
+Reuses the existing `.rpt-notes-col`/`.rpt-note-marker`/`.rpt-detail-notes` CSS classes directly
+(PDS's container already carries the `rpt-onscreen` scoping class those rules are written
+against) rather than introducing new styling.
+
+Verified live: with no notes anywhere, header and data row cell counts match exactly (5/9, no
+Notes column) — confirmed no header/row column-count mismatch the way the original Load Analysis
+Detail report had before its own fix; adding one note brings both counts up by exactly one (6/10),
+the marker appears on the correct row in the correct (DC, in this case) section's table, and the
+footnote list at the end of the report shows the right numbered text. Confirmed no regression
+across every other tab.
+
+## 43. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
