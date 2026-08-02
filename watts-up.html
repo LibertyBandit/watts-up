@@ -1862,16 +1862,18 @@ function renderLoadAnalysisDetailAlt() {
   }
 
   function colgroupHtmlFor(colsCount,hasAnnot) {
-    const labelPct=20,cbPct=7,modPct=9,notesPct=hasAnnot?4:0;
-    const numPct=(100-labelPct-cbPct-modPct-notesPct)/colsCount;
-    let html=`<colgroup><col style="width:${labelPct}%"><col style="width:${cbPct}%"><col style="width:${modPct}%">`;
+    // Revision 42: the modifier column is gone — "(Net Change)" now appends onto the child's own
+    // description text, and the Installed-status parent label moved to a banner row instead.
+    const labelPct=24,cbPct=8,notesPct=hasAnnot?4:0;
+    const numPct=(100-labelPct-cbPct-notesPct)/colsCount;
+    let html=`<colgroup><col style="width:${labelPct}%"><col style="width:${cbPct}%">`;
     if (hasAnnot) html+=`<col style="width:${notesPct}%">`;
     for (let i=0;i<colsCount;i++) html+=`<col style="width:${numPct}%">`;
     return html+`</colgroup>`;
   }
   function headerHtml(cols,hasAnnot,leftCellContent) {
     const notesTh=hasAnnot?'<th class="rpt-notes-col">Notes</th>':'';
-    return `<thead><tr><th class="rpt-left">${leftCellContent||''}</th><th></th><th></th>${notesTh}${cols.map(c=>`<th class="rpt-sub">${c.l}</th>`).join('')}</tr></thead>`;
+    return `<thead><tr><th class="rpt-left">${leftCellContent||''}</th><th></th>${notesTh}${cols.map(c=>`<th class="rpt-sub">${c.l}</th>`).join('')}</tr></thead>`;
   }
 
   // CB/fuse rating gets its own dedicated column here, shown whenever amps was selected or not
@@ -1924,7 +1926,7 @@ function renderLoadAnalysisDetailAlt() {
     const kids=children(id,nodes);
     const path=pathFor(n);
     const pathHtml=path?`<span class="rpt-detail-path-inline">${path}</span>`:'';
-    const ncols=3+cols.length+(hasAnyAnnot?1:0);
+    const ncols=2+cols.length+(hasAnyAnnot?1:0);
     const capSet=activeKeySet('cap',cfgSide),exSet=activeKeySet('exload',cfgSide),
           ncSet=activeKeySet('nc',cfgSide),nlSet=activeKeySet('newload',cfgSide),
           remSet=activeKeySet('rem',cfgSide),addedSet=activeKeySet('added',cfgSide);
@@ -1934,47 +1936,52 @@ function renderLoadAnalysisDetailAlt() {
     const rows=[];
 
     const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
-    // No "Removed" banner for a Removed-status parent's own row (matches the existing Load
-    // Analysis Detail report, which never labels a subject row this way either — only its
-    // italic styling indicates removed). An Installed-status parent instead gets "Installed" in
-    // the modifier column, since a banner row above the parent didn't fit this transposed layout.
+    // Revision 42: the modifier column is gone. An Installed-status parent now gets a banner row
+    // above it instead (matching the original Load Analysis Detail report's convention exactly)
+    // — no "Removed" banner for a Removed-status parent's own row either way, matching that same
+    // report, which never labels a subject row this way — only its italic styling indicates removed.
+    if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Installed</td></tr>`);
     const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
     const itemAnnot=annotateGroup(n,null); if (itemAnnot) pushEntries(itemAnnot.entries);
     // Warning highlights (Revision 36 §6.2) belong on the items themselves — the Parent Item row
     // and each child row — rather than on any individual value-group row, reversing the prior
     // New-Load-row-specific approach.
-    rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}<td>${n.status==='new'?'Installed':''}</td>${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
+    rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
 
     { const a=annotateGroup(n,'cap'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
 
     if (n.status!=='new') {
       const a=annotateGroup(n,'exload'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">EXISTING LOAD</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('exload',n.existingLoad,cols,exSet)}</tr>`);
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">EXISTING LOAD</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('exload',n.existingLoad,cols,exSet)}</tr>`);
     }
 
-    let shownRemoved=false,shownAdded=false;
+    // Installed-status children don't repeat the "Installed" divider when the parent itself is
+    // already Installed-status (matching the original report's identical suppression) — hence
+    // seeding shownAdded from the parent's own status instead of always starting false.
+    let shownRemoved=false,shownAdded=(n.status==='new');
     kids.forEach(k=>{
       if (k.status==='removed'&&!shownRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:28px">Removed</td></tr>`); shownRemoved=true; }
       else if (k.status==='new'&&!shownAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Installed</td></tr>`); shownAdded=true; }
       const kAnnot=annotateAll(k); if (kAnnot) pushEntries(kAnnot.entries);
-      const kDesc=esc((k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:''));
-      const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
       // Load children don't have a Net Change concept of their own (a Load's net change is
       // always 0 while existing — the modifier would misleadingly label a Load value as a net
-      // change), so this only applies to non-load existing children.
-      const modifier=(k.status==='existing'&&!isLoad(k.type))?'(Net Change)':'';
-      rows.push(`<tr${warnRowCls(k)} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}<td>${modifier}</td>${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
+      // change), so this only applies to non-load existing children. Now appended directly onto
+      // the description instead of a separate modifier column (Revision 42).
+      const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
+      const kDesc=esc((k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
+      const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
+      rows.push(`<tr${warnRowCls(k)} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
     });
 
     if (n.status!=='new') {
       const a=annotateGroup(n,'nc'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Net Change</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('nc',n._netChange,cols,ncSet)}</tr>`);
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Net Change</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('nc',n._netChange,cols,ncSet)}</tr>`);
     }
     { const a=annotateGroup(n,'newload'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
     { const a=annotateGroup(n,'rem'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Reserve</td><td class="rpt-num"></td><td></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
+      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Reserve</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
 
     blockNotes.sort((a,b)=>a.num-b.num);
     const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';

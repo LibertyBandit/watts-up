@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§44).
+enhancement (§45).
 
 ---
 
@@ -1559,7 +1559,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§44).
+multi-interval load analysis still listed under Future Enhancements (§45).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2379,7 +2379,45 @@ reload attempts; the code itself is a plain `let ladLayout='vertical'` module-le
 initialization, unconditionally correct on any genuine fresh script execution.) Confirmed no
 regression across every other tab.
 
-## 44. Future Enhancements
+## 44. Revision 42 (Phase 3) — Vertical Layout Content Changes
+
+*Last updated: 2026-07-31*
+
+Third phase of the Revision 42 request. Only the Horizontal layout's Rating-column change (source
+§2.4, propagating to Print Report and Word export) remains deferred.
+
+Four changes to the Vertical layout (`detailBlockAlt`), all in `renderLoadAnalysisDetailAlt()`:
+
+1. **Modifier column removed.** `ncols` drops from `3+cols.length+...` to `2+cols.length+...`;
+   `colgroupHtmlFor`/`headerHtml` each lose one column (the 9%-width `modPct` column and its
+   `<th></th>`/`<td></td>` pair on every row).
+2. **"(Net Change)" moved onto the child's own description.** Previously a separate modifier-
+   column cell for existing-status non-load children; now appended directly (`' (Net Change)'`)
+   onto the description/RefDes text before it's wrapped in `<em>`/`<strong>` — so it inherits the
+   same italic/bold styling as the rest of the description rather than sitting in its own column.
+3. **Installed-status parent banner restored.** A `<tr class="rpt-lbl-added">` row is now pushed
+   above the Parent Item row when `n.status==='new'`, identical to the original Load Analysis
+   Detail report's own convention (`if (n.status==='new') rows.push(...)`) — this reverses the
+   Revision 33 Phase 3 follow-up decision to show "Installed" in the modifier column instead,
+   since that column no longer exists. Still no banner for a Removed-status parent's own row
+   either way (only italic styling), matching the original report exactly.
+4. **Redundant "Installed" child-divider suppressed when the parent's already Installed.**
+   `shownAdded` now seeds from `(n.status==='new')` instead of always `false` — matching the
+   original report's identical `seenAdded=(n.status==='new')` initialization. This is a genuine
+   gap-fill: the Alternate report never actually had this suppression before (unlike the original
+   report, which has always had it) — not a re-revert of anything previously working.
+
+Verified live with a New-status Bus (as a child of Root, and as its own table's subject) with an
+Existing non-load child and a New non-load child: Root's own table correctly shows an "Installed"
+divider before the Bus as a child row; the Bus's own table shows the "Installed" banner above its
+own Parent Item row, "Vert Existing CB [CB1] (Net Change)" with the suffix inline (no separate
+column), and *no* repeated "Installed" divider before its New-status child (since the Bus itself
+is already Installed) — header and data row cell counts match exactly in both cases (4/4, 6/6).
+Flipping the same Bus to Removed-status confirmed no banner appears for it, while its New-status
+child now correctly *does* get its own "Installed" divider again (parent no longer Installed).
+Confirmed no regression across every other tab.
+
+## 45. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
