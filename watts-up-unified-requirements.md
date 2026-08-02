@@ -537,7 +537,7 @@ state to display.
 
 **Document section prose** (editable in Watts Up; later round-tripped via Word content controls):
 - `introText` — multi-line free text. Default: blank.
-- `generalNotes` — ordered array of strings (bulleted in report). Default: `[]`.
+- `generalNotes` — ordered array of strings (numbered in report). Default: `[]`.
 - `complianceText` — multi-line free text. Default: blank.
 
 **Reference list:**
@@ -609,7 +609,7 @@ Five sub-sections within the Document tab:
 - Revision and Date fields are visually de-emphasized (optional)
 
 **C. General Notes** — managed ordered list of text inputs with `[↑] [↓] [✕]` controls.
-`+ Add Note` button. Notes are bulleted (not numbered) in the report.
+`+ Add Note` button. Notes are numbered in the report (Revision 42 cleanup — was bulleted).
 
 **D. Row Notes** (Revision 36, §39) — managed ordered list of `meta.rowNoteDefs`, structurally
 identical to General Notes (`[↑] [↓] [✕]`, `+ Add Row Note`), but semantically distinct: these
@@ -674,7 +674,7 @@ numbered sequentially (1, 2, 3…). Reference citations use the reference's disp
 
 **Sections added to the report** (between the report header and the load tables):
 
-1. **General Notes** — bulleted list from `meta.generalNotes`
+1. **General Notes** — numbered list from `meta.generalNotes`
 2. **References** — numbered list, each entry rendered as:
    `N. Organization. DocNumber. Title. Revision. Date.`
    (Revision and Date omitted if blank)
@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§46).
+enhancement (§47).
 
 ---
 
@@ -1171,9 +1171,14 @@ Print Report configuration (§13).
 Each table is preceded by a breadcrumb line showing the distribution path from the top
 of that item's AC/DC system down to its immediate parent — e.g. `RH Main > Galley AC >`
 for an item two levels under an AC bus, or `RH Main TRU > RH ACC #1 >` for an item past
-a TRU conversion boundary onto a DC bus. The breadcrumb is omitted for root items and for
-the entry point of each AC/DC system (an item whose immediate parent is on the other side
-of a conversion boundary), since there is no useful same-system path to show for those.
+a TRU conversion boundary onto a DC bus. The breadcrumb is omitted for root items, for items
+whose immediate parent is the Aircraft Total Load (Root-type) item, and for the entry point
+of each AC/DC system (an item whose immediate parent is on the other side of a conversion
+boundary), since there is no useful same-system path to show for those. A root-level item of
+any other type (e.g. a standalone Generator entered as its own top-level item, not under the
+Aircraft Total Load) still gets a breadcrumb for its own descendants, including that item's
+own name at the top of the chain (Revision 42 cleanup — previously any structurally root-level
+parent suppressed the breadcrumb, which wrongly hid it for non-Root-type top-level items too).
 
 Tables are presented in the same order the items appear in the Load Analysis Summary
 table, grouped AC then DC (or DC then AC, matching whichever comes first at the root).
@@ -1559,7 +1564,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§46).
+multi-interval load analysis still listed under Future Enhancements (§47).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2470,7 +2475,61 @@ regressions. Test data removed after verification.
 
 This completes Revision 42.
 
-## 46. Future Enhancements
+## 46. Revision 42 Cleanup Round — Breadcrumb Root-Type Check, Numbered General Notes
+
+*Last updated: 2026-08-02*
+
+Two small clean-up items requested ahead of a larger upcoming scope change.
+
+**1. Breadcrumb path omission now keys off item TYPE, not tree structure** (both the Vertical
+and Horizontal Load Analysis Detail layouts, source §20.4/§44): `pathFor(n)` (declared once per
+layout, in `renderLoadAnalysisDetail()` and `renderLoadAnalysisDetailAlt()`) previously suppressed
+the breadcrumb whenever an ancestor was structurally root-level (`parentId===null`), regardless of
+that ancestor's item type. Since a root-level item need not be the Aircraft Total Load (a
+standalone Generator, Bus, etc. can be added as its own top-level item via "+ Root" with a
+different Item Type), this wrongly hid the breadcrumb — and silently dropped that ancestor's name
+from deeper chains — for any such non-Root-type top-level item. Both the initial suppression
+check and the chain-building loop's stop condition now test `NT.ROOT.includes(type)` instead of
+`parentId===null`; the Aircraft Total Load item itself behaves exactly as before (it's always
+root-level AND Root-type), but a root-level item of any other type now correctly gets a breadcrumb
+for its own descendants, including its own name at the top of the chain.
+
+Verified live: seeded Root → Bus1 → Bus2 → CB (existing case, regression check) alongside a
+second, independent top-level item — a standalone Generator (not Root-type) → BusG → CB. In both
+the Horizontal and Vertical layouts: Bus1's own table still shows no breadcrumb (parent is the
+Root-type Aircraft Total Load); Bus2's table shows "Bus1 >" (unchanged); the standalone
+Generator's own table shows no breadcrumb (it has no parent); and BusG's table now correctly shows
+"Standalone Generator >" (new behavior — previously blank, since Generator's `parentId` is null).
+No console errors; full tab sweep clean. Test data removed after verification.
+
+*(Editing note: this fix has two near-identical function bodies, one per layout — `renderLoadAnalysisDetail()`'s
+own `pathFor` and `renderLoadAnalysisDetailAlt()`'s own `pathFor`, each a local function in its own
+scope, not a live/dead hoisting-shadow pair like `buildRptRow`. A `replace_all` edit across the file
+only caught one of the two — the file has mixed CRLF/LF line endings from different tools across
+this session's history, which silently breaks an exact-string-match replace across two
+otherwise-identical-looking blocks. Caught by testing the Vertical layout specifically after the
+first edit, rather than assuming both copies updated together; applied a second, explicit edit to
+the missed copy. Worth remembering for any future fix that touches both of these two reports'
+duplicated local helpers.)*
+
+**2. General Notes numbered instead of bulleted, in Print Report and Word export** (source: user
+request, no prior spec citation — General Notes previously had no numbering in either output,
+unlike References which was always numbered): Print Report's `gnSec` now wraps entries in `<ol>`
+instead of `<ul>` (matching References' own `<ol>` immediately below it); the matching
+`.rpt-gen-notes-sec` print CSS selector updated from `ul` to `ol` to match. Word export's
+`buildGeneralNotesParas` now prefixes each paragraph with `${i+1}. ` (mirroring `buildRefsParas`'s
+own `${i+1}. ` numbering exactly) instead of a `•  ` bullet character. The Document tab's own
+General Notes editor already numbered its list items (`${i+1}.` next to each textarea, added
+alongside multiline support per §40) — this item only affects the two *report* outputs, which had
+drifted from the editor's own numbered presentation.
+
+Verified live: added two general notes, confirmed Print Report's General Notes section renders as
+an `<ol>` with default browser numbering (1., 2.) instead of bullets; called
+`buildGeneralNotesParas()` directly and confirmed the Word XML fragment produces "1. First general
+note" / "2. Second general note" paragraphs with the same hanging-indent style References uses. No
+console errors. Test data removed after verification.
+
+## 47. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
