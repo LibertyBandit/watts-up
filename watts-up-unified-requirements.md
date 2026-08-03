@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§51).
+enhancement (Appendix A).
 
 ---
 
@@ -1564,7 +1564,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§51).
+multi-interval load analysis still listed under Future Enhancements (Appendix A).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2779,7 +2779,7 @@ errors. Test data removed after verification.
 **This completes item sharing (Revision 47 Phase 2).** Remaining Revision 47 work: reference
 sharing (Phase 3), notes sharing (Phase 4), and the Word Report appendix (Phase 5).
 
-## 51. Future Enhancements
+## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
