@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§47).
+enhancement (§48).
 
 ---
 
@@ -1564,7 +1564,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§47).
+multi-interval load analysis still listed under Future Enhancements (§48).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2529,7 +2529,79 @@ an `<ol>` with default browser numbering (1., 2.) instead of bullets; called
 note" / "2. Second general note" paragraphs with the same hanging-indent style References uses. No
 console errors. Test data removed after verification.
 
-## 47. Future Enhancements
+## 47. Revision 47 (Phase 1) — Previous and Concurrent Modifications: Data Model Foundation
+
+*Last updated: 2026-08-02*
+
+First phase of a much larger request (source: "Watts Up Revision 47 (+) – Previous and Concurrent
+Modifications Analysis.txt"). The full request adds a second, parallel analysis — "Previous and
+Concurrent Modifications" (PCM) — documenting load changes made outside the current project, with
+eventual bidirectional item/reference/note sharing between it and today's single tree (now labeled
+the "Active Project") and a Word Report appendix. This phase lays the foundation only: two
+independent analyses that can be created, switched between, and persisted — no sharing/linking
+between them yet (that's Phase 2+).
+
+**Data model.** `state.meta` now holds only genuinely shared fields (document properties, aircraft
+info) — `introText`, `generalNotes`, `references`, and `rowNoteDefs` moved to live per-analysis.
+`state.analyses = {ap, pcm}` holds the two analyses; each is shaped like the old single-tree state
+(`label`, `introText`, `generalNotes`, `references`, `rowNoteDefs`, `nodes`, `rootIds`). `pcm` is
+`null` until the user explicitly creates it. `state.currentAnalysis` (`'ap'`|`'pcm'`) tracks which
+one is active.
+
+**Alias mechanism** (`installAnalysisView`/`curAn`): rather than rewriting the ~200 existing call
+sites across the file that read/write `state.nodes`, `state.rootIds`, and `state.meta.{introText,
+generalNotes,references,rowNoteDefs}` directly, these became `Object.defineProperty` accessors that
+transparently resolve to `state.analyses[state.currentAnalysis]` on every read/write. Every existing
+render/calc/grid/report function keeps working completely unchanged, regardless of which analysis
+is active — `state.analyses` is the real, authoritative multi-analysis data; the top-level fields
+are just a live convenience view onto whichever analysis is current. This must be (re-)installed on
+any plain object about to become the live `state` (`freshState`, `migrateLegacy`, the grid's Cancel-
+button snapshot restore) since accessor properties don't survive `JSON.stringify`/`JSON.parse`.
+
+**Migration** (`migrateLegacy`): detects a pre-Revision-47 save (bare `p.nodes`/`p.rootIds`, with
+`introText`/`generalNotes`/`references`/`rowNoteDefs` living directly on `p.meta`) and wraps it into
+`p.analyses.ap`, defaulting `pcm` to `null` and `currentAnalysis` to `'ap'` — a save already in the
+new shape skips this. The existing per-node/per-save normalization logic (childIds backfill, row
+notes/refs bank migration, capacity/load shape coercion, etc.) now runs once per existing analysis
+(`ap` always, `pcm` too if present) instead of once against a single tree.
+
+**Persistence** (`persist`/`doExport`): both now go through a new `snapshotState()` helper that
+explicitly saves `state.meta` plus both analyses (each stripped of computed per-node fields via the
+existing `strip()`), plus `currentAnalysis`. `state.meta` still carries the getter-derived
+`introText`/etc. for whichever analysis is current, so it also appears (redundantly) in the saved
+JSON — harmless, since `migrateLegacy` always rebuilds the live accessors from `state.analyses` on
+load and never trusts that redundant top-level snapshot. `doImport`/`importDocx` needed no changes
+at all: they already funnel through `migrateLegacy`+`validateImport` before assigning `state=p`, and
+docx-import's post-migration `parsed.meta.introText=...`/`generalNotes=...` writes now correctly
+land in the Active Project (or whichever analysis is current) via the setters, unchanged.
+`validateImport` now checks node/rootIds integrity for both analyses when `pcm` exists, not just
+whichever is currently active.
+
+**UI**: a small "Active Project | Previous & Concurrent Modifications" toggle above the existing
+tab bar (`#analysis-switch`), visible regardless of which of the four tabs (Document/
+Existing-Removed/Installed/Analysis) is open. The PCM side shows "+ Create Previous & Concurrent
+Modifications" until `state.analyses.pcm` exists; clicking it creates a fresh PCM analysis
+(`freshAnalysis()` — a single default Root node, same as a brand-new file) and switches to it.
+Clicking either pill once both exist just flips `state.currentAnalysis` and re-renders — no other
+tab code needed to change, since it all already reads through the aliased fields.
+
+Verified live: fresh load regression (full tab sweep, no console errors) confirmed unchanged
+behavior before any PCM exists. Seeded distinct data in each analysis (an "AP Bus" node in Active
+Project, a "PCM Generator" node in PCM) and confirmed full isolation switching back and forth
+(including in the actual rendered tree/grid DOM, not just `state`). Verified the grid's Cancel
+button correctly reverts only within the analysis it was invoked in. Verified a full save/reload
+round-trip three ways: `persist()`'s localStorage payload re-parsed through `migrateLegacy`
+correctly reconstructs both analyses and the alias still resolves correctly after flipping
+`currentAnalysis`; a hand-built legacy-shaped (pre-Revision-47) object correctly wraps into
+`analyses.ap` with `pcm: null`; and `snapshotState()`'s JSON round-tripped through
+`migrateLegacy`+`validateImport` (the same path `doImport` uses) reconstructs both analyses exactly.
+Confirmed Print Report and Word export both run cleanly against whichever analysis is active. Test
+data removed after verification.
+
+**Deferred to later phases**: item/reference/note sharing between the two analyses (Phase 2+), and
+including PCM's own analysis as a Word Report appendix (Phase 5).
+
+## 48. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,

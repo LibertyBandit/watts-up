@@ -308,6 +308,16 @@
     .tab-btn{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:.45rem .9rem;font-size:.82rem;color:var(--text-secondary);cursor:pointer;margin-bottom:-1px}
     .tab-btn:hover{color:var(--text-primary)}
     .tab-btn.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue);font-weight:600}
+    #analysis-switch{flex-shrink:0;background:var(--bg-secondary);border-bottom:1px solid var(--border);
+      padding:.35rem 1rem;display:flex;align-items:center;gap:.6rem}
+    #analysis-switch-label{font-size:.68rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted)}
+    #analysis-toggle{display:flex;gap:2px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:2px}
+    .analysis-btn{background:none;border:none;border-radius:4px;padding:.25rem .75rem;font-size:.72rem;font-weight:700;
+      letter-spacing:.3px;color:var(--text-secondary);cursor:pointer}
+    .analysis-btn:hover{color:var(--text-primary)}
+    .analysis-btn.active{background:var(--accent-blue);color:#fff}
+    .analysis-btn.analysis-btn-create{color:var(--text-muted);font-style:italic}
+    .analysis-btn.analysis-btn-create:hover{color:var(--accent-blue)}
     /* ── DOCUMENT PANEL ── */
     #doc-panel{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:1.2rem}
     .doc-section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:.3rem;margin-bottom:.6rem}
@@ -386,6 +396,14 @@
       <button id="btn-word"   class="btn-default">Word Report</button>
     </div>
   </header>
+
+  <div id="analysis-switch">
+    <span id="analysis-switch-label">Analysis</span>
+    <div id="analysis-toggle">
+      <button id="analysis-btn-ap" class="analysis-btn active">Active Project</button>
+      <button id="analysis-btn-pcm" class="analysis-btn analysis-btn-create">+ Create Previous &amp; Concurrent Modifications</button>
+    </div>
+  </div>
 
   <div id="tab-bar">
     <button id="tab-document" class="tab-btn">Document</button>
@@ -1008,13 +1026,63 @@ function makeNode(type,parentId,overrides={}) {
   return Object.assign(node,overrides);
 }
 
-function freshState() {
+// Revision 47: an "analysis" is one full tree (Power Distribution Summary, Load Analysis Detail,
+// its own intro/General Notes/References/Row Notes bank) — the Active Project always exists;
+// Previous and Concurrent Modifications is created on demand (see createPcmAnalysis). Document
+// properties and aircraft info (state.meta) are shared across both analyses.
+function freshAnalysis(label) {
   const rid=uid();
   const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115});
-  return {meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',interval:'Continuous',
+  return {label,introText:'',generalNotes:[],references:[],rowNoteDefs:[],nodes:{[rid]:root},rootIds:[rid]};
+}
+function freshState() {
+  const st={meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',interval:'Continuous',
     documentNumber:'',revisionLevel:'',preparedBy:'',revisionDate:'',revisionDescription:'Initial Release.',
-    introText:'',generalNotes:[],complianceText:'',references:[],rowNoteDefs:[]},
-    nodes:{[rid]:root},rootIds:[rid],lastSaved:null};
+    complianceText:''},
+    analyses:{ap:freshAnalysis('Active Project'),pcm:null},
+    currentAnalysis:'ap',lastSaved:null};
+  installAnalysisView(st);
+  return st;
+}
+// Returns whichever analysis (Active Project / Previous & Concurrent Modifications) is currently
+// selected. Defaults to the given state object, or the live global `state` if omitted.
+function curAn(st) { st=st||state; return st.analyses[st.currentAnalysis]; }
+// Wires state.nodes/state.rootIds and state.meta.{introText,generalNotes,references,rowNoteDefs}
+// as live views onto whichever analysis is current, via Object.defineProperty accessors reading
+// through curAn(st). This lets the rest of the app keep reading/writing state.nodes,
+// state.meta.generalNotes, etc. completely unchanged — state.analyses is the real, authoritative
+// multi-analysis data; these are just convenience aliases onto the active one, always resolved
+// fresh against state.currentAnalysis. Must be (re-)called on every plain object that is about to
+// become the live `state` (freshState, migrateLegacy, gridSnapshot restore) since these accessor
+// properties don't survive JSON.stringify/JSON.parse — plain data carries no getters/setters.
+function installAnalysisView(st) {
+  ['nodes','rootIds'].forEach(key=>{
+    Object.defineProperty(st,key,{
+      get(){ return curAn(st)[key]; },
+      set(v){ curAn(st)[key]=v; },
+      enumerable:true,configurable:true
+    });
+  });
+  ['introText','generalNotes','references','rowNoteDefs'].forEach(key=>{
+    Object.defineProperty(st.meta,key,{
+      get(){ return curAn(st)[key]; },
+      set(v){ curAn(st)[key]=v; },
+      enumerable:true,configurable:true
+    });
+  });
+}
+// Creates the Previous & Concurrent Modifications analysis (a no-op if it already exists) and
+// switches to it so the user lands directly in their new, empty analysis.
+function createPcmAnalysis() {
+  if (!state||state.analyses.pcm) return;
+  state.analyses.pcm=freshAnalysis('Previous and Concurrent Modifications');
+  state.currentAnalysis='pcm';
+  recalc();persist();renderAll();
+}
+function switchAnalysis(id) {
+  if (!state||state.currentAnalysis===id||!state.analyses[id]) return;
+  state.currentAnalysis=id;
+  renderAll();
 }
 
 // Creates a new shared note-bank entry and returns its key — used both by legacy-note migration
@@ -1025,72 +1093,106 @@ function mkNoteDefKey(m,text) {
   return key;
 }
 function migrateLegacy(p) {
-  if (p.rootId&&!p.rootIds) {p.rootIds=[p.rootId];delete p.rootId;}
-  if (!p.rootIds||!p.rootIds.length) {
-    const roots=Object.values(p.nodes||{}).filter(n=>n.parentId===null);
-    p.rootIds=roots.map(n=>n.id);
+  p.meta=p.meta||{};
+  const m=p.meta;
+  // Revision 47: wrap a pre-Revision-47 single-tree save (bare p.nodes/p.rootIds, with
+  // introText/generalNotes/references/rowNoteDefs living directly on p.meta) into the new
+  // two-analysis shape. A save already in the new shape has p.analyses and skips this — this
+  // block only ever runs once per file, the first time an old save is opened.
+  if (!p.analyses) {
+    if (p.rootId&&!p.rootIds) {p.rootIds=[p.rootId];delete p.rootId;}
+    if (!p.rootIds||!p.rootIds.length) {
+      const roots=Object.values(p.nodes||{}).filter(n=>n.parentId===null);
+      p.rootIds=roots.map(n=>n.id);
+    }
+    p.analyses={
+      ap:{label:'Active Project',introText:m.introText||'',
+        generalNotes:Array.isArray(m.generalNotes)?m.generalNotes:[],
+        references:Array.isArray(m.references)?m.references:[],
+        rowNoteDefs:Array.isArray(m.rowNoteDefs)?m.rowNoteDefs:[],
+        nodes:p.nodes||{},rootIds:p.rootIds||[]},
+      pcm:null
+    };
+    p.currentAnalysis='ap';
+    delete p.nodes;delete p.rootIds;
+    delete m.introText;delete m.generalNotes;delete m.references;delete m.rowNoteDefs;
   }
-  // Default new meta fields
-  const m=p.meta||{};
+  if (!p.currentAnalysis) p.currentAnalysis='ap';
+  // Default shared meta fields (document properties / aircraft info)
   if (!m.documentNumber)  m.documentNumber='';
   if (!m.revisionLevel)   m.revisionLevel='';
   if (!m.preparedBy)      m.preparedBy='';
   if (!m.revisionDate)    m.revisionDate='';
   if (!m.revisionDescription) m.revisionDescription='Initial Release.';
   if (!m.interval)        m.interval='Continuous';
-  if (!m.introText)       m.introText='';
   if (!m.complianceText)  m.complianceText='';
-  if (!Array.isArray(m.generalNotes)) m.generalNotes=[];
-  if (!Array.isArray(m.references))   m.references=[];
-  if (!Array.isArray(m.rowNoteDefs))  m.rowNoteDefs=[];
   // Rev Date became a native date picker (stores ISO YYYY-MM-DD); reformat any pre-existing
   // free-text "MMM-DD-YYYY" value so it still populates the picker instead of appearing blank.
   if (m.revisionDate && !/^\d{4}-\d{2}-\d{2}$/.test(m.revisionDate)) {
     const iso=parseLegacyRevDate(m.revisionDate);
     if (iso) m.revisionDate=iso;
   }
-  // Backfill childIds for saves predating explicit sibling ordering: derive from
-  // parentId (preserving the object's existing key order) for any node missing it.
-  const needsChildBackfill=Object.values(p.nodes||{}).some(n=>!Array.isArray(n.childIds));
-  if (needsChildBackfill) {
-    const byParent={};
-    Object.values(p.nodes||{}).forEach(n=>{ if (n.parentId) (byParent[n.parentId]=byParent[n.parentId]||[]).push(n.id); });
-    Object.values(p.nodes||{}).forEach(n=>{ if (!Array.isArray(n.childIds)) n.childIds=byParent[n.id]||[]; });
-  }
-  Object.values(p.nodes||{}).forEach(n=>{
-    if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
-    // Revision 36: rowNotes entries now reference a shared note-text bank (meta.rowNoteDefs)
-    // instead of storing text inline, so the same note can be cited by multiple items/groups
-    // without duplicating its text at render time — mirrors how rowRefs already references
-    // meta.references by key. Old saves (bare strings, or Revision 33's {text,group} shape)
-    // migrate by creating one bank entry per existing note (no attempt to merge identical-
-    // looking text across different items — safer default, user can consolidate manually).
-    n.rowNotes=n.rowNotes.map(o=>{
-      if (typeof o==='string') return {key:mkNoteDefKey(m,o),group:null};
-      if ('text' in o) return {key:mkNoteDefKey(m,o.text||''),group:o.group||null};
-      return {key:o.key,group:o.group||null};
+  // Per-analysis normalization — runs for the Active Project always, and for Previous &
+  // Concurrent Modifications too if it's been created. Everything below used to run once
+  // against the single tree; now it runs once per existing analysis.
+  ['ap','pcm'].forEach(id=>{
+    const an=p.analyses[id];
+    if (!an) return;
+    if (!an.label) an.label=id==='ap'?'Active Project':'Previous and Concurrent Modifications';
+    if (!an.introText) an.introText='';
+    if (!Array.isArray(an.generalNotes)) an.generalNotes=[];
+    if (!Array.isArray(an.references))   an.references=[];
+    if (!Array.isArray(an.rowNoteDefs))  an.rowNoteDefs=[];
+    if (!an.nodes) an.nodes={};
+    if (!an.rootIds||!an.rootIds.length) {
+      const roots=Object.values(an.nodes).filter(n=>n.parentId===null);
+      an.rootIds=roots.map(n=>n.id);
+    }
+    // Backfill childIds for saves predating explicit sibling ordering: derive from
+    // parentId (preserving the object's existing key order) for any node missing it.
+    const needsChildBackfill=Object.values(an.nodes).some(n=>!Array.isArray(n.childIds));
+    if (needsChildBackfill) {
+      const byParent={};
+      Object.values(an.nodes).forEach(n=>{ if (n.parentId) (byParent[n.parentId]=byParent[n.parentId]||[]).push(n.id); });
+      Object.values(an.nodes).forEach(n=>{ if (!Array.isArray(n.childIds)) n.childIds=byParent[n.id]||[]; });
+    }
+    Object.values(an.nodes).forEach(n=>{
+      if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
+      // Revision 36: rowNotes entries reference a shared note-text bank (this analysis's own
+      // rowNoteDefs) instead of storing text inline, so the same note can be cited by multiple
+      // items/groups without duplicating its text at render time — mirrors how rowRefs already
+      // references references by key. Old saves (bare strings, or Revision 33's {text,group}
+      // shape) migrate by creating one bank entry per existing note (no attempt to merge
+      // identical-looking text across different items — safer default, user can consolidate
+      // manually).
+      n.rowNotes=n.rowNotes.map(o=>{
+        if (typeof o==='string') return {key:mkNoteDefKey(an,o),group:null};
+        if ('text' in o) return {key:mkNoteDefKey(an,o.text||''),group:o.group||null};
+        return {key:o.key,group:o.group||null};
+      });
+      if (!Array.isArray(n.rowRefs))  n.rowRefs=[];
+      n.rowRefs=n.rowRefs.map(r=>({key:r.key,comment:r.comment||'',group:r.group||null}));
+      if (!n.acDc) n.acDc='dc';
+      if (n.voltage===undefined) n.voltage=null;
+      if (isConv(n.type)&&n.convPf===undefined) n.convPf=(n.type==='TRU'?0.95:1.0);
+      const v=n.voltage||28;
+      if (typeof n.capacity==='number') {
+        const w=n.capacity;
+        n.capacity=w>0?{w,var:null,va:null,a:v>0?w/v:null,pf:null}:null;
+      }
+      if (typeof n.existingLoad==='number') {
+        const w=n.existingLoad;
+        n.existingLoad={w,var:0,va:null,a:v>0?w/v:null,pf:1};
+      }
+      if (!n.existingLoad) n.existingLoad=mkPow(0,0,0,0,1);
+      if (typeof n.loadValue==='number') {
+        const w=n.loadValue;
+        n.loadValue={w,var:0,va:null,a:v>0?w/v:null,pf:1};
+      }
+      if (typeof n.netChangeOverride==='number') n.netChangeOverride={w:n.netChangeOverride};
     });
-    if (!Array.isArray(n.rowRefs))  n.rowRefs=[];
-    n.rowRefs=n.rowRefs.map(r=>({key:r.key,comment:r.comment||'',group:r.group||null}));
-    if (!n.acDc) n.acDc='dc';
-    if (n.voltage===undefined) n.voltage=null;
-    if (isConv(n.type)&&n.convPf===undefined) n.convPf=(n.type==='TRU'?0.95:1.0);
-    const v=n.voltage||28;
-    if (typeof n.capacity==='number') {
-      const w=n.capacity;
-      n.capacity=w>0?{w,var:null,va:null,a:v>0?w/v:null,pf:null}:null;
-    }
-    if (typeof n.existingLoad==='number') {
-      const w=n.existingLoad;
-      n.existingLoad={w,var:0,va:null,a:v>0?w/v:null,pf:1};
-    }
-    if (!n.existingLoad) n.existingLoad=mkPow(0,0,0,0,1);
-    if (typeof n.loadValue==='number') {
-      const w=n.loadValue;
-      n.loadValue={w,var:0,va:null,a:v>0?w/v:null,pf:1};
-    }
-    if (typeof n.netChangeOverride==='number') n.netChangeOverride={w:n.netChangeOverride};
   });
+  installAnalysisView(p);
 }
 // ── CALCULATION ──────────────────────────────────────────────────────────────
 function calcNC(node,nodes) {
@@ -1216,10 +1318,24 @@ function strip(nodes) {
   return out;
 }
 
+// The authoritative save/export shape: shared meta plus both analyses explicitly, each stripped
+// of computed per-node fields. state.meta also carries getter-derived introText/generalNotes/
+// references/rowNoteDefs for whichever analysis is current (installAnalysisView) — redundant
+// with analyses[current] here, but harmless: migrateLegacy always rebuilds the live accessors
+// from state.analyses on load and never trusts this redundant top-level snapshot.
+function snapshotState() {
+  const an=id=>{
+    const a=state.analyses[id];
+    return a?{label:a.label,introText:a.introText,generalNotes:a.generalNotes,references:a.references,
+      rowNoteDefs:a.rowNoteDefs,nodes:strip(a.nodes),rootIds:a.rootIds}:null;
+  };
+  return {meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved};
+}
+
 function persist() {
   if (!state) return;
   state.lastSaved=new Date().toISOString();
-  try { localStorage.setItem(LS,JSON.stringify({meta:state.meta,nodes:strip(state.nodes),rootIds:state.rootIds,lastSaved:state.lastSaved})); } catch(e){}
+  try { localStorage.setItem(LS,JSON.stringify(snapshotState())); } catch(e){}
   updateSaveEl();
 }
 
@@ -1227,19 +1343,23 @@ function loadLS() { try{const r=localStorage.getItem(LS);return r?JSON.parse(r):
 
 function validateImport(p) {
   if (!p||typeof p!=='object') throw new Error('Not a valid JSON object.');
-  if (!p.meta||!p.nodes) throw new Error('Missing required fields (meta, nodes).');
-  if (!p.rootIds||!p.rootIds.length) throw new Error('Missing rootIds.');
-  const ns=p.nodes;
-  p.rootIds.forEach(rid=>{ if (!ns[rid]) throw new Error(`rootIds references unknown node "${rid}".`); });
-  Object.values(ns).forEach(n=>{
-    if (n.parentId!==null&&!ns[n.parentId]) throw new Error(`Node "${n.description}" has unknown parent.`);
-    if (!ALL_TYPES.includes(n.type)) throw new Error(`Unknown node type: "${n.type}".`);
+  if (!p.meta||!p.analyses||!p.analyses.ap) throw new Error('Missing required fields (meta, analyses).');
+  ['ap','pcm'].forEach(id=>{
+    const an=p.analyses[id];
+    if (!an) return;
+    if (!an.nodes||!an.rootIds||!an.rootIds.length) throw new Error(`"${an.label||id}" analysis is missing rootIds.`);
+    const ns=an.nodes;
+    an.rootIds.forEach(rid=>{ if (!ns[rid]) throw new Error(`"${an.label||id}" rootIds references unknown node "${rid}".`); });
+    Object.values(ns).forEach(n=>{
+      if (n.parentId!==null&&!ns[n.parentId]) throw new Error(`Node "${n.description}" has unknown parent.`);
+      if (!ALL_TYPES.includes(n.type)) throw new Error(`Unknown node type: "${n.type}".`);
+    });
   });
 }
 
 function doExport() {
   if (!state) return;
-  const blob=new Blob([JSON.stringify({meta:state.meta,nodes:strip(state.nodes),rootIds:state.rootIds,lastSaved:state.lastSaved},null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify(snapshotState(),null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const m=state.meta;
   const name=['WattsUp',m.make,m.model,m.serialNumber,new Date().toISOString().slice(0,10)].filter(Boolean).join('_').replace(/\s+/g,'_')+'.json';
@@ -2627,6 +2747,7 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
   if (cancelBtn) cancelBtn.addEventListener('click',()=>{
     if (!gridSnapshot) return;
     state=JSON.parse(JSON.stringify(gridSnapshot));
+    installAnalysisView(state);
     recalc();renderAll();
   });
   if (saveBtn) saveBtn.addEventListener('click',()=>{
@@ -2820,7 +2941,22 @@ function updateSaveEl() {
   if (!state?.lastSaved){el.textContent='';return;}
   el.textContent=`Saved ${new Date(state.lastSaved).toLocaleTimeString()}`;
 }
-function renderAll(){renderDocPanel();renderTree();renderTable();renderPowerDistSummary();renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();renderExRemGrid();renderNewGrid();renderWarnings();updateSaveEl();}
+function renderAll(){renderDocPanel();renderTree();renderTable();renderPowerDistSummary();renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();renderExRemGrid();renderNewGrid();renderWarnings();updateSaveEl();updateAnalysisSwitchUI();}
+function updateAnalysisSwitchUI() {
+  if (!state) return;
+  const apBtn=document.getElementById('analysis-btn-ap'), pcmBtn=document.getElementById('analysis-btn-pcm');
+  if (!apBtn||!pcmBtn) return;
+  apBtn.classList.toggle('active',state.currentAnalysis==='ap');
+  if (state.analyses.pcm) {
+    pcmBtn.textContent=state.analyses.pcm.label||'Previous & Concurrent Modifications';
+    pcmBtn.classList.remove('analysis-btn-create');
+    pcmBtn.classList.toggle('active',state.currentAnalysis==='pcm');
+  } else {
+    pcmBtn.textContent='+ Create Previous & Concurrent Modifications';
+    pcmBtn.classList.add('analysis-btn-create');
+    pcmBtn.classList.remove('active');
+  }
+}
 // ── NOTES & REFS MODAL HELPERS ───────────────────────────────────────────────
 // Revision 33: notes/refs can optionally be scoped to a specific value-group instead of the
 // item itself (null = item itself, the backward-compatible default). Legal groups depend on the
@@ -4683,6 +4819,12 @@ function initEvents() {
   document.getElementById('btn-new').addEventListener('click',()=>{
     if (!confirm('Start a new analysis? Any unsaved changes will be lost.')) return;
     state=freshState();collapsed=new Set();recalc();renderAll();persist();
+  });
+  document.getElementById('analysis-btn-ap').addEventListener('click',()=>switchAnalysis('ap'));
+  document.getElementById('analysis-btn-pcm').addEventListener('click',()=>{
+    if (!state) return;
+    if (!state.analyses.pcm) { createPcmAnalysis(); return; }
+    switchAnalysis('pcm');
   });
   document.getElementById('btn-open').addEventListener('click',()=>document.getElementById('file-input').click());
   document.getElementById('file-input').addEventListener('change',e=>{
