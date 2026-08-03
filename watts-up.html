@@ -1140,8 +1140,9 @@ function shareWithOther(nodeId) {
     node.sharedPeerId=twinId;
     parentId=twinId;
   });
-  recalc();
   state.currentAnalysis=curId;
+  // recalc() always recomputes both analyses in dependency order (Phase 2c), so one call here
+  // is enough regardless of which side was just touched.
   recalc();
   persist();renderAll();
 }
@@ -1164,7 +1165,7 @@ function unshareNode(id) {
 // after any commit that may have touched the synced fields — a no-op cost when it hasn't.
 function syncSharedFields(n) {
   if (!state||!n||!n.sharedPeerId) return;
-  const curId=state.currentAnalysis, otherId=curId==='ap'?'pcm':'ap';
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   const other=state.analyses[otherId];
   const peer=other&&other.nodes[n.sharedPeerId];
   if (!peer) return;
@@ -1173,12 +1174,9 @@ function syncSharedFields(n) {
   if (hasCap(n.type)&&hasCap(peer.type)) peer.capacity=n.capacity?{...n.capacity}:null;
   if (isLoad(n.type)&&isLoad(peer.type)) peer.loadValue=n.loadValue?{...n.loadValue}:mkPow();
   // The peer's own computed fields (_netChange/_newLoad/_remainingCapacity/_warnings) need
-  // refreshing too, since its capacity/loadValue may have just changed — recalc() is
-  // alias-based (always operates on whichever analysis is currently aliased), so temporarily
-  // flip to the other analysis to recompute it, then flip back.
-  state.currentAnalysis=otherId;
-  recalc();
-  state.currentAnalysis=curId;
+  // refreshing too, since its capacity/loadValue may have just changed. Every caller of this
+  // function already calls recalc() of its own accord right afterward, and recalc() always
+  // recomputes both analyses in dependency order (Phase 2c) — so no separate recalc needed here.
 }
 
 // Creates a new shared note-bank entry and returns its key — used both by legacy-note migration
@@ -1383,18 +1381,47 @@ function warnNode(node,nodes) {
   return w;
 }
 
-function recalc() {
-  if (!state) return;
-  const roots=state.rootIds||(state.rootId?[state.rootId]:[]);
-  postOrder(roots,state.nodes).forEach(id=>{
-    const n=state.nodes[id]; const v=n.voltage||0;
-    n._netChange=calcNC(n,state.nodes);
+// Computes _netChange/_newLoad/_remainingCapacity/_warnings for every node in one analysis,
+// purely from that analysis's own data (no cross-analysis dependency here — see recalc() for
+// where the one cross-analysis dependency, §3.3.2, gets applied before this runs for the Active
+// Project).
+function recalcAnalysis(an) {
+  if (!an) return;
+  const roots=an.rootIds||(an.rootId?[an.rootId]:[]);
+  postOrder(roots,an.nodes).forEach(id=>{
+    const n=an.nodes[id]; const v=n.voltage||0;
+    n._netChange=calcNC(n,an.nodes);
     if (hasCap(n.type)) {
       n._newLoad=addPow(n.existingLoad||mkPow(0,0,0,0,1),n._netChange,n.acDc,v);
       n._remainingCapacity=n.capacity?subPow(n.capacity,n._newLoad,n.acDc,v):null;
     } else {n._newLoad=null;n._remainingCapacity=null;}
-    n._warnings=warnNode(n,state.nodes);
+    n._warnings=warnNode(n,an.nodes);
   });
+}
+// Revision 47 (Phase 2c): recomputes BOTH analyses, always in dependency order, regardless of
+// which is currently active (state.currentAnalysis) — Active Project can depend on Previous &
+// Concurrent Modifications (never the other way around), so PCM is always fully computed first.
+// For every shared non-load Active Project item, Existing Load is overwritten with PCM's own
+// freshly-computed new-load for that item (spec §3.3.2 — PCM documents what's already installed;
+// Active Project starts from there instead of an independently-entered value) before Active
+// Project's own bottom-up pass runs. Calling this always recomputes both analyses in one pass, so
+// call sites no longer need to track which analysis they just touched or temporarily flip
+// state.currentAnalysis to recalculate the other one (Phase 2a/2b's shareWithOther/
+// syncSharedFields used to do exactly that; simplified once this landed).
+function recalc() {
+  if (!state) return;
+  const pcm=state.analyses.pcm;
+  if (pcm) {
+    recalcAnalysis(pcm);
+    const ap=state.analyses.ap;
+    Object.values(ap.nodes).forEach(n=>{
+      if (!n.sharedPeerId||isLoad(n.type)||!hasCap(n.type)) return;
+      const peer=pcm.nodes[n.sharedPeerId];
+      if (!peer) return;
+      n.existingLoad=peer._newLoad?{...peer._newLoad}:mkPow(0,0,0,0,1);
+    });
+  }
+  recalcAnalysis(state.analyses.ap);
 }
 
 function allWarnings() {
@@ -2588,6 +2615,13 @@ function gridDisplayCells(n,field,applicable,forceDisabled){
 // grid/analysis/status — status is allowed to drift independently between a shared pair (Phase
 // 2a/2b), so an item can end up already-shared but outside its "share-eligible" status set (e.g.
 // a shared PCM item later toggled to Removed there); it still needs a way back out.
+// Revision 47 (Phase 2c): whether this node's Existing Load is computed from its PCM peer's
+// new-load (spec §3.3.2) rather than independently entered — true only for a shared, non-load
+// item viewed from the Active Project side (PCM's own Existing Load stays freely editable; it's
+// the source of truth this rule reads from, via recalc()'s cross-analysis substitution).
+function apExistingLoadLocked(n) {
+  return !!(state&&state.currentAnalysis==='ap'&&n.sharedPeerId&&hasCap(n.type)&&!isLoad(n.type));
+}
 function gridShareInfo(n,gridKey){
   if (!state) return {show:false};
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
@@ -2675,13 +2709,20 @@ function gridStatusDisplayCell(n){
 }
 function buildExRemRow(n,depth){
   const otherStatus=n.status==='existing'?'removed':'existing';
+  // Revision 47 (Phase 2c): a shared non-load item's Existing Load is computed from its PCM
+  // peer's new-load, not entered here — shown as a read-only value (gridDisplayCells) instead
+  // of the normal editable cells, and its Reset button is hidden (nothing to reset to).
+  const exLoadLocked=apExistingLoadLocked(n);
+  const exLoadCells=exLoadLocked
+    ?gridDisplayCells(n,'existingLoad',hasCap(n.type))
+    :gridPowerGroupCells(n,'existingLoad',hasCap(n.type));
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
     ${gridTypeCell(n,depth)}${gridDescInputCell(n)}${gridRefDesCell(n)}
     ${gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
     ${gridEffCell(n)}${gridPfCell(n)}
     ${gridCapCells(n)}${gridGroupResetCell('capacity',hasCap(n.type))}
-    ${gridPowerGroupCells(n,'existingLoad',hasCap(n.type))}${gridGroupResetCell('existingLoad',hasCap(n.type))}
+    ${exLoadCells}${gridGroupResetCell('existingLoad',hasCap(n.type)&&!exLoadLocked)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type))}${gridGroupResetCell('loadValue',isLoad(n.type))}
     ${gridActionsCell(n,false,'exrem')}
   </tr>`;
@@ -3425,6 +3466,17 @@ function efReshow() {
   applyVoltageAcdcLock(n,pid);
   const ac=document.getElementById('ef-acdc').value;
   efShowSections(tp,cr,st,hc,ac);
+  // Revision 47 (Phase 2c): a shared, non-load Active Project item's Existing Load is computed
+  // from its PCM peer's new-load (spec §3.3.2), not entered here — lock the fields and hide the
+  // Reset button rather than let an edit here get silently overwritten by the next recalc().
+  // Uses the form's live Type (tp), not n.type, so it reacts correctly if Type is changed
+  // mid-edit, same as every other section this function toggles.
+  const exLoadLocked=!!(n&&n.sharedPeerId&&state.currentAnalysis==='ap'&&hasCap(tp)&&!isLoad(tp));
+  ['ef-exld-a','ef-exld-w','ef-exld-ac-a','ef-exld-ac-va','ef-exld-ac-w','ef-exld-ac-var','ef-exld-ac-pf'].forEach(id=>{
+    document.getElementById(id).disabled=exLoadLocked;
+  });
+  const exResetBtn=document.querySelector('#ef-sec-exload .btn-reset');
+  if (exResetBtn) exResetBtn.classList.toggle('hidden',exLoadLocked);
 }
 function findPairedNode(node) {
   if (node.convRole==='in')  return children(node.id,state.nodes).find(c=>c.convRole==='out')||null;

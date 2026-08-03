@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§50).
+enhancement (§51).
 
 ---
 
@@ -1564,7 +1564,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§50).
+multi-interval load analysis still listed under Future Enhancements (§51).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2733,7 +2733,53 @@ after verification.
 **Not yet built**: the Active-Project-existing-load-from-PCM-new-load calculation (Phase 2c) —
 Active Project's Existing Load remains freely editable for shared non-load items until then.
 
-## 50. Future Enhancements
+## 50. Revision 47 (Phase 2c) — Item Sharing: Existing Load Computed From PCM's New Load
+
+*Last updated: 2026-08-02*
+
+Third and final step of item sharing (source §3.3.2). For a shared, non-load item, Active
+Project's Existing Load is no longer independently entered — it's computed from PCM's own
+new-load result for that same item, and the field becomes read-only. This completes item sharing;
+reference sharing and notes sharing are separate, later phases.
+
+**Calc engine restructured for cross-analysis dependency** (`recalc()`/`recalcAnalysis()`): the
+body of the old single-analysis `recalc()` became `recalcAnalysis(an)`, parameterized over an
+explicit analysis object instead of the aliased `state.nodes`/`state.rootIds`. `recalc()` itself now
+always computes PCM first (if it exists), then — for every shared non-load Active Project node —
+overwrites `existingLoad` with PCM's peer's freshly-computed `_newLoad`, then computes Active
+Project. This runs in the same fixed order regardless of `state.currentAnalysis`, since Active
+Project can depend on PCM but never the reverse. A useful side effect: Phase 2a/2b's `shareWithOther`
+and `syncSharedFields` no longer need their own temporary `state.currentAnalysis`-flip-and-recalc
+dance to keep the *other* analysis's computed fields fresh — a single `recalc()` call now always
+handles both sides correctly, so those workarounds were simplified away.
+
+**Read-only Existing Load UI** (`apExistingLoadLocked`): true only for a shared, non-load item
+viewed from the Active Project side (PCM's own Existing Load — the source of truth this rule reads
+from — stays freely editable). In the Existing/Removed grid, a locked row's Existing Load renders
+via `gridDisplayCells` (read-only, but showing the actual computed value) instead of the normal
+editable `gridPowerGroupCells`, and its Reset button is hidden. In the Edit Item modal
+(`efReshow`), the five Existing Load inputs (DC and AC variants) are disabled and the section's
+Reset button hidden, checked against the form's live Type selection (not the stored node type) so
+it reacts correctly if Type is changed mid-edit, consistent with every other section this function
+already toggles. `doEditSave` needed no changes: even though the disabled fields still submit
+their last-displayed values, `updateNode`'s subsequent `recalc()` immediately overwrites
+`existingLoad` with the correct PCM-derived value regardless.
+
+Verified live: built a shared Bus (capacity 20A) with an Existing Load entered on the PCM side;
+confirmed Active Project's peer's `existingLoad` and `_newLoad` exactly match PCM's Bus's computed
+`_newLoad`, including through the actual grid DOM (five disabled cells showing the right values, no
+Reset button) and the Edit modal (same five fields disabled with matching values, Reset hidden).
+Confirmed PCM's own Existing Load stays fully editable throughout. Confirmed a shared *Load* item
+is unaffected by this rule entirely (Load items have no capacity/Existing-Load split to compute —
+governed only by Phase 2b's loadValue sync). Confirmed unsharing restores independent editability,
+preserving the last-computed value as a starting point rather than resetting it. Confirmed Print
+Report and Word export still run cleanly with a PCM analysis present. Full tab sweep, no console
+errors. Test data removed after verification.
+
+**This completes item sharing (Revision 47 Phase 2).** Remaining Revision 47 work: reference
+sharing (Phase 3), notes sharing (Phase 4), and the Word Report appendix (Phase 5).
+
+## 51. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
