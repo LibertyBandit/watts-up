@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§49).
+enhancement (§50).
 
 ---
 
@@ -1564,7 +1564,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§49).
+multi-interval load analysis still listed under Future Enhancements (§50).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2681,7 +2681,59 @@ console errors. Test data removed after verification.
 calculation (Phase 2c) — for now, a shared pair's fields can drift independently after the initial
 copy, and Active Project's Existing Load remains freely editable even for shared non-load items.
 
-## 49. Future Enhancements
+## 49. Revision 47 (Phase 2b) — Item Sharing: Field Sync Between Linked Pairs
+
+*Last updated: 2026-08-02*
+
+Second step of item sharing (source §3.3.1's "a change in any of these in one analysis should
+change the value in the other analysis"). Keeps a shared pair's description, ref des, capacity
+(non-load)/load value (load items), and parent item all in sync going forward — Phase 2a only
+handled the initial copy at share time. §3.3.2's existing-load-from-PCM's-new-load calculation is
+still Phase 2c, not part of this sync.
+
+**`syncSharedFields(n)`**: if `n.sharedPeerId` is set, copies description/ref des and
+capacity-or-loadValue onto the peer, then recomputes the *other* analysis (temporarily flipping
+`state.currentAnalysis`, recalc-ing, and flipping back — the same technique Phase 2a's twin
+creation uses) so the peer's own `_netChange`/`_newLoad`/`_remainingCapacity` reflect the new value
+immediately rather than staying stale until the user happens to switch analyses. Deliberately does
+**not** sync status, Existing Load, or Net Change Override — those stay independent per analysis
+(Phase 2a's twins already default to Existing regardless of the source's status; a shared pair can
+legitimately end up with different statuses on each side, e.g. PCM's copy later toggled to Removed
+while Active Project's stays Existing). Called from the two places a node's fields actually get
+committed: `updateNode()` (the Edit modal's Save path) and `gridFieldChanged()` (inline grid edits)
+— both already-established single choke points, so no other code needed to change.
+
+**Parent Item sync** (`doEditSave`'s existing reparent block): reparenting a shared node now
+requires the new parent to also be shared (or the node becoming a new top-level root) — anything
+else is blocked with an alert naming what's missing, rather than silently letting the shared
+structure diverge. When the move is allowed, the same move is mirrored onto the peer in the other
+analysis (via the same temporary-flip technique), keeping both sides' tree structure — not just
+field values — consistent.
+
+**Share/Unshare button visibility fixed** (`gridShareInfo`, found while testing this phase): Unshare
+was gated behind the same share-eligible status set as Share, so an already-shared item that later
+drifted to a non-eligible status on one side (e.g. a shared PCM item toggled to Removed, which
+isn't in PCM's own share-eligible set) lost its Unshare button entirely — no way back out via the
+grid. Fixed: Unshare is now offered unconditionally on any node with a live `sharedPeerId`,
+regardless of grid/analysis/status; only the "not yet shared → offer Share" branch stays gated by
+the per-analysis eligible-status set from Phase 2a.
+
+Verified live: built a shared Bus→CB→Load chain and edited description, capacity, and load value
+through real grid inline edits — confirmed each propagates to the peer and the peer's own
+`_remainingCapacity` recomputes correctly. Confirmed toggling status and editing Existing Load on
+one side leaves the peer's status/Existing Load untouched. Confirmed the status-drift bug above:
+toggling a shared PCM item to Removed then checking the grid found the Unshare button had vanished
+before the fix, present after. Tested reparenting a shared item to an unshared parent (blocked,
+correct alert message, parent unchanged, modal stays open) and to a different already-shared parent
+(mirrored correctly — peer's `parentId` and both sides' `childIds` verified structurally consistent,
+not just the field). Tested reparenting a shared item to "No Parent (New Root)" — mirrored into a
+new root-level item on both sides correctly. Full tab sweep, no console errors. Test data removed
+after verification.
+
+**Not yet built**: the Active-Project-existing-load-from-PCM-new-load calculation (Phase 2c) —
+Active Project's Existing Load remains freely editable for shared non-load items until then.
+
+## 50. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
