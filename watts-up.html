@@ -1019,7 +1019,8 @@ let state=null;
 
 function makeNode(type,parentId,overrides={}) {
   const node={id:uid(),type,description:'',refDes:'',status:'existing',parentId,convRole:null,
-    voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],childIds:[],_netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
+    voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],childIds:[],sharedPeerId:null,
+    _netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
   if (hasCap(type)) {node.capacity=null;node.existingLoad=mkPow(0,0,0,0,1);node.netChangeOverride=null;}
   if (isConv(type)) {node.efficiency=0.85;node.convPf=convPfDefault(type);}
   if (isLoad(type)) {node.loadValue=mkPow();}
@@ -1076,6 +1077,15 @@ function installAnalysisView(st) {
 function createPcmAnalysis() {
   if (!state||state.analyses.pcm) return;
   state.analyses.pcm=freshAnalysis('Previous and Concurrent Modifications');
+  // The two analyses' root items are definitionally the same aircraft — link them as shared
+  // peers immediately, so every later ancestor-share-walk (shareWithOther) always has a
+  // guaranteed, already-shared place to terminate instead of needing to decide which of
+  // possibly several top-level items a shared root should attach to. If either analysis ever
+  // has more than one root-level item, only the first one is auto-linked here — a documented
+  // simplification, not a general multi-root sharing mechanism.
+  const apRootId=state.analyses.ap.rootIds[0], pcmRootId=state.analyses.pcm.rootIds[0];
+  const apRoot=state.analyses.ap.nodes[apRootId], pcmRoot=state.analyses.pcm.nodes[pcmRootId];
+  if (apRoot&&pcmRoot) { apRoot.sharedPeerId=pcmRootId; pcmRoot.sharedPeerId=apRootId; }
   state.currentAnalysis='pcm';
   recalc();persist();renderAll();
 }
@@ -1083,6 +1093,64 @@ function switchAnalysis(id) {
   if (!state||state.currentAnalysis===id||!state.analyses[id]) return;
   state.currentAnalysis=id;
   renderAll();
+}
+
+// Revision 47 (Phase 2a): links a node to a newly-created twin in the other analysis, walking
+// up to the nearest already-shared ancestor first (source spec 3.3.3 — sharing an item requires
+// all its ancestors to be shared too). Roots are always already shared (see createPcmAnalysis),
+// so this always terminates without needing user input on where to attach. Auto-created ancestor
+// twins default to Existing status regardless of the source's own status — they're structural
+// scaffolding the user didn't explicitly choose, not something being actively documented as
+// new/removed. Field sync going forward (beyond this initial copy) is Phase 2b.
+function shareWithOther(nodeId) {
+  if (!state) return;
+  const curId=state.currentAnalysis, otherId=curId==='ap'?'pcm':'ap';
+  const cur=curAn();
+  const n=cur.nodes[nodeId];
+  if (!n||n.sharedPeerId) return;
+  if (!state.analyses[otherId]) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+
+  const chain=[]; let cursor=n;
+  while (cursor&&!cursor.sharedPeerId) { chain.unshift(cursor); cursor=cursor.parentId?cur.nodes[cursor.parentId]:null; }
+  if (!cursor) { alert('Could not find a shared ancestor to attach to — this should not happen.'); return; }
+
+  if (chain.length>1) {
+    const names=chain.slice(0,-1).map(x=>x.description||'unnamed').join(', ');
+    const otherLabel=state.analyses[otherId].label;
+    if (!confirm(`Sharing "${n.description||'unnamed'}" with ${otherLabel} will also share its ancestor(s): ${names}. Continue?`)) return;
+  }
+
+  // Create the twin chain top-down in the other analysis. Temporarily flipping
+  // state.currentAnalysis lets addNode/attachChild (which always operate on the currently
+  // aliased state.nodes/state.rootIds) create nodes there unchanged, instead of needing a
+  // parallel "other analysis" version of every node-creation helper.
+  state.currentAnalysis=otherId;
+  let parentId=cursor.sharedPeerId;
+  chain.forEach(node=>{
+    const overrides={description:node.description,refDes:node.refDes,status:'existing',
+      acDc:node.acDc,voltage:node.voltage,sharedPeerId:node.id};
+    if (hasCap(node.type)) overrides.capacity=node.capacity?{...node.capacity}:null;
+    if (isConv(node.type)) { overrides.efficiency=node.efficiency; overrides.convPf=node.convPf; }
+    if (isLoad(node.type)) overrides.loadValue=node.loadValue?{...node.loadValue}:mkPow();
+    const twinId=addNode(parentId,{type:node.type,...overrides});
+    node.sharedPeerId=twinId;
+    parentId=twinId;
+  });
+  recalc();
+  state.currentAnalysis=curId;
+  recalc();
+  persist();renderAll();
+}
+function unshareNode(id) {
+  if (!state) return;
+  const n=curAn().nodes[id];
+  if (!n||!n.sharedPeerId) return;
+  if (!confirm(`Stop sharing "${n.description||'unnamed'}"? Both items remain — they just won't stay linked anymore.`)) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const peer=state.analyses[otherId]?.nodes[n.sharedPeerId];
+  if (peer) peer.sharedPeerId=null;
+  n.sharedPeerId=null;
+  persist();renderAll();
 }
 
 // Creates a new shared note-bank entry and returns its key — used both by legacy-note migration
@@ -1157,6 +1225,7 @@ function migrateLegacy(p) {
       Object.values(an.nodes).forEach(n=>{ if (!Array.isArray(n.childIds)) n.childIds=byParent[n.id]||[]; });
     }
     Object.values(an.nodes).forEach(n=>{
+      if (n.sharedPeerId===undefined) n.sharedPeerId=null;
       if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
       // Revision 36: rowNotes entries reference a shared note-text bank (this analysis's own
       // rowNoteDefs) instead of storing text inline, so the same note can be cited by multiple
@@ -1440,6 +1509,16 @@ function delNode(id) {
   const n=state.nodes[id]; if (!n) return;
   const isRoot=state.rootIds.includes(id);
   if (isRoot&&state.rootIds.length<=1) return;
+  // Revision 47: refuse to delete a shared item, or a branch containing one — deleting it here
+  // would silently orphan its linked peer in the other analysis. Unshare first (no data lost),
+  // then delete.
+  const branch=subtree(id,state.nodes);
+  const sharedIds=branch.filter(x=>state.nodes[x].sharedPeerId);
+  if (sharedIds.length) {
+    const names=sharedIds.map(x=>state.nodes[x].description||'unnamed').join(', ');
+    alert(`Can't delete — shared with the other analysis: ${names}. Unshare first.`);
+    return;
+  }
   const parentId=n.parentId;
   subtree(id,state.nodes).forEach(x=>delete state.nodes[x]);
   detachChild(id,parentId);
@@ -2471,7 +2550,28 @@ function gridDisplayCells(n,field,applicable,forceDisabled){
     return `<td class="${cls}"><input disabled value="${val!=null?fmtN(val):''}"></td>`;
   }).join('');
 }
-function gridActionsCell(n,readOnly){
+// Revision 47 (Phase 2a): whether a Share/Unshare action belongs on this row, and its label.
+// Share is offered from exactly one grid/status combination per analysis — the one matching
+// that analysis's own share-eligible status set (source spec 3.2 for PCM, 3.3 for AP) — so a
+// shareable node never ends up with two different Share buttons across its two grids: the
+// Existing/Removed grid when the Active Project is current (existing/removed rows), or the
+// Installed grid when PCM is current (existing/new rows, including its read-only existing rows).
+function gridShareInfo(n,gridKey){
+  if (!state) return {show:false};
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const eligible=
+    (gridKey==='exrem'&&state.currentAnalysis==='ap'&&(n.status==='existing'||n.status==='removed'))||
+    (gridKey==='new'&&state.currentAnalysis==='pcm'&&(n.status==='existing'||n.status==='new'));
+  if (!eligible) return {show:false};
+  if (n.sharedPeerId) {
+    const otherLabel=state.analyses[otherId]?.label||'the other analysis';
+    return {show:true,action:'unshare',label:'Unshare',title:`Stop sharing this item with ${otherLabel}`};
+  }
+  if (!state.analyses[otherId]) return {show:false};
+  const otherLabel=state.analyses[otherId].label;
+  return {show:true,action:'share',label:'Share',title:`Share this item with ${otherLabel}`};
+}
+function gridActionsCell(n,readOnly,gridKey){
   const {canUp,canDown}=siblingOrderInfoForNode(n);
   // A New-status item with an active Net Change override is being treated as a fixed value
   // rather than a sum of children — adding a child wouldn't affect the total anyway (and
@@ -2483,13 +2583,16 @@ function gridActionsCell(n,readOnly){
   // AC groups no longer auto-derive on every edit (gridCommitPowerGroup) — Calc is the explicit
   // trigger, shown only for AC rows that actually have an editable AC power group.
   const canCalc=n.acDc==='ac'&&(hasCap(n.type)||isLoad(n.type));
-  if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}</div></td>`;
+  const shareInfo=gridShareInfo(n,gridKey);
+  const shareBtn=shareInfo.show?`<button data-act="${shareInfo.action}" title="${shareInfo.title}">${shareInfo.label}</button>`:'';
+  if (readOnly) return `<td><div class="grid-actions">${shareBtn}${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}</div></td>`;
   return `<td><div class="grid-actions">
     <button data-act="up" title="Move up"${canUp?'':' disabled'}>&uarr;</button>
     <button data-act="down" title="Move down"${canDown?'':' disabled'}>&darr;</button>
     ${canCalc?'<button data-act="calc" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>':''}
     ${canDelDup?'<button data-act="dup" title="Duplicate">Dup</button>':''}
     ${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}
+    ${shareBtn}
     <button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>
     ${canDelDup?'<button data-act="del" title="Delete">Del</button>':''}
   </div></td>`;
@@ -2548,7 +2651,7 @@ function buildExRemRow(n,depth){
     ${gridCapCells(n)}${gridGroupResetCell('capacity',hasCap(n.type))}
     ${gridPowerGroupCells(n,'existingLoad',hasCap(n.type))}${gridGroupResetCell('existingLoad',hasCap(n.type))}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type))}${gridGroupResetCell('loadValue',isLoad(n.type))}
-    ${gridActionsCell(n,false)}
+    ${gridActionsCell(n,false,'exrem')}
   </tr>`;
 }
 // Mirrors gridHeader's exact column sequence with explicit widths, so every numeric column is
@@ -2600,7 +2703,7 @@ function buildNewRow(n,depth){
     ${gridCapCells(n,isExistingCtx)}${gridGroupResetCell('capacity',hasCap(n.type)&&!isExistingCtx)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!isExistingCtx)}
     ${ncOverridable?gridPowerGroupCells(n,'netChangeOverride',true,false,'auto'):gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}${gridGroupResetCell('netChangeOverride',ncOverridable&&n.netChangeOverride!=null)}
-    ${gridActionsCell(n,isExistingCtx)}
+    ${gridActionsCell(n,isExistingCtx,'new')}
   </tr>`;
 }
 
@@ -2737,6 +2840,8 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
       else if (act==='calc') gridCalcRow(id);
       else if (act==='reset-group') gridResetGroup(id,btn.dataset.resetField,renderFn);
       else if (act==='toggle-status') { const n=state.nodes[id]; if (n) { n.status=btn.dataset.toggleTo; recalc();persist();renderAll(); } }
+      else if (act==='share') shareWithOther(id);
+      else if (act==='unshare') unshareNode(id);
     });
   });
   const addBtn=el.querySelector('[data-grid-add]');

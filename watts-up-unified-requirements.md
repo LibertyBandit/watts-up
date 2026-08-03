@@ -1057,7 +1057,7 @@ Clicking **"Word Report"** now opens this dialog (mode `'word'`) instead of call
 **Rounding** is not separately configurable per export target — `fmtRpt()` /
 `fmtPfRpt()` are shared by `buildRptRow` (print), `buildWordSectionRows`, and
 `buildWordRptTable` (Word). A user-configurable rounding schedule remains a future
-enhancement (§48).
+enhancement (§49).
 
 ---
 
@@ -1564,7 +1564,7 @@ generated `.docx`). `migrateLegacy()` converts any pre-existing free-text date (
 
 New meta fields: `revisionDescription` (multiline, default "Initial Release.") and `interval`
 (default "Continuous") — document-tracking fields only; distinct from the full per-item
-multi-interval load analysis still listed under Future Enhancements (§48).
+multi-interval load analysis still listed under Future Enhancements (§49).
 
 General Notes are now numbered ("1.", "2.", …) and multiline (textarea instead of a single-line
 input); editing, reordering, and persistence all continue to work unchanged.
@@ -2601,7 +2601,87 @@ data removed after verification.
 **Deferred to later phases**: item/reference/note sharing between the two analyses (Phase 2+), and
 including PCM's own analysis as a Word Report appendix (Phase 5).
 
-## 48. Future Enhancements
+## 48. Revision 47 (Phase 2a) — Item Sharing: the Share Action
+
+*Last updated: 2026-08-02*
+
+First step of item sharing (source §3.2/§3.3/§3.3.3). Establishes the link mechanism itself —
+creating and breaking shares, with ancestors auto-shared as required. Field sync between linked
+pairs (§3.3.1) is Phase 2b; the Active-Project-existing-load-from-PCM-new-load calculation
+(§3.3.2) is Phase 2c.
+
+Reviewed and advised before implementing; three genuine judgment calls not settled by the wish-list
+text, asked via AskUserQuestion, all answered with the recommended option:
+
+1. **PCM's root auto-links to the Active Project's root the instant PCM is created** (not a manual
+   share like everything else) — the two are definitionally the same aircraft, and this gives every
+   later ancestor-share-walk a guaranteed, already-shared place to terminate rather than needing to
+   decide which of possibly several top-level items to attach to.
+2. **Un-sharing is supported in this phase**, not deferred — a mis-shared item with no undo path
+   seemed like a rough edge worth avoiding from day one.
+3. **Deleting a shared item (or a shared ancestor) is blocked with a warning**, rather than
+   auto-unsharing and proceeding — the safer default.
+
+**Data model**: every node gains `sharedPeerId` (`null` by default) — the id of its linked twin in
+the *other* analysis. `migrateLegacy()` defaults it to `null` for any node missing it (legacy saves,
+and anything else predating this phase).
+
+**Root auto-link** (`createPcmAnalysis`): the moment PCM is created, its root and the Active
+Project's root are cross-linked via `sharedPeerId`. If either analysis ever has more than one
+top-level item, only the first is auto-linked — a documented simplification, not a general
+multi-root mechanism.
+
+**`shareWithOther(nodeId)`**: walks up from the target node to the nearest already-shared ancestor
+(always terminates, since roots are shared by construction) collecting any un-shared ones along the
+way; if there's more than one link to create, confirms first, naming everything that will also get
+shared. Creates the twin chain top-down in the other analysis by temporarily flipping
+`state.currentAnalysis` — this lets the existing `addNode`/`attachChild` helpers (which always
+operate on whichever analysis is currently aliased) create the twins unchanged, rather than needing
+a parallel "other analysis" version of every node-creation helper. Each twin copies description/ref
+des/capacity (non-load) or load value (load items) from its source at creation time, and always
+defaults to **Existing** status regardless of the source's own status — an auto-created twin is
+structural scaffolding, not something the user is actively documenting as new/removed (verified:
+sharing a Removed-status Active Project item creates an Existing-status PCM twin, not a Removed
+one). Already-shared nodes are a no-op if re-shared (no duplicate twin, no confirmation prompt);
+sharing a node whose immediate parent is already shared skips the ancestor-confirmation entirely
+(only one link to create).
+
+**`unshareNode(id)`**: confirms, then clears `sharedPeerId` on both the node and its peer — no data
+is deleted, the two nodes just stop being linked.
+
+**Share/Unshare button** (`gridShareInfo`, wired into `gridActionsCell`): appears in exactly one
+grid per analysis, matching each analysis's own share-eligible status set so a shareable node never
+gets two different Share buttons across its two grids — the Existing/Removed grid when the Active
+Project is current (Existing/Removed rows, per §3.3), or the Installed grid when PCM is current
+(Existing/New rows, per §3.2, including PCM's own read-only Existing-status rows there — the one
+action offered on an otherwise read-only context row). Shows "Share" or "Unshare" depending on
+whether `sharedPeerId` is already set; hidden entirely in the Active Project's Existing/Removed
+grid until PCM has been created.
+
+**Delete guard** (`delNode`): refuses to delete a node if it or any descendant in its subtree has a
+live `sharedPeerId`, naming the shared item(s) and directing the user to unshare first. Covers both
+the grid's Delete button and the Edit modal's Delete button, since both funnel through this one
+function.
+
+Verified live: creating PCM correctly cross-links both roots. Built a PCM chain (Bus1→Bus2→CB, plus
+a sibling Load) and shared the deepest item — confirmed the exact ancestor-confirmation message,
+that declining creates nothing, and that accepting materializes the whole chain top-down in the
+Active Project with correct parenting, copied capacity, and Existing status throughout. Confirmed
+re-sharing an already-shared node is a silent no-op, and sharing a new sibling under an
+already-shared ancestor skips the confirmation (single hop only). Verified Unshare clears both
+sides while preserving both nodes, and that delete is blocked (naming every shared descendant) until
+unshared. Verified the Active-Project→PCM direction with a Removed-status source, confirming the
+PCM twin still defaults to Existing. Verified the Share/Unshare buttons render correctly in the
+actual grid DOM (including PCM's read-only Existing rows in the Installed grid) and that a real
+click through the DOM (not just calling the function directly) works end-to-end. Verified a full
+save/reload round-trip preserves `sharedPeerId` consistently on both sides. Full tab sweep, no
+console errors. Test data removed after verification.
+
+**Not yet built**: field sync between linked pairs (Phase 2b) and the cross-analysis existing-load
+calculation (Phase 2c) — for now, a shared pair's fields can drift independently after the initial
+copy, and Active Project's Existing Load remains freely editable even for shared non-load items.
+
+## 49. Future Enhancements
 
 - Three-phase AC circuit support
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
