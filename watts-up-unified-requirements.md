@@ -2779,6 +2779,53 @@ errors. Test data removed after verification.
 **This completes item sharing (Revision 47 Phase 2).** Remaining Revision 47 work: reference
 sharing (Phase 3), notes sharing (Phase 4), and the Word Report appendix (Phase 5).
 
+## 51. Revision 47 (Phase 3) — Reference Sharing
+
+*Last updated: 2026-08-02*
+
+Adds reference sharing between the Active Project and PCM analyses (source §3.4/§3.4.1/§3.4.2).
+Deliberately mirrors the item-sharing design from Phase 2a/2b rather than inventing a new pattern,
+but for the flatter Reference type instead of a tree: a shared reference is a linked twin object
+(not one record both analyses point at), joined by `sharedPeerKey` instead of `sharedPeerId`. Each
+analysis keeps its own independently-ordered `references` array exactly as before, so §3.4.2's
+"order references independently" falls out for free — there's no separate shared-order concept to
+build. There's also no ancestor-walk equivalent (references aren't a tree), so sharing one is
+always a single, immediate link with no cascading confirmation.
+
+**`shareReference(key)`**: finds the reference in the current analysis, requires the other analysis
+to exist, creates a twin (copying organization/doc number/title/revision/date) and appends it to
+the other analysis's own `references` array — the user can then reorder it independently there like
+any other reference. **`unshareReference(key)`**: confirms, then clears `sharedPeerKey` on both
+sides — no data deleted. **`syncSharedReferenceFields(ref)`**: propagates organization/doc
+number/title/revision/date to the peer; called from the Document tab's existing per-field `input`
+listener (the single choke point for reference edits), so no other code needed to change.
+
+**Document tab UI** (`renderRefList`): a Share/Unshare button per reference row, next to the
+existing Move Up/Down/Remove controls. Unshare always shows on an already-shared reference
+regardless of anything else (the same Phase-2b lesson about not gating Unshare behind other
+conditions); Share only shows once the other analysis exists. Removing a shared reference is
+blocked with an alert directing the user to unshare first — the same policy already established
+for shared tree items (Phase 2a's `delNode` guard).
+
+Citations are unaffected: `rowRefs` on nodes already cite references by key within their own
+analysis's bank (established in Revision 36), and sharing doesn't change that — a shared
+reference is simply a bank entry that happens to exist (linked) in both analyses' banks, cited
+independently by whichever nodes in each analysis reference it.
+
+Verified live: created a reference in Active Project via the real Document tab UI, shared it, and
+confirmed the twin appeared correctly in PCM's own list with all fields copied. Edited a field on
+the Active Project side and confirmed it propagated to the PCM twin (and the reverse direction).
+Added a second, unrelated PCM reference and reordered PCM's list — confirmed Active Project's own
+array and order were completely unaffected. Confirmed removing the shared reference is blocked
+with the correct message, and that Unsharing first clears the link on both sides (not deleting
+either entry) after which removal succeeds normally. Confirmed a full save/reload round-trip
+(`snapshotState()` through `migrateLegacy`/`validateImport`, the same path real save/load uses)
+preserves `sharedPeerKey` correctly on both sides. Confirmed Print Report and Word export still run
+cleanly with shared references present. Full tab sweep, no console errors. Test data removed after
+verification.
+
+**Not yet built**: notes sharing (Phase 4) and the Word Report appendix (Phase 5).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

@@ -1179,6 +1179,52 @@ function syncSharedFields(n) {
   // recomputes both analyses in dependency order (Phase 2c) — so no separate recalc needed here.
 }
 
+// Revision 47 (Phase 3): reference sharing — same linking idea as item sharing (Phase 2a/2b), but
+// for the flatter Reference type instead of tree nodes. Each analysis keeps its own independently
+// ordered `references` array (so §3.4.2's "order references independently" is satisfied for
+// free, with no separate shared-order concept needed), and a shared pair is linked by
+// `sharedPeerKey` instead of `sharedPeerId`. There's no ancestor-walk equivalent here — references
+// aren't a tree — so sharing one is always a single, immediate link.
+function shareReference(key) {
+  if (!state) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  if (!other) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+  const ref=curAn().references.find(r=>r.key===key);
+  if (!ref||ref.sharedPeerKey) return;
+  const twin={key:uid(),organization:ref.organization,docNumber:ref.docNumber,title:ref.title,
+    revision:ref.revision,date:ref.date,sharedPeerKey:ref.key};
+  other.references.push(twin);
+  ref.sharedPeerKey=twin.key;
+  persist();renderRefList();
+}
+function unshareReference(key) {
+  if (!state) return;
+  const ref=curAn().references.find(r=>r.key===key);
+  if (!ref||!ref.sharedPeerKey) return;
+  if (!confirm("Stop sharing this reference? Both entries remain — they just won't stay linked anymore.")) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  const peer=other&&other.references.find(r=>r.key===ref.sharedPeerKey);
+  if (peer) peer.sharedPeerKey=null;
+  ref.sharedPeerKey=null;
+  persist();renderRefList();
+}
+// Keeps a shared reference's twin in sync (spec §3.4.1) — organization/docNumber/title/revision/
+// date, everything but the key and the link itself. Call after any commit to a reference field.
+function syncSharedReferenceFields(ref) {
+  if (!state||!ref||!ref.sharedPeerKey) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  const peer=other&&other.references.find(r=>r.key===ref.sharedPeerKey);
+  if (!peer) return;
+  peer.organization=ref.organization;
+  peer.docNumber=ref.docNumber;
+  peer.title=ref.title;
+  peer.revision=ref.revision;
+  peer.date=ref.date;
+}
+
 // Creates a new shared note-bank entry and returns its key — used both by legacy-note migration
 // and by the Edit modal's "+ Add New Note" (Revision 36).
 function mkNoteDefKey(m,text) {
@@ -1236,6 +1282,7 @@ function migrateLegacy(p) {
     if (!an.introText) an.introText='';
     if (!Array.isArray(an.generalNotes)) an.generalNotes=[];
     if (!Array.isArray(an.references))   an.references=[];
+    an.references.forEach(r=>{ if (r.sharedPeerKey===undefined) r.sharedPeerKey=null; });
     if (!Array.isArray(an.rowNoteDefs))  an.rowNoteDefs=[];
     if (!an.nodes) an.nodes={};
     if (!an.rootIds||!an.rootIds.length) {
@@ -3010,8 +3057,16 @@ function renderRefList() {
   const refs=state.meta.references||[];
   if (!refs.length){el.innerHTML='<div class="doc-empty-hint">No references yet. Click "+ Add Reference" to add one.</div>';return;}
   el.innerHTML='';
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const otherExists=!!state.analyses[otherId];
   refs.forEach((ref,i)=>{
     const item=document.createElement('div');item.className='doc-list-item';
+    // Revision 47 (Phase 3): Share/Unshare a reference with the other analysis. Unshare always
+    // shows on an already-shared reference regardless of anything else (same lesson learned with
+    // items in Phase 2b); Share only shows once the other analysis actually exists.
+    const shareBtnHtml=ref.sharedPeerKey
+      ?`<button class="ref-share" title="Stop sharing this reference with ${state.analyses[otherId]?.label||'the other analysis'}">Unshare</button>`
+      :(otherExists?`<button class="ref-share" title="Share this reference with ${state.analyses[otherId].label}">Share</button>`:'');
     item.innerHTML=`
       <div class="doc-list-item-row">
         <span class="doc-item-num">[${i+1}]</span>
@@ -3020,6 +3075,7 @@ function renderRefList() {
         <div class="doc-list-btns">
           <button class="ref-up" title="Move up">↑</button>
           <button class="ref-dn" title="Move down">↓</button>
+          ${shareBtnHtml}
           <button class="ref-del" title="Remove" style="color:var(--accent-red)">✕</button>
         </div>
       </div>
@@ -3030,7 +3086,7 @@ function renderRefList() {
         <span class="doc-item-opt">Date</span><input data-field="date" value="${esc(ref.date||'')}" placeholder="optional" style="width:120px">
       </div>`;
     item.querySelectorAll('input[data-field]').forEach(inp=>{
-      inp.addEventListener('input',()=>{ref[inp.dataset.field]=inp.value;persist();});
+      inp.addEventListener('input',()=>{ref[inp.dataset.field]=inp.value;syncSharedReferenceFields(ref);persist();});
     });
     item.querySelector('.ref-up').addEventListener('click',()=>{
       if(i===0)return;[refs[i-1],refs[i]]=[refs[i],refs[i-1]];persist();renderRefList();
@@ -3038,7 +3094,12 @@ function renderRefList() {
     item.querySelector('.ref-dn').addEventListener('click',()=>{
       if(i>=refs.length-1)return;[refs[i],refs[i+1]]=[refs[i+1],refs[i]];persist();renderRefList();
     });
+    const shareBtn=item.querySelector('.ref-share');
+    if (shareBtn) shareBtn.addEventListener('click',()=>{
+      if (ref.sharedPeerKey) unshareReference(ref.key); else shareReference(ref.key);
+    });
     item.querySelector('.ref-del').addEventListener('click',()=>{
+      if (ref.sharedPeerKey) { alert("Can't remove — shared with the other analysis. Unshare it first."); return; }
       if(!confirm(`Remove reference [${i+1}]?`))return;
       refs.splice(i,1);persist();renderRefList();
     });
@@ -5155,7 +5216,7 @@ function initEvents() {
   document.getElementById('doc-add-ref').addEventListener('click',()=>{
     if (!state) return;
     if (!state.meta.references) state.meta.references=[];
-    state.meta.references.push({key:uid(),organization:'',docNumber:'',title:'',revision:'',date:''});
+    state.meta.references.push({key:uid(),organization:'',docNumber:'',title:'',revision:'',date:'',sharedPeerKey:null});
     persist();renderRefList();
     // Focus the first field of the new entry
     const items=document.querySelectorAll('#doc-ref-list .doc-list-item');
