@@ -2826,6 +2826,63 @@ verification.
 
 **Not yet built**: notes sharing (Phase 4) and the Word Report appendix (Phase 5).
 
+## 52. Revision 47 (Phase 4) — Notes Sharing
+
+*Last updated: 2026-08-02*
+
+Adds sharing for both General Notes and Row Notes between the Active Project and PCM analyses
+(source §3.5/§3.5.1). Per the user's own confirmed design decision (made before Phase 1 even
+started), notes sharing is a **per-list** action — "Share All" / "Copy All" for the whole General
+Notes list, and separately for the whole Row Notes bank — rather than the per-entry Share/Unshare
+items and references use; per-entry Unshare still exists as the escape hatch for a single entry.
+
+**General Notes converted to keyed objects**: previously bare strings, now `{key, text,
+sharedPeerKey}` — matching Row Notes' existing shape (`rowNoteDefs`, established in Revision 36)
+— since a note needs stable identity to link a shared twin to, and independent per-analysis
+ordering (§3.5.1) requires more than array position. `migrateLegacy()` converts old bare-string
+saves; `importDocx`'s General Notes re-import (parsed from the Word doc's own `wu-general-notes`
+content control) constructs the new shape too. Every consumer updated: the Document tab's
+`renderNoteList()`, Print Report's `gnSec`, and Word export's `buildGeneralNotesParas()` all now
+read `.text` instead of treating the array element as the string directly.
+
+**Shared implementation** (`linkNoteEntry`/`unshareNoteEntry`/`syncSharedNoteEntryFields`/
+`shareAllNotes`/`copyAllNotes`): one set of functions parameterized by which list
+(`'generalNotes'` or `'rowNoteDefs'`) backs both General Notes and Row Notes sharing, since the two
+are otherwise identical — a flat list of keyed entries with no ancestor/tree structure to walk
+(same reasoning as reference sharing, Phase 3). "Share All" links every not-yet-shared entry in the
+current analysis to a new twin in the other analysis (confirming first, naming the count).
+"Copy All" instead makes a one-time, fully independent duplicate of every entry in the current list
+— no link, no ongoing sync — into the other analysis. Editing a shared entry's text (Document tab
+textarea, or — for Row Notes — the Edit Item modal's Notes checklist text input) propagates to its
+twin via `syncSharedNoteEntryFields`.
+
+**Delete guards**: removing a shared General Note or Row Note is blocked (alert directing to
+unshare first), matching the policy already established for shared items (Phase 2a) and references
+(Phase 3). Row Notes have two delete entry points — the Document tab's list and the Edit Item
+modal's Notes checklist — both now check `sharedPeerKey` before their existing "used by N other
+items" warning.
+
+**UI**: two new buttons per section ("Share All with Other Analysis" / "Copy All to Other
+Analysis"), disabled until the other analysis exists; a per-entry Share/Unshare button next to the
+existing Move Up/Down/Remove controls, showing "Unshare" unconditionally on an already-shared entry
+regardless of anything else (the Phase 2b lesson about not gating Unshare).
+
+Verified live through the real Document tab UI: added General Notes, shared one individually and
+the rest via "Share All," confirmed both propagate text edits correctly and that PCM's own
+independent reordering (including an unrelated third, unshared PCM-only note) leaves Active
+Project's list/order completely untouched. Verified the same for Row Notes, including text-sync
+through both the Document tab and the Edit Item modal's checklist. Confirmed both delete guards
+(Document tab and Edit modal) block removal while shared. Confirmed Print Report and Word export
+render the new keyed shape correctly (not `[object Object]`). Confirmed a full save/reload
+round-trip preserves everything, and that a hand-built legacy save with bare-string General Notes
+correctly converts to the new keyed shape on migration. Full tab sweep, no console errors. Test
+data removed after verification.
+
+**This concludes this round of Revision 47 work.** The Word Report appendix (Phase 5) is deferred
+to a future session — the user has additional, unrelated Word template updates planned and wants
+all Word-interface work (including the PCM appendix) handled together in that dedicated session
+rather than split across two rounds.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

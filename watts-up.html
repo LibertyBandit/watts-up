@@ -456,12 +456,16 @@
       <div class="doc-section-title">General Notes</div>
       <div id="doc-note-list" class="doc-list"></div>
       <button id="doc-add-note" class="btn-default doc-add-btn">+ Add Note</button>
+      <button id="doc-share-all-notes" class="btn-default doc-add-btn">Share All with Other Analysis</button>
+      <button id="doc-copy-all-notes" class="btn-default doc-add-btn">Copy All to Other Analysis</button>
     </div>
     <div>
       <div class="doc-section-title">Row Notes</div>
       <div class="doc-empty-hint" style="margin-bottom:.4rem">Shared notes that can be attached to multiple items or item value-groups from the Edit Item dialog's Notes &amp; References section — editing the text here updates it everywhere it's used.</div>
       <div id="doc-rownote-list" class="doc-list"></div>
       <button id="doc-add-rownote" class="btn-default doc-add-btn">+ Add Row Note</button>
+      <button id="doc-share-all-rownotes" class="btn-default doc-add-btn">Share All with Other Analysis</button>
+      <button id="doc-copy-all-rownotes" class="btn-default doc-add-btn">Copy All to Other Analysis</button>
     </div>
     <div>
       <div class="doc-section-title">Section Text</div>
@@ -1225,11 +1229,84 @@ function syncSharedReferenceFields(ref) {
   peer.date=ref.date;
 }
 
+// Revision 47 (Phase 4): notes sharing — General Notes and Row Notes each get the same linked-
+// twin pattern as references (Phase 3), via one shared implementation parameterized by which
+// list ("generalNotes" or "rowNoteDefs"), since the two are otherwise identical: a flat list of
+// {key,text,sharedPeerKey} entries with no ancestor/tree structure to walk. Per the user's chosen
+// design (confirmed before Phase 1 even started), notes sharing is a per-list bulk action —
+// "Share All"/"Copy All" — rather than the per-entry Share/Unshare items and references use,
+// though per-entry Unshare still exists as the escape hatch for a single entry.
+function linkNoteEntry(listField,key,other) {
+  const list=curAn()[listField];
+  const entry=list.find(e=>e.key===key);
+  if (!entry||entry.sharedPeerKey) return false;
+  const twin={key:uid(),text:entry.text,sharedPeerKey:entry.key};
+  other[listField].push(twin);
+  entry.sharedPeerKey=twin.key;
+  return true;
+}
+function unshareNoteEntry(listField,key,renderFn) {
+  if (!state) return;
+  const entry=curAn()[listField].find(e=>e.key===key);
+  if (!entry||!entry.sharedPeerKey) return;
+  if (!confirm("Stop sharing this note? Both entries remain — they just won't stay linked anymore.")) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const peer=state.analyses[otherId]?.[listField].find(e=>e.key===entry.sharedPeerKey);
+  if (peer) peer.sharedPeerKey=null;
+  entry.sharedPeerKey=null;
+  persist();renderFn();
+}
+function syncSharedNoteEntryFields(listField,entry) {
+  if (!state||!entry||!entry.sharedPeerKey) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const peer=state.analyses[otherId]?.[listField].find(e=>e.key===entry.sharedPeerKey);
+  if (peer) peer.text=entry.text;
+}
+function shareAllNotes(listField,renderFn) {
+  if (!state) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  if (!other) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+  const list=curAn()[listField];
+  const unshared=list.filter(e=>!e.sharedPeerKey);
+  if (!unshared.length) return;
+  const kind=listField==='generalNotes'?'general note':'row note';
+  if (!confirm(`Share all ${unshared.length} not-yet-shared ${kind}(s) with ${other.label}?`)) return;
+  unshared.forEach(e=>linkNoteEntry(listField,e.key,other));
+  persist();renderFn();
+}
+function copyAllNotes(listField,renderFn) {
+  if (!state) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  if (!other) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+  const list=curAn()[listField];
+  if (!list.length) return;
+  const kind=listField==='generalNotes'?'general note':'row note';
+  if (!confirm(`Copy all ${list.length} ${kind}(s) to ${other.label} as independent, unlinked entries?`)) return;
+  list.forEach(e=>{ other[listField].push({key:uid(),text:e.text,sharedPeerKey:null}); });
+  persist();renderFn();
+}
+function shareGeneralNote(key) {
+  if (!state) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  if (!other) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+  if (linkNoteEntry('generalNotes',key,other)) { persist();renderNoteList(); }
+}
+function shareRowNoteDef(key) {
+  if (!state) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const other=state.analyses[otherId];
+  if (!other) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+  if (linkNoteEntry('rowNoteDefs',key,other)) { persist();renderRowNoteList(); }
+}
+
 // Creates a new shared note-bank entry and returns its key — used both by legacy-note migration
 // and by the Edit modal's "+ Add New Note" (Revision 36).
 function mkNoteDefKey(m,text) {
   const key=uid();
-  m.rowNoteDefs.push({key,text});
+  m.rowNoteDefs.push({key,text,sharedPeerKey:null});
   return key;
 }
 function migrateLegacy(p) {
@@ -1281,9 +1358,15 @@ function migrateLegacy(p) {
     if (!an.label) an.label=id==='ap'?'Active Project':'Previous and Concurrent Modifications';
     if (!an.introText) an.introText='';
     if (!Array.isArray(an.generalNotes)) an.generalNotes=[];
+    // Revision 47 (Phase 4): General Notes used to be bare strings — converted to {key,text,
+    // sharedPeerKey} objects (matching rowNoteDefs' shape) so a note has stable identity to link
+    // a shared twin to. Already-keyed saves just get sharedPeerKey defaulted.
+    an.generalNotes=an.generalNotes.map(n=>typeof n==='string'?{key:uid(),text:n,sharedPeerKey:null}:n);
+    an.generalNotes.forEach(n=>{ if (n.sharedPeerKey===undefined) n.sharedPeerKey=null; });
     if (!Array.isArray(an.references))   an.references=[];
     an.references.forEach(r=>{ if (r.sharedPeerKey===undefined) r.sharedPeerKey=null; });
     if (!Array.isArray(an.rowNoteDefs))  an.rowNoteDefs=[];
+    an.rowNoteDefs.forEach(d=>{ if (d.sharedPeerKey===undefined) d.sharedPeerKey=null; });
     if (!an.nodes) an.nodes={};
     if (!an.rootIds||!an.rootIds.length) {
       const roots=Object.values(an.nodes).filter(n=>n.parentId===null);
@@ -1591,7 +1674,8 @@ async function importDocx(file){
       const gnRaw=extractSdtText(docXml,'wu-general-notes');
       if(gnRaw!==null){
         parsed.meta.generalNotes=gnRaw.split('\n')
-          .map(l=>l.replace(/^[••]\s*/,'').trim()).filter(Boolean);
+          .map(l=>l.replace(/^[••]\s*/,'').trim()).filter(Boolean)
+          .map(text=>({key:uid(),text,sharedPeerKey:null}));
       }
     }
     state=parsed;recalc();renderAll();persist();
@@ -3111,22 +3195,38 @@ function renderNoteList() {
   if (!state) return;
   const el=document.getElementById('doc-note-list');if(!el)return;
   const notes=state.meta.generalNotes||[];
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const otherExists=!!state.analyses[otherId];
+  const shareAllBtn=document.getElementById('doc-share-all-notes'), copyAllBtn=document.getElementById('doc-copy-all-notes');
+  if (shareAllBtn) shareAllBtn.disabled=!otherExists;
+  if (copyAllBtn) copyAllBtn.disabled=!otherExists;
   if (!notes.length){el.innerHTML='<div class="doc-empty-hint">No general notes yet. Click "+ Add Note" to add one.</div>';return;}
   el.innerHTML='';
   notes.forEach((note,i)=>{
     const item=document.createElement('div');item.className='doc-list-item';
+    const shareBtnHtml=note.sharedPeerKey
+      ?`<button class="note-share" title="Stop sharing this note with ${state.analyses[otherId]?.label||'the other analysis'}">Unshare</button>`
+      :(otherExists?`<button class="note-share" title="Share this note with ${state.analyses[otherId].label}">Share</button>`:'');
     item.innerHTML=`<div class="doc-list-item-row">
       <span class="doc-item-num">${i+1}.</span>
-      <textarea rows="2" placeholder="Note text" style="flex:1">${esc(note)}</textarea>
+      <textarea rows="2" placeholder="Note text" style="flex:1">${esc(note.text)}</textarea>
       <div class="doc-list-btns">
         <button class="note-up">↑</button><button class="note-dn">↓</button>
+        ${shareBtnHtml}
         <button class="note-del" style="color:var(--accent-red)">✕</button>
       </div></div>`;
     const inp=item.querySelector('textarea');
-    inp.addEventListener('input',()=>{notes[i]=inp.value;persist();});
+    inp.addEventListener('input',()=>{note.text=inp.value;syncSharedNoteEntryFields('generalNotes',note);persist();});
     item.querySelector('.note-up').addEventListener('click',()=>{if(i===0)return;[notes[i-1],notes[i]]=[notes[i],notes[i-1]];persist();renderNoteList();});
     item.querySelector('.note-dn').addEventListener('click',()=>{if(i>=notes.length-1)return;[notes[i],notes[i+1]]=[notes[i+1],notes[i]];persist();renderNoteList();});
-    item.querySelector('.note-del').addEventListener('click',()=>{notes.splice(i,1);persist();renderNoteList();});
+    const shareBtn=item.querySelector('.note-share');
+    if (shareBtn) shareBtn.addEventListener('click',()=>{
+      if (note.sharedPeerKey) unshareNoteEntry('generalNotes',note.key,renderNoteList); else shareGeneralNote(note.key);
+    });
+    item.querySelector('.note-del').addEventListener('click',()=>{
+      if (note.sharedPeerKey) { alert("Can't remove — shared with the other analysis. Unshare it first."); return; }
+      notes.splice(i,1);persist();renderNoteList();
+    });
     el.appendChild(item);
   });
 }
@@ -3140,22 +3240,36 @@ function renderRowNoteList() {
   if (!state) return;
   const el=document.getElementById('doc-rownote-list');if(!el)return;
   const defs=state.meta.rowNoteDefs||[];
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  const otherExists=!!state.analyses[otherId];
+  const shareAllBtn=document.getElementById('doc-share-all-rownotes'), copyAllBtn=document.getElementById('doc-copy-all-rownotes');
+  if (shareAllBtn) shareAllBtn.disabled=!otherExists;
+  if (copyAllBtn) copyAllBtn.disabled=!otherExists;
   if (!defs.length){el.innerHTML='<div class="doc-empty-hint">No row notes yet. Click "+ Add Row Note" to add one.</div>';return;}
   el.innerHTML='';
   defs.forEach((def,i)=>{
     const item=document.createElement('div');item.className='doc-list-item';
+    const shareBtnHtml=def.sharedPeerKey
+      ?`<button class="rownote-share" title="Stop sharing this note with ${state.analyses[otherId]?.label||'the other analysis'}">Unshare</button>`
+      :(otherExists?`<button class="rownote-share" title="Share this note with ${state.analyses[otherId].label}">Share</button>`:'');
     item.innerHTML=`<div class="doc-list-item-row">
       <span class="doc-item-num">${i+1}.</span>
       <textarea rows="2" placeholder="Note text" style="flex:1">${esc(def.text)}</textarea>
       <div class="doc-list-btns">
         <button class="rownote-up">↑</button><button class="rownote-dn">↓</button>
+        ${shareBtnHtml}
         <button class="rownote-del" style="color:var(--accent-red)">✕</button>
       </div></div>`;
     const inp=item.querySelector('textarea');
-    inp.addEventListener('input',()=>{def.text=inp.value;persist();});
+    inp.addEventListener('input',()=>{def.text=inp.value;syncSharedNoteEntryFields('rowNoteDefs',def);persist();});
     item.querySelector('.rownote-up').addEventListener('click',()=>{if(i===0)return;[defs[i-1],defs[i]]=[defs[i],defs[i-1]];persist();renderRowNoteList();});
     item.querySelector('.rownote-dn').addEventListener('click',()=>{if(i>=defs.length-1)return;[defs[i],defs[i+1]]=[defs[i+1],defs[i]];persist();renderRowNoteList();});
+    const shareBtn=item.querySelector('.rownote-share');
+    if (shareBtn) shareBtn.addEventListener('click',()=>{
+      if (def.sharedPeerKey) unshareNoteEntry('rowNoteDefs',def.key,renderRowNoteList); else shareRowNoteDef(def.key);
+    });
     item.querySelector('.rownote-del').addEventListener('click',()=>{
+      if (def.sharedPeerKey) { alert("Can't remove — shared with the other analysis. Unshare it first."); return; }
       if(!confirm(`Remove row note ${i+1}? Any items currently using it will no longer show it.`))return;
       defs.splice(i,1);persist();renderRowNoteList();
     });
@@ -3250,9 +3364,14 @@ function renderEfNotesRefs(n) {
       if (sel) sel.style.display=checked?'':'none';
       chk.addEventListener('change',()=>{ if(sel) sel.style.display=chk.checked?'':'none'; });
       div.querySelector('.nr-note-text-input').addEventListener('input',e=>{
-        const d=state.meta.rowNoteDefs.find(x=>x.key===def.key); if(d){d.text=e.target.value;persist();}
+        const d=state.meta.rowNoteDefs.find(x=>x.key===def.key);
+        if(d){d.text=e.target.value;syncSharedNoteEntryFields('rowNoteDefs',d);persist();}
       });
       div.querySelector('button').addEventListener('click',()=>{
+        // Revision 47: a shared row note can't be deleted here at all — unshare it from the
+        // Document tab first (same policy as items/references), since deleting it would silently
+        // orphan its peer in the other analysis.
+        if (def.sharedPeerKey) { alert("Can't delete — shared with the other analysis. Unshare it from the Document tab first."); return; }
         // Warn separately if OTHER items (not this one) also use the note — deleting removes it
         // from the shared bank entirely, so those items would silently lose it too.
         const otherUsers=Object.values(state.nodes).filter(other=>other.id!==n.id&&(other.rowNotes||[]).some(o=>o.key===def.key)).length;
@@ -3271,7 +3390,7 @@ function renderEfNotesRefs(n) {
   redrawNotes();
   document.getElementById('ef-add-note').onclick=()=>{
     const key=uid();
-    state.meta.rowNoteDefs.push({key,text:''});
+    state.meta.rowNoteDefs.push({key,text:'',sharedPeerKey:null});
     persist();
     notesEl._newlyAdded.add(key);
     redrawNotes();
@@ -4647,7 +4766,7 @@ function buildPrintR10(){
 
   // General Notes section
   const gn=m.generalNotes||[];
-  const gnSec=gn.length?`<div class="rpt-gen-notes-sec rpt-annot-section"><h3>General Notes</h3><ol>${gn.map(n=>`<li>${esc(n)}</li>`).join('')}</ol></div>`:'';
+  const gnSec=gn.length?`<div class="rpt-gen-notes-sec rpt-annot-section"><h3>General Notes</h3><ol>${gn.map(n=>`<li>${esc(n.text)}</li>`).join('')}</ol></div>`:'';
 
   // References section
   const refs=m.references||[];
@@ -4885,7 +5004,7 @@ function buildGeneralNotesParas(notes){
   if(!arr.length)return`<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr></w:p>`;
   return arr.map((n,i)=>
     `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:ind w:left="360" w:hanging="360"/></w:pPr>`+
-    `<w:r><w:t xml:space="preserve">${i+1}. ${xe(n)}</w:t></w:r></w:p>`
+    `<w:r><w:t xml:space="preserve">${i+1}. ${xe(n.text)}</w:t></w:r></w:p>`
   ).join('');
 }
 function buildRefsParas(){
@@ -5227,19 +5346,23 @@ function initEvents() {
   document.getElementById('doc-add-note').addEventListener('click',()=>{
     if (!state) return;
     if (!state.meta.generalNotes) state.meta.generalNotes=[];
-    state.meta.generalNotes.push('');
+    state.meta.generalNotes.push({key:uid(),text:'',sharedPeerKey:null});
     persist();renderNoteList();
     const items=document.querySelectorAll('#doc-note-list .doc-list-item');
-    if(items.length)items[items.length-1].querySelector('input')?.focus();
+    if(items.length)items[items.length-1].querySelector('textarea')?.focus();
   });
   document.getElementById('doc-add-rownote').addEventListener('click',()=>{
     if (!state) return;
     if (!state.meta.rowNoteDefs) state.meta.rowNoteDefs=[];
-    state.meta.rowNoteDefs.push({key:uid(),text:''});
+    state.meta.rowNoteDefs.push({key:uid(),text:'',sharedPeerKey:null});
     persist();renderRowNoteList();
     const items=document.querySelectorAll('#doc-rownote-list .doc-list-item');
     if(items.length)items[items.length-1].querySelector('textarea')?.focus();
   });
+  document.getElementById('doc-share-all-notes').addEventListener('click',()=>shareAllNotes('generalNotes',renderNoteList));
+  document.getElementById('doc-copy-all-notes').addEventListener('click',()=>copyAllNotes('generalNotes',renderNoteList));
+  document.getElementById('doc-share-all-rownotes').addEventListener('click',()=>shareAllNotes('rowNoteDefs',renderRowNoteList));
+  document.getElementById('doc-copy-all-rownotes').addEventListener('click',()=>copyAllNotes('rowNoteDefs',renderRowNoteList));
   document.getElementById('modal-close' ).addEventListener('click',closeModal);
   document.getElementById('btn-cancel'  ).addEventListener('click',closeModal);
   document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
