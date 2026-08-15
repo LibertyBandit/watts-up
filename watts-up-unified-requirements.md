@@ -2883,6 +2883,87 @@ to a future session — the user has additional, unrelated Word template updates
 all Word-interface work (including the PCM appendix) handled together in that dedicated session
 rather than split across two rounds.
 
+## 53. Revision 52 (Phase 1) — Sharing/Duplicate/Status-Change Bug Fixes
+
+*Last updated: 2026-08-15*
+
+First phase of a wish-list request ("Watts Up Revision 52 (+) – Miscellaneous Clean-up and Wish
+List Items.txt", items 1–7 and their sub-items). Reviewed and advised before implementing — traced
+two of the reported bugs to their exact root cause in the code before proposing anything, and asked
+two clarifying questions: whether to include item 13 (a large standalone TRU multi-phase input +
+dual-pane Edit dialog redesign) in this round — deferred to its own future session, since it's
+roughly as large as everything else on the list combined — and what "filter by branch" (item 12)
+should mean — confirmed as "a selected item plus its descendants."
+
+**Item 1 — fresh analysis starts with a blank root Existing Load.** `freshAnalysis()`'s Root node
+now passes `existingLoad:mkPow()` (all null) explicitly, instead of `makeNode`'s usual all-zero
+default — matching how `loadValue` already defaults blank. Since `freshState()` delegates root
+creation to `freshAnalysis()`, this fixes both "New" (a fresh file) and "Create PCM" in one place.
+A blank root now correctly triggers the W4 "existing load not entered" warning instead of silently
+looking like a real zero was already entered.
+
+**Items 2/3 — status-transition values displayed as cleared but still feeding calculations.**
+Root cause: `recalc()`'s `_newLoad` formula reads `existingLoad` unconditionally regardless of
+status, and `calcNC`'s override branch reads `netChangeOverride` unconditionally too (checked
+*before* the removed-status branch) — so `efShowSections` hiding the Existing Load / Net Change
+Override sections in the Edit modal never actually cleared the underlying stored value, letting
+stale data silently keep feeding calculations after a status change. Fixed in `doEditSave`: a
+Removed→Installed transition (non-load, capacity-bearing, non-conversion-pair items only — Load
+items have no such split, and conversion-pair items already recompute both fields unconditionally
+every save) warns via `confirm()` that Existing Load will clear; an Installed→Removed transition
+warns that Net Change will clear. Declining aborts the whole save (matching the existing efficiency-
+validation pattern of an early `return`, no partial changes). Accepting sets a flag applied as a
+final override immediately before `updateNode()` — *after* the function's own field-reading logic
+runs, since that logic unconditionally recomputes both fields from the (now-hidden but still
+populated) form fields and would otherwise silently undo an early clear.
+
+**Items 4/5 — duplicating a shared item corrupted the original's link.** Root cause:
+`duplicateNodeById`/`duplicateBranch` deep-clone via `JSON.parse(JSON.stringify(n))`, which copies
+`sharedPeerId` verbatim onto the copy — the copy then believes it's linked to the original's peer,
+but the peer's own `sharedPeerId` still points back at the original only. Editing the copy's fields
+afterward fires the sync and overwrites the *original's* peer, exactly matching item 5's reported
+symptom. Fixed: every clone (including the paired OUT clone inside `duplicateNodeById`) explicitly
+sets `sharedPeerId=null` — a duplicate is always a new, independent item, never inheriting sharing.
+
+**Item 4.1 — copy Existing Load into a newly-shared twin.** `shareWithOther`'s twin-creation
+overrides now include `existingLoad` (copied from the source) for non-load capacity-bearing items,
+in addition to capacity. Harmless when sharing PCM→Active Project (§3.3.2's `recalc()`
+substitution immediately overrides the new Active Project twin's value anyway, since it's now
+shared and non-load), and gives a newly-shared PCM twin a sensible non-zero starting point instead
+of the `addNode` zero default when sharing Active Project→PCM.
+
+**Items 6/7 — TRU sharing fundamentally broken.** Root cause: `shareWithOther`'s twin-creation
+never set `convRole` on the twin at all (leaving it an unpaired, non-functional node despite being
+type `'TRU'`), and never created a twin for the paired OUT node when sharing the IN node directly —
+the upward-only ancestor walk never visits a node's children, so OUT (IN's child) was simply never
+visited unless the actual share target happened to be somewhere *below* OUT. Fixed:
+`shareWithOther` now copies `convRole` onto every twin, and — specifically when the share target
+itself is a `convRole==='in'` node — creates and links a twin for its paired OUT node as a final
+step, parented under the new IN twin (if OUT was already naturally part of the ancestor chain
+because the real target was below it, it was already handled correctly by the normal loop and this
+step is a no-op). `unshareNode` symmetrically unshares the paired OUT node when unsharing an IN
+node, so a TRU pair never ends up half-shared either direction. The Share/Unshare button is now
+hidden entirely on conversion-output rows (`gridShareInfo`) — matching the existing convention that
+Dup/Del are already OUT-row-hidden, managed via the IN row instead.
+
+Verified live: fresh analysis creation correctly blanks the root and triggers W4. Both status
+transitions tested via the real Edit modal, decline and accept paths: declining leaves status,
+values, and the modal itself untouched; accepting shows the exact warning text, correctly clears
+the stored value, and confirms the *computed* `_newLoad`/`_netChange` no longer reflects the stale
+data (not just the display). Duplicating a shared item produces an independent, unshared copy, and
+editing the copy no longer corrupts the original's real peer link. Sharing a non-load item with a
+populated Existing Load correctly copies that value into the new twin. Built and shared a real TRU
+(IN parented under the already-shared root, not a disconnected top-level item) — confirmed the PCM
+twin's OUT side correctly shows `type:'TRU', convRole:'out', acDc:'dc'` (previously the exact
+reported bug: coming over as an unpaired, AC-only item) and that `findPairedNode` recognizes the
+twins as a real functioning pair. Confirmed the Share/Unshare button is absent on the OUT row's
+actual grid DOM, and that clicking Unshare on the IN row through the real UI unshares both sides
+together. Confirmed a full save/reload round-trip preserves everything. Full tab sweep, no console
+errors. Test data removed after verification.
+
+**Not yet built**: items 8–12 (tab order/positioning, icon buttons, grid filters) and the deferred
+item 13 (TRU multi-phase input + dual-pane Edit dialog).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

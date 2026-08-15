@@ -1037,7 +1037,11 @@ function makeNode(type,parentId,overrides={}) {
 // properties and aircraft info (state.meta) are shared across both analyses.
 function freshAnalysis(label) {
   const rid=uid();
-  const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115});
+  // Revision 52: existingLoad starts blank (mkPow(), all null) rather than makeNode's usual
+  // all-zero default — matching loadValue's own blank default — so a brand-new analysis's root
+  // correctly triggers the W4 "existing load not entered" warning instead of silently looking
+  // like a real zero was already entered.
+  const root=makeNode('Root',null,{id:rid,description:'Aircraft Total',status:'existing',acDc:'ac',voltage:115,existingLoad:mkPow()});
   return {label,introText:'',generalNotes:[],references:[],rowNoteDefs:[],nodes:{[rid]:root},rootIds:[rid]};
 }
 function freshState() {
@@ -1133,17 +1137,39 @@ function shareWithOther(nodeId) {
   // aliased state.nodes/state.rootIds) create nodes there unchanged, instead of needing a
   // parallel "other analysis" version of every node-creation helper.
   state.currentAnalysis=otherId;
-  let parentId=cursor.sharedPeerId;
-  chain.forEach(node=>{
+  const makeTwin=(node,parentId)=>{
     const overrides={description:node.description,refDes:node.refDes,status:'existing',
-      acDc:node.acDc,voltage:node.voltage,sharedPeerId:node.id};
-    if (hasCap(node.type)) overrides.capacity=node.capacity?{...node.capacity}:null;
+      acDc:node.acDc,voltage:node.voltage,sharedPeerId:node.id,convRole:node.convRole};
+    if (hasCap(node.type)) {
+      overrides.capacity=node.capacity?{...node.capacity}:null;
+      // Revision 52 (item 4.1): the twin's Existing Load starts as a copy of the source's
+      // current value, rather than the addNode default of all-zero — a sensible non-zero
+      // starting point when sharing Active Project -> PCM. Sharing PCM -> Active Project makes
+      // this moot (the recalc() below immediately overrides it per §3.3.2 anyway, since the new
+      // Active Project twin is now shared and non-load), so no direction check is needed.
+      overrides.existingLoad=node.existingLoad?{...node.existingLoad}:mkPow(0,0,0,0,1);
+    }
     if (isConv(node.type)) { overrides.efficiency=node.efficiency; overrides.convPf=node.convPf; }
     if (isLoad(node.type)) overrides.loadValue=node.loadValue?{...node.loadValue}:mkPow();
     const twinId=addNode(parentId,{type:node.type,...overrides});
     node.sharedPeerId=twinId;
-    parentId=twinId;
-  });
+    return twinId;
+  };
+  let parentId=cursor.sharedPeerId;
+  chain.forEach(node=>{ parentId=makeTwin(node,parentId); });
+  // Revision 52 (items 6/7): a conversion-IN node's paired OUT node must always be shared
+  // alongside it — a TRU is documented and edited as one paired item, not two independent ones,
+  // and previously the twin never got convRole set at all (making it an unpaired, effectively
+  // broken node) nor did OUT ever get created when sharing IN directly. This only needs handling
+  // here for the share *target* itself (`n`, the chain's last entry): the upward-only ancestor
+  // walk above never visits a node's children, so if `n` is convRole 'in', its OUT child was
+  // never visited and needs its own twin now. If the original target was instead somewhere
+  // *below* OUT, OUT was already a normal ancestor in `chain` and already got its twin created
+  // in its correct place by the loop above — this only fires when it wasn't.
+  if (n.convRole==='in') {
+    const outNode=children(n.id,cur.nodes).find(c=>c.convRole==='out');
+    if (outNode&&!outNode.sharedPeerId) makeTwin(outNode,n.sharedPeerId);
+  }
   state.currentAnalysis=curId;
   // recalc() always recomputes both analyses in dependency order (Phase 2c), so one call here
   // is enough regardless of which side was just touched.
@@ -1156,9 +1182,19 @@ function unshareNode(id) {
   if (!n||!n.sharedPeerId) return;
   if (!confirm(`Stop sharing "${n.description||'unnamed'}"? Both items remain — they just won't stay linked anymore.`)) return;
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
-  const peer=state.analyses[otherId]?.nodes[n.sharedPeerId];
-  if (peer) peer.sharedPeerId=null;
-  n.sharedPeerId=null;
+  const other=state.analyses[otherId];
+  const unlinkOne=node=>{
+    const peer=other&&other.nodes[node.sharedPeerId];
+    if (peer) peer.sharedPeerId=null;
+    node.sharedPeerId=null;
+  };
+  unlinkOne(n);
+  // Revision 52 (items 6/7): unshare a TRU's IN/OUT pair together, same reasoning as sharing —
+  // never leave the pair in an inconsistent half-shared state.
+  if (n.convRole==='in') {
+    const outNode=children(n.id,curAn().nodes).find(c=>c.convRole==='out');
+    if (outNode&&outNode.sharedPeerId) unlinkOne(outNode);
+  }
   persist();renderAll();
 }
 // Revision 47 (Phase 2b): keeps a shared item's twin in sync for the fields spec §3.3.1 requires
@@ -2755,6 +2791,10 @@ function apExistingLoadLocked(n) {
 }
 function gridShareInfo(n,gridKey){
   if (!state) return {show:false};
+  // Revision 52 (items 6/7): a conversion-output row is managed via its IN row's Share/Unshare,
+  // same as Dup/Del already are (canDelDup) — sharing/unsharing always handles the IN/OUT pair
+  // together, so a separate control on OUT would be redundant at best and confusing at worst.
+  if (n.convRole==='out') return {show:false};
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   if (n.sharedPeerId) {
     const otherLabel=state.analyses[otherId]?.label||'the other analysis';
@@ -3565,6 +3605,11 @@ function duplicateNodeById(id) {
   const copy=JSON.parse(JSON.stringify(n));
   copy.id=uid();
   copy.childIds=[];
+  // Revision 52: a duplicate is a brand-new, independent item — never sharing the source's link.
+  // The JSON deep-clone above copies sharedPeerId verbatim otherwise, leaving the copy "linked"
+  // to the original's peer (which still only points back at the original) — editing the copy's
+  // fields then corrupts the original's real shared link.
+  copy.sharedPeerId=null;
   copy.description=(copy.description||'')+' (copy)';
   state.nodes[copy.id]=copy;
   attachChild(copy.id,copy.parentId);
@@ -3574,6 +3619,7 @@ function duplicateNodeById(id) {
       const outCopy=JSON.parse(JSON.stringify(paired));
       outCopy.id=uid();
       outCopy.childIds=[];
+      outCopy.sharedPeerId=null;
       outCopy.parentId=copy.id;
       outCopy.description=(paired.description||'')+' (copy)';
       state.nodes[outCopy.id]=outCopy;
@@ -3594,6 +3640,9 @@ function duplicateBranch(rootId) {
     copy.id=idMap[id];
     copy.parentId=id===rootId?originalParentId:idMap[orig.parentId];
     copy.childIds=(orig.childIds||[]).filter(cid=>idMap[cid]).map(cid=>idMap[cid]);
+    // Revision 52: same as duplicateNodeById — every node in a duplicated branch is independent,
+    // never inheriting the source's shared link.
+    copy.sharedPeerId=null;
     copy.description=(copy.description||'')+' (copy)';
     state.nodes[copy.id]=copy;
   });
@@ -3976,6 +4025,27 @@ function doEditSave() {
   const acDc=document.getElementById('ef-acdc').value;
   const v=voltage||0;
   const data={type,status:document.getElementById('ef-status').value,voltage,acDc};
+  // Revision 52 (items 2/3): Existing Load and Net Change Override only ever make sense for one
+  // of Removed/Installed status at a time — calcNC's override branch and recalc()'s _newLoad
+  // formula both read these fields unconditionally regardless of status, so hiding the section
+  // in the UI (efShowSections) never actually cleared the stored value, letting stale data keep
+  // feeding calculations after a status change (e.g. a Removed item's leftover Existing Load
+  // still counted once switched to Installed). Applies to non-load capacity-bearing items only —
+  // conversion-pair items already recompute both fields unconditionally on every save regardless
+  // of status, and Load items have no Existing Load/Net Change split at all. The actual clearing
+  // happens right before updateNode() at the end of this function, after the field-reading logic
+  // below has had its say — otherwise that logic would just overwrite this back to whatever the
+  // (now-hidden, but still populated) form fields contain.
+  let clearExistingLoadOnSave=false, clearNetChangeOnSave=false;
+  if (hasCap(type)&&!isLoad(type)&&!n.convRole&&n.status!==data.status) {
+    if (n.status==='removed'&&data.status==='new') {
+      if (!confirm(`Changing status to Installed will clear "${n.description||'this item'}"'s Existing Load values. Continue?`)) return;
+      clearExistingLoadOnSave=true;
+    } else if (n.status==='new'&&data.status==='removed') {
+      if (!confirm(`Changing status to Removed will clear "${n.description||'this item'}"'s Net Change values. Continue?`)) return;
+      clearNetChangeOnSave=true;
+    }
+  }
   data.description=document.getElementById('ef-desc').value.trim();
   data.refDes=document.getElementById('ef-refdes').value.trim();
 
@@ -4113,6 +4183,8 @@ function doEditSave() {
     data.rowNotes=data.rowNotes.map(o=>allowedGroups.has(o.group)?o:{...o,group:null});
     data.rowRefs=data.rowRefs.map(r=>allowedGroups.has(r.group)?r:{...r,group:null});
   }
+  if (clearExistingLoadOnSave) data.existingLoad=mkPow();
+  if (clearNetChangeOnSave) data.netChangeOverride=null;
   updateNode(mNode,data);
   closeModal();
 }
