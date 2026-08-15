@@ -3033,7 +3033,18 @@ Duplicate creates the expected "(copy)" node, Delete removes it. Confirmed the A
 `af-del` now shows its tooltip. Full tab sweep, no console errors. Test data removed after
 verification.
 
-**Not yet built**: item 12 (grid filters); item 13 remains deferred to its own future session.
+**Follow-up (same day): Calc and +Child icons.** Suggested `∑` (summation) for Calc and `↳`
+(down-then-right arrow, suggesting "branch downward from here") for +Child; user confirmed both.
+Applied to the grid's `gridActionsCell` (both the full and read-only row variants) and, for
+consistency, the Add Item(s) dialog's own per-row Calc button (`af-calc`) as well, so both
+surfaces show the same glyph rather than one being an icon and the other staying text. Share/
+Unshare remains text-labeled — not addressed in this follow-up. Verified live: correct glyph/
+tooltip in both the grid and the Add modal; +Child still creates a real child node through a real
+click; Calc still correctly derives VA/A/pf from a partially-filled AC row through a real click.
+Full tab sweep, no console errors. Test data removed after verification.
+
+**Not yet built**: item 12 (grid filters); Share/Unshare icon still undecided; item 13 remains
+deferred to its own future session.
 
 ## Appendix A: Future Enhancements
 
