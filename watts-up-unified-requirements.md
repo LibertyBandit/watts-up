@@ -3006,6 +3006,35 @@ Test data removed after verification.
 **Not yet built**: item 11 (icon buttons) and item 12 (grid filters); item 13 (TRU multi-phase
 input + dual-pane Edit dialog) remains deferred to its own future session.
 
+## 55. Revision 52 (Phase 3) — Icon Buttons for Grid Row Actions
+
+*Last updated: 2026-08-15*
+
+Item 11 (and 11.1) of the Revision 52 wish list. Dup, Del, and Edit in the grid's row-action
+column (`gridActionsCell`) are now icons instead of text labels, matching existing conventions
+rather than inventing new ones: Dup uses `⧉`, the exact glyph the Add Item(s) dialog's own
+per-row Duplicate button (`af-dup`) already uses; Del uses `×`, the exact glyph the Add modal's
+own Delete button (`af-del`) already uses, now styled red (`var(--accent-red)`) to match the
+red-delete convention already established in the References/Notes lists — the Add modal's own
+`af-del` was never red, a pre-existing minor inconsistency fixed in passing while touching this
+area, along with adding its own missing `title="Delete"` tooltip. Edit uses `✎` (pencil), per the
+user's own suggestion (11.1). Up/Down and the group Reset buttons were already icons before this
+phase; tooltips on all three changed buttons are unchanged (already present) from their previous
+text-label versions.
+
+**Deferred pending the user's input** (11.2 explicitly asked "suggestions for the others?" —
+treated as an open question, not a directive, so nothing beyond Dup/Del/Edit was changed without
+confirming first): Calc, +Child, and Share/Unshare remain text-labeled for now, pending the user's
+choice of icon for each.
+
+Verified live: confirmed the three buttons render with the correct glyphs, tooltips, and (for Del)
+red color. Confirmed each still functions correctly through a real click — Edit opens the modal,
+Duplicate creates the expected "(copy)" node, Delete removes it. Confirmed the Add modal's own
+`af-del` now shows its tooltip. Full tab sweep, no console errors. Test data removed after
+verification.
+
+**Not yet built**: item 12 (grid filters); item 13 remains deferred to its own future session.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

@@ -2825,14 +2825,19 @@ function gridActionsCell(n,readOnly,gridKey){
   // Revision 52 (item 10): Share/Unshare moved to the right margin — last in the button sequence
   // — instead of ahead of Edit/Del.
   if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}${shareBtn}</div></td>`;
+  // Revision 52 (item 11): Dup/Del/Edit are icons instead of text labels — Dup and Del match the
+  // exact glyphs the Add Item(s) dialog's own row buttons already use (af-dup/af-del), Edit uses
+  // a pencil per the user's own suggestion (11.1). Del is styled red here (the Add modal's af-del
+  // never was, a pre-existing minor inconsistency — matches the red-delete convention already
+  // established in the References/Notes lists instead). Tooltips are unchanged/kept on all three.
   return `<td><div class="grid-actions">
     <button data-act="up" title="Move up"${canUp?'':' disabled'}>&uarr;</button>
     <button data-act="down" title="Move down"${canDown?'':' disabled'}>&darr;</button>
     ${canCalc?'<button data-act="calc" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>':''}
-    ${canDelDup?'<button data-act="dup" title="Duplicate">Dup</button>':''}
+    ${canDelDup?'<button data-act="dup" title="Duplicate">⧉</button>':''}
     ${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}
-    <button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>
-    ${canDelDup?'<button data-act="del" title="Delete">Del</button>':''}
+    <button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">✎</button>
+    ${canDelDup?'<button data-act="del" title="Delete" style="color:var(--accent-red)">×</button>':''}
     ${shareBtn}
   </div></td>`;
 }
@@ -4371,7 +4376,7 @@ function afRenderTable() {
       return cell+`<td class="grid-reset-cell"><button type="button" class="af-reset-group" data-row="${ri}" data-keys="${keys}" title="Reset this group">&#8635;</button></td>`;
     }).join('');
     const canCalc=cols.some(c=>c.calc);
-    return `<tr><td class="row-num">${idx+1}</td>${cells}<td style="white-space:nowrap">${canCalc?`<button class="af-calc btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>`:''}<button class="af-dup btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Duplicate">⧉</button><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)">×</button></td></tr>`;
+    return `<tr><td class="row-num">${idx+1}</td>${cells}<td style="white-space:nowrap">${canCalc?`<button class="af-calc btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>`:''}<button class="af-dup btn-node" data-row="${ri}" style="padding:.1rem .3rem" title="Duplicate">⧉</button><button class="af-del btn-node" data-row="${ri}" style="padding:.1rem .3rem;color:var(--accent-red)" title="Delete">×</button></td></tr>`;
   }).join('');
   wrap.innerHTML=`<table class="add-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   document.getElementById('modal').style.width=afComputeModalWidth(cols)+'px';
