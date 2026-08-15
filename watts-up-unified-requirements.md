@@ -2964,6 +2964,48 @@ errors. Test data removed after verification.
 **Not yet built**: items 8–12 (tab order/positioning, icon buttons, grid filters) and the deferred
 item 13 (TRU multi-phase input + dual-pane Edit dialog).
 
+## 54. Revision 52 (Phase 2) — Tab Order and Grid Button Positioning
+
+*Last updated: 2026-08-15*
+
+Items 8, 9, and 10 of the Revision 52 wish list — pure tab-order and button-position rearrangement,
+no new capability.
+
+**Item 8 — reference row buttons moved after Date.** `renderRefList`'s reference row template
+previously placed the row buttons (Up/Down/Share-Unshare/Remove) at the end of the *first* visual
+row, between the Doc # and Title fields in DOM order — so tabbing through a reference detoured
+through the buttons before reaching Title. The `.doc-list-btns` block now sits at the end of the
+*second* row, after Date, so the natural (unmodified) DOM tab order runs straight through every
+real field — Org → Doc # → Title → Rev → Date — before landing on the row buttons last.
+
+**Item 9 — status toggle included in the grid's Tab sequence.** The Existing/Removed grid's own
+Tab-key handler (`wireGridEvents`) builds its own field list independent of native tab order, via
+a selector that only matched `input[data-field]`/`select[data-field]` — the status toggle is a
+`<button data-act="toggle-status">`, so it silently fell out of this custom sequence even though it
+sits visually between Ref Des and the value columns. New shared constant `GRID_TAB_FIELDS_SEL`
+widens the selector (used consistently everywhere the handler builds or re-queries its field list)
+to also include `button[data-act="toggle-status"]:not(:disabled)`. Load rows are unaffected — their
+status cell is a plain, non-interactive badge (`gridStatusToggleCell` only renders a real button
+for non-Load rows), and the read-only Installed-grid context rows use a different, still-plain
+badge (`gridStatusDisplayCell`) untouched by this change.
+
+**Item 10 — grid Share/Unshare moved to the right margin.** `gridActionsCell` previously placed
+Share/Unshare mid-sequence (ahead of Edit, or first of all in the read-only row). It's now the last
+button in both the full row (`... Edit, Del, Share/Unshare`) and the read-only row
+(`+Child, Share/Unshare`).
+
+Verified live: confirmed the reference row's actual DOM order (Org/Doc # on row one only; Title/
+Rev/Date/buttons on row two). Confirmed the field list computed for a root row includes the status
+toggle in its correct position (after Ref Des, before Voltage) via the widened selector, then
+confirmed it with a real dispatched Tab keydown: focus starting on Ref Des lands on the status
+toggle, and a second Tab from there correctly continues to Voltage — not skipping it, not getting
+stuck. Confirmed Share/Unshare renders last in both the full grid-actions row (after Del) and the
+read-only row (after +Child), for an already-shared root node. Full tab sweep, no console errors.
+Test data removed after verification.
+
+**Not yet built**: item 11 (icon buttons) and item 12 (grid filters); item 13 (TRU multi-phase
+input + dual-pane Edit dialog) remains deferred to its own future session.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

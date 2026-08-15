@@ -2822,16 +2822,18 @@ function gridActionsCell(n,readOnly,gridKey){
   const canCalc=n.acDc==='ac'&&(hasCap(n.type)||isLoad(n.type));
   const shareInfo=gridShareInfo(n,gridKey);
   const shareBtn=shareInfo.show?`<button data-act="${shareInfo.action}" title="${shareInfo.title}">${shareInfo.label}</button>`:'';
-  if (readOnly) return `<td><div class="grid-actions">${shareBtn}${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}</div></td>`;
+  // Revision 52 (item 10): Share/Unshare moved to the right margin — last in the button sequence
+  // — instead of ahead of Edit/Del.
+  if (readOnly) return `<td><div class="grid-actions">${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}${shareBtn}</div></td>`;
   return `<td><div class="grid-actions">
     <button data-act="up" title="Move up"${canUp?'':' disabled'}>&uarr;</button>
     <button data-act="down" title="Move down"${canDown?'':' disabled'}>&darr;</button>
     ${canCalc?'<button data-act="calc" title="Recalculate this row\'s AC power values from whatever fields are filled in">Calc</button>':''}
     ${canDelDup?'<button data-act="dup" title="Duplicate">Dup</button>':''}
     ${canAddChild?'<button data-act="child" title="Add child">+Child</button>':''}
-    ${shareBtn}
     <button data-act="edit" title="Open full editor (Net Change Override, Notes &amp; References)">Edit</button>
     ${canDelDup?'<button data-act="del" title="Delete">Del</button>':''}
+    ${shareBtn}
   </div></td>`;
 }
 function gridGroupResetCell(field,editable){
@@ -3031,6 +3033,11 @@ async function gridDuplicateRow(id,renderFn){
     if (descInput) { descInput.focus(); if (descInput.select) descInput.select(); }
   }
 }
+// Revision 52 (item 9): the grid's own Tab-key handling (below) treats these as one combined
+// field sequence — ordinary input/select cells plus the Existing/Removed grid's status toggle
+// button, which sits between Ref Des and the value columns but previously fell out of Tab order
+// entirely since it's a <button>, not an input/select.
+const GRID_TAB_FIELDS_SEL='input[data-field]:not(:disabled),select[data-field]:not(:disabled),button[data-act="toggle-status"]:not(:disabled)';
 function wireGridEvents(el,renderFn,defaultChildStatus){
   el.querySelectorAll('input[data-field],select[data-field]').forEach(inp=>{
     inp.addEventListener('change',e=>gridFieldChanged(e,renderFn));
@@ -3052,13 +3059,17 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
   // recalc()/renderAll(), which rebuilds the row's DOM (and refocuses the same field) before our
   // setTimeout callback runs — re-querying the row by data-nid and re-focusing by index afterward
   // wins that race instead of fighting it. Left unhandled (native Tab) at row boundaries.
+  // Revision 52 (item 9): the Existing/Removed grid's status toggle button is included alongside
+  // the ordinary input/select fields — previously it was a button, not an input/select, so this
+  // handler's own field list silently skipped over it, and Tab from Ref Des jumped straight past
+  // it to the next real field despite it sitting visually between them.
   el.addEventListener('keydown',e=>{
     if (e.key!=='Tab') return;
     const t=e.target;
-    if (!t.matches || !t.matches('input[data-field],select[data-field]')) return;
+    if (!t.matches || !t.matches(GRID_TAB_FIELDS_SEL)) return;
     const row=t.closest('tr[data-nid]'); if (!row) return;
     const id=row.dataset.nid;
-    const fields=Array.from(row.querySelectorAll('input[data-field]:not(:disabled),select[data-field]:not(:disabled)'));
+    const fields=Array.from(row.querySelectorAll(GRID_TAB_FIELDS_SEL));
     const idx=fields.indexOf(t);
     if (idx===-1) return;
     const nextIdx=idx+(e.shiftKey?-1:1);
@@ -3068,7 +3079,7 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
     setTimeout(()=>{
       const newRow=document.querySelector(`tr[data-nid="${id}"]`);
       if (!newRow) return;
-      const newFields=Array.from(newRow.querySelectorAll('input[data-field]:not(:disabled),select[data-field]:not(:disabled)'));
+      const newFields=Array.from(newRow.querySelectorAll(GRID_TAB_FIELDS_SEL));
       const target=newFields[nextIdx];
       if (target) { target.focus(); if (target.select) target.select(); }
     },0);
@@ -3191,23 +3202,26 @@ function renderRefList() {
     const shareBtnHtml=ref.sharedPeerKey
       ?`<button class="ref-share" title="Stop sharing this reference with ${state.analyses[otherId]?.label||'the other analysis'}">Unshare</button>`
       :(otherExists?`<button class="ref-share" title="Share this reference with ${state.analyses[otherId].label}">Share</button>`:'');
+    // Revision 52 (item 8): row buttons moved after the Date field so the tab sequence runs
+    // straight through every real field (Org -> Doc# -> Title -> Rev -> Date) before landing on
+    // the row buttons last, instead of detouring through them between Doc# and Title.
     item.innerHTML=`
       <div class="doc-list-item-row">
         <span class="doc-item-num">[${i+1}]</span>
         <span class="doc-item-lbl">Org</span><input data-field="organization" value="${esc(ref.organization||'')}" placeholder="Organization / Corporate Author" style="flex:1.2;min-width:100px">
         <span class="doc-item-lbl">Doc #</span><input data-field="docNumber" value="${esc(ref.docNumber||'')}" placeholder="Document number" style="flex:1;min-width:80px">
-        <div class="doc-list-btns">
-          <button class="ref-up" title="Move up">↑</button>
-          <button class="ref-dn" title="Move down">↓</button>
-          ${shareBtnHtml}
-          <button class="ref-del" title="Remove" style="color:var(--accent-red)">✕</button>
-        </div>
       </div>
       <div class="doc-list-item-row">
         <span style="min-width:22px"></span>
         <span class="doc-item-lbl">Title</span><input data-field="title" value="${esc(ref.title||'')}" placeholder="Document title" style="flex:2;min-width:140px">
         <span class="doc-item-opt">Rev</span><input data-field="revision" value="${esc(ref.revision||'')}" placeholder="optional" style="width:62px">
         <span class="doc-item-opt">Date</span><input data-field="date" value="${esc(ref.date||'')}" placeholder="optional" style="width:120px">
+        <div class="doc-list-btns">
+          <button class="ref-up" title="Move up">↑</button>
+          <button class="ref-dn" title="Move down">↓</button>
+          ${shareBtnHtml}
+          <button class="ref-del" title="Remove" style="color:var(--accent-red)">✕</button>
+        </div>
       </div>`;
     item.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('input',()=>{ref[inp.dataset.field]=inp.value;syncSharedReferenceFields(ref);persist();});
