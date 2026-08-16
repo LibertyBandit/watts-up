@@ -250,6 +250,11 @@
     .grid-footer{flex-shrink:0;padding:.5rem .75rem;border-top:1px solid var(--border);
       display:flex;align-items:center;gap:.6rem;justify-content:flex-end;background:var(--bg-secondary)}
     .grid-footer .grid-footer-msg{margin-right:auto;font-size:.74rem;color:var(--text-muted)}
+    .grid-filter-bar{flex-shrink:0;padding:.4rem .75rem;border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:.9rem;background:var(--bg-secondary)}
+    .grid-filter-bar label{display:flex;align-items:center;gap:.35rem;font-size:.72rem;color:var(--text-secondary)}
+    .grid-filter-bar select{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);
+      border-radius:4px;padding:.15rem .35rem;font-size:.72rem;font-family:inherit;max-width:220px}
     .data-grid{table-layout:fixed;border-collapse:collapse;font-size:.68rem;white-space:nowrap}
     .data-grid thead{position:sticky;top:0;z-index:5;background:var(--bg-secondary)}
     .data-grid th{padding:.27rem .36rem;text-align:center;font-weight:700;color:var(--text-secondary);
@@ -2430,6 +2435,54 @@ function renderLoadAnalysisDetailAlt() {
 
 // ── DATA ENTRY GRIDS (Existing/Removed, New) ──────────────────────────────────
 let gridSnapshot=null;
+// Revision 52 (item 12): grid view filters — session-only (not saved/persisted, matching the
+// Vertical/Horizontal report-layout toggle's own precedent), shared between the Existing/Removed
+// and Installed grids so a filter set on one stays applied when switching to the other. Defensive
+// against gridFilterBranchId referencing a node that doesn't exist in the current analysis (e.g.
+// right after switching Active Project <-> PCM) — applyGridFilters() below just treats that as no
+// branch filter rather than erroring.
+let gridFilterAcDc='all', gridFilterBranchId='';
+// Filters the id list a grid is about to render: AC/DC match (when not 'all'), and branch subtree
+// membership (when a branch is selected) — kept as a plain filter over the already-status-filtered
+// id list, not a hide-whole-subtree operation, so a non-matching ancestor doesn't hide matching
+// descendants further down (e.g. filtering to DC-only shouldn't hide DC loads just because most of
+// the tree above a TRU boundary is AC). Depth for indentation is computed from the *unfiltered*
+// preOrder list before this runs, so a filtered row still shows its real tree depth.
+function applyGridFilters(ids,nodes) {
+  let out=ids;
+  if (gridFilterAcDc!=='all') out=out.filter(id=>nodes[id]?.acDc===gridFilterAcDc);
+  if (gridFilterBranchId&&nodes[gridFilterBranchId]) {
+    const allowed=new Set(subtree(gridFilterBranchId,nodes));
+    out=out.filter(id=>allowed.has(id));
+  }
+  return out;
+}
+// Shared filter-bar UI for both grids — AC/DC select, Branch select (indented item list,
+// preOrder), and a Clear Filters button shown only while a filter is actually active.
+function gridFilterBar() {
+  if (!state) return '';
+  const nodes=state.nodes;
+  const ids=preOrder(state.rootIds,nodes);
+  const dm={}; ids.forEach(id=>{ const p=nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  const branchOptions=ids.map(id=>{
+    const n=nodes[id]; if (!n) return '';
+    const indent='&nbsp;&nbsp;'.repeat(dm[id]||0);
+    return `<option value="${id}"${gridFilterBranchId===id?' selected':''}>${indent}${esc(n.description||'unnamed')}</option>`;
+  }).join('');
+  const hasFilters=gridFilterAcDc!=='all'||!!gridFilterBranchId;
+  return `<div class="grid-filter-bar">
+    <label>AC/DC <select id="grid-filter-acdc">
+      <option value="all"${gridFilterAcDc==='all'?' selected':''}>All</option>
+      <option value="ac"${gridFilterAcDc==='ac'?' selected':''}>AC only</option>
+      <option value="dc"${gridFilterAcDc==='dc'?' selected':''}>DC only</option>
+    </select></label>
+    <label>Branch <select id="grid-filter-branch">
+      <option value=""${gridFilterBranchId?'':' selected'}>(All items)</option>
+      ${branchOptions}
+    </select></label>
+    ${hasFilters?'<button type="button" id="grid-filter-clear" class="btn-default">Clear Filters</button>':''}
+  </div>`;
+}
 const SAME_SHAPE_GROUPS=[NT.GENERATION,NT.DISTRIBUTION,NT.PROTECTION];
 function sameShapeTypes(type){ for (const g of SAME_SHAPE_GROUPS) if (g.includes(type)) return g; return [type]; }
 // Conversion nodes are deliberately excluded from free type-switching: they're a paired
@@ -3126,6 +3179,15 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
     persist();
     renderAll();
   });
+  // Revision 52 (item 12): view filters (AC/DC, branch) — shared session-only state, so changing
+  // either just re-renders this grid; the other grid picks up the same shared values whenever it
+  // next renders (e.g. on tab switch).
+  const acdcFilterSel=el.querySelector('#grid-filter-acdc');
+  if (acdcFilterSel) acdcFilterSel.addEventListener('change',()=>{ gridFilterAcDc=acdcFilterSel.value; renderFn(); });
+  const branchFilterSel=el.querySelector('#grid-filter-branch');
+  if (branchFilterSel) branchFilterSel.addEventListener('change',()=>{ gridFilterBranchId=branchFilterSel.value; renderFn(); });
+  const filterClearBtn=el.querySelector('#grid-filter-clear');
+  if (filterClearBtn) filterClearBtn.addEventListener('click',()=>{ gridFilterAcDc='all'; gridFilterBranchId=''; renderFn(); });
 }
 function gridFooter(gridKey){
   return `<div class="grid-footer">
@@ -3150,11 +3212,13 @@ function renderExRemGrid(){
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
   const allIds=preOrder(state.rootIds,state.nodes);
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
-  const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='removed'); });
+  const statusIds=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='removed'); });
+  const ids=applyGridFilters(statusIds,state.nodes);
   const rows=ids.map(id=>buildExRemRow(state.nodes[id],dm[id]||0)).join('');
   const cg=gridColgroup(true);
   const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Existing Load','Load')}<tbody>${rows}</tbody></table>`;
-  el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No Existing or Removed items.</div>'}</div>${gridFooter('exrem')}`;
+  const emptyMsg=statusIds.length?'No items match the current filters.':'No Existing or Removed items.';
+  el.innerHTML=`${gridFilterBar()}<div class="grid-scroll">${ids.length?table:`<div class="empty-state">${emptyMsg}</div>`}</div>${gridFooter('exrem')}`;
   restoreGridScrollPos(el,scrollPos);
   wireGridEvents(el,renderExRemGrid,'existing');
 }
@@ -3165,13 +3229,15 @@ function renderNewGrid(){
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
   const allIds=preOrder(state.rootIds,state.nodes);
   const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
-  const ids=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
+  const statusIds=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
+  const ids=applyGridFilters(statusIds,state.nodes);
   const rows=ids.map(id=>buildNewRow(state.nodes[id],dm[id]||0)).join('');
   // Net Change now has its own reset column too (resettable3=true), since New-status childless
   // non-load rows can carry a real netChangeOverride the user may want to clear.
   const cg=gridColgroup(true);
   const table=`<table class="data-grid" style="width:${cg.total}px">${cg.html}${gridHeader('Load','Net Change',true)}<tbody>${rows}</tbody></table>`;
-  el.innerHTML=`<div class="grid-scroll">${ids.length?table:'<div class="empty-state">No items to display.</div>'}</div>${gridFooter('new')}`;
+  const emptyMsg=statusIds.length?'No items match the current filters.':'No items to display.';
+  el.innerHTML=`${gridFilterBar()}<div class="grid-scroll">${ids.length?table:`<div class="empty-state">${emptyMsg}</div>`}</div>${gridFooter('new')}`;
   restoreGridScrollPos(el,scrollPos);
   wireGridEvents(el,renderNewGrid,'new');
 }

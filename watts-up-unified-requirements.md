@@ -3046,6 +3046,57 @@ Full tab sweep, no console errors. Test data removed after verification.
 **Not yet built**: item 12 (grid filters); Share/Unshare icon still undecided; item 13 remains
 deferred to its own future session.
 
+## 56. Revision 52 (Phase 4) — Grid Filters
+
+*Last updated: 2026-08-15*
+
+Item 12 of the Revision 52 wish list. Adds an AC/DC filter, a branch filter (a selected item plus
+its descendants — confirmed with the user during planning), and a Clear Filters control to both
+the Existing/Removed and Installed grids.
+
+**Shared, session-only state** (`gridFilterAcDc`, `gridFilterBranchId`): not saved/persisted,
+matching the precedent already set by the Vertical/Horizontal report-layout toggle (§43) — resets
+on reload. Shared between both grids rather than independent per grid, so a filter set on one stays
+applied when switching to the other (each grid's own render function reads the same module-level
+values). Defensive against `gridFilterBranchId` referencing a node that doesn't exist in the
+current analysis (e.g. right after switching Active Project↔PCM): `applyGridFilters()` simply
+treats a dangling id as no branch filter rather than erroring, and the branch `<select>` naturally
+shows "(All items)" again since it rebuilds its option list fresh from whichever analysis is
+current on every render.
+
+**Filtering behavior** (`applyGridFilters`): the AC/DC filter is a plain match on each candidate
+row, not a hide-the-whole-subtree operation — a non-matching ancestor does *not* hide matching
+descendants further down. This matters in practice: most of a typical aircraft tree above a TRU
+conversion boundary is AC, so a "DC only" filter that hid whole subtrees under non-DC ancestors
+would show almost nothing. A filtered row keeps its true tree depth for indentation, since depth is
+computed from the *unfiltered* `preOrder` list before filtering runs. The branch filter uses the
+existing `subtree()` helper to build an allow-set once, so combining both filters is a simple
+two-step narrowing (AND logic) of the same id list already filtered by status (existing/removed,
+or existing/new).
+
+**UI** (`gridFilterBar`): rendered above each grid's scrollable table — an AC/DC `<select>`
+(All/AC only/DC only), a Branch `<select>` listing every item in the current analysis indented to
+match its tree depth (built the same way the Edit modal's own Parent dropdown already indents its
+hierarchy), and a Clear Filters button that only appears while a filter is actually active. Wired
+into the existing shared `wireGridEvents()` (used by both grids already) rather than duplicating
+handler-attachment code.
+
+Verified live: seeded a mixed AC/DC tree (an AC branch with an AC child, and a separate AC branch
+holding one DC child). Confirmed "DC only" shows just the DC item at its correct original depth
+despite every one of its ancestors being AC (proving the no-hide-whole-subtree design). Confirmed
+the branch filter shows exactly a selected bus and its descendant, excluding everything else.
+Confirmed Clear Filters restores every row and then removes itself. Confirmed the filter set on the
+Existing/Removed grid is still applied after switching to the Installed tab (shared state).
+Confirmed switching to a freshly-created PCM analysis with a stale Active-Project-only branch id
+selected degrades gracefully — no crash, dropdown falls back to "(All items)", PCM's own items show
+normally. Confirmed both filters combine correctly (AC-only within a specific branch). Confirmed
+`snapshotState()`'s saved JSON contains no filter state at all (correctly session-only). Full tab
+sweep, no console errors. Test data removed after verification.
+
+**This completes the in-scope portion of Revision 52** (items 1–12). Item 13 (TRU multi-phase
+input + dual-pane Edit dialog) remains deferred to its own future session; the Share/Unshare icon
+choice from item 11.2 also remains open.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
