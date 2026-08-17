@@ -3097,6 +3097,88 @@ sweep, no console errors. Test data removed after verification.
 input + dual-pane Edit dialog) remains deferred to its own future session; the Share/Unshare icon
 choice from item 11.2 also remains open.
 
+## 57. Revision 57 (Phase 1) — TRU Multi-Phase Input: Data Model
+
+*Last updated: 2026-08-16*
+
+First of several phases implementing TRU multi-phase input (up to three AC input phases feeding
+one TRU, source spec "Watts Up Revision 57 (+) – TRU multi-phase input + dual-pane edit.txt",
+itself an elaborated version of Revision 52's deferred item 13). This phase is pure data-model
+groundwork — no UI changes — laying the foundation the later phases (Edit modal dual-pane
+redesign, additional-parent management, Power Distribution Tree, Grids) will build on.
+
+**Scope decisions confirmed with the user before starting:**
+- The Add Item(s) dialog stays single-input at creation time; managing additional input phases (up
+  to two more, three total) is exclusively an Edit-dialog operation in a later phase.
+- Each additional input's parent dropdown will be constrained to AC siblings of the primary
+  parent, at the primary's voltage, and distinct from every other input already chosen (not just
+  the primary) — so by the third input, only one candidate sibling remains eligible.
+- The TRU-sharing Share/Unshare reversal proposed in the source spec (§3.2: output-only, cascading
+  to all inputs) is explicitly deferred — Revision 52 Phase 1's input-driven sharing stays as-is.
+  The user may revisit Share/Unshare behavior in a future session to reduce user error.
+- The output node's structural parent stays the *primary* input always (not the "last" input) —
+  reparenting it on every phase reorder would ripple into every mechanism that already assumes a
+  stable structural parent (`subtree()`, branch filters, duplicate/delete cascade, recalc). The
+  spec's "pair output with the last input" is a visual-reference nicety the user authorized
+  dropping if it proved complicated; a later phase (Power Distribution Tree) will assess whether a
+  purely cosmetic render-time placement is cheap enough to add.
+
+**Data model:** a TRU's up to three input-phase nodes and its one output node now share a
+`convGroupId` (fresh `uid()`), replacing pure structural inference (which broke down once
+additional inputs could live under a different parent bus than the primary). Each input also
+carries a `phaseOrder` (0/1/2) for ordering and later Total/Phase division. `findConversionGroup(node, nodes)`
+resolves `{inputs:[...sorted by phaseOrder], output}` for any group member; it takes an explicit
+`nodes` dict (defaulting to the current analysis) so `calcNC` can resolve groups correctly while
+recomputing whichever analysis isn't currently active. `findPairedNode` (the old single-pair
+lookup) is left untouched for now — every existing UI call site still only deals with legacy
+single-input pairs until the Edit modal is redesigned in a later phase.
+
+**Migration** (`migrateLegacy`): every pre-existing conversion pair predates this model and was
+always a simple IN-parents-OUT structural link, so that relationship alone safely assigns both
+sides a fresh shared `convGroupId` the first time an old save loads. New TRUs created via
+`doAddSave` and twins created via `shareWithOther`'s `makeTwin` both get their own fresh
+`convGroupId` at creation time too (the latter needed a small fix — twins previously copied
+`convRole` but not `convGroupId`, which would have silently broken calcNC for shared TRUs again,
+similar in shape to the bug Revision 52 items 6/7 fixed for `convRole` itself).
+
+**Calculation** (`calcNC`): the `convRole==='in'` branch now resolves the group's output via
+`findConversionGroup` instead of via structural `children()` — additional input phases don't have
+the output as a structural child, only the primary does — then divides the total computed input
+demand by the number of input nodes in the group (source spec §2.3). Falls back to the old
+children-based sum if no group is found (defensive only; shouldn't occur post-migration).
+
+**Duplicate/Delete** (`duplicateNodeById`, `duplicateBranch`, `delNode`): a TRU's whole conversion
+group is now treated as one indivisible unit regardless of which member an operation starts from.
+`reconcileConvGroups(idMap)` completes and relinks a touched group under a fresh `convGroupId`
+after either duplicate path's own clone pass, cloning any member the caller didn't already reach
+(an additional input phase living on a separate, un-duplicated ancestor bus) and reparenting it
+consistently — via the id map when its original parent was cloned too, otherwise unchanged, so
+duplicated additional inputs stay attached to their real original buses while the duplicated output
+reparents onto the duplicated primary. `convGroupExtraIds(ids)` does the equivalent job for
+`delNode`, pulling in out-of-subtree group members before the shared-item delete guard runs and
+before deletion, with an explicit `detachChild` for those extra members since (unlike the rest of
+the subtree) their surviving parent isn't itself being deleted.
+
+One bug caught and fixed during verification: `cloneNodeShallow` (and `duplicateBranch`'s own
+inline clone) initially copied `convGroupId` verbatim from the source, same as every other field.
+Since `reconcileConvGroups` scans `state.nodes` by `convGroupId` immediately after cloning, the
+still-uncorrected copy transiently looked like an extra member of the *original* group and got
+double-processed, silently producing a spurious extra duplicate (`"... (copy) (copy)"`). Fixed by
+clearing `convGroupId` on every clone before `reconcileConvGroups` runs, same reasoning as clearing
+`sharedPeerId`.
+
+Verified live via direct console/state manipulation and the real UI: a manually-built 3-input group
+(three AC 115V buses each feeding one input phase, one DC load under the output) divided the total
+input demand evenly across all three inputs and rolled each phase's share up into its own parent
+bus correctly. Duplicating the primary input cloned all three inputs plus the output under a fresh
+`convGroupId`, additional inputs staying on their original buses and the output reparenting onto
+the new primary. Deleting the duplicated primary removed all four group members with no dangling
+child references on the surviving buses, leaving the original group untouched. Sharing a TRU
+primary input between Active Project and PCM correctly linked the twin IN/OUT pair under its own
+fresh `convGroupId` in the target analysis. A classic single-input TRU created and duplicated
+through the real Add Item(s)/Edit dialogs behaved identically to before — zero regression. Full tab
+sweep, no console errors. Test data removed after verification.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

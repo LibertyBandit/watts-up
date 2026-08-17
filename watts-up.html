@@ -1028,6 +1028,7 @@ let state=null;
 
 function makeNode(type,parentId,overrides={}) {
   const node={id:uid(),type,description:'',refDes:'',status:'existing',parentId,convRole:null,
+    convGroupId:null,phaseOrder:0,
     voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],childIds:[],sharedPeerId:null,
     _netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
   if (hasCap(type)) {node.capacity=null;node.existingLoad=mkPow(0,0,0,0,1);node.netChangeOverride=null;}
@@ -1175,6 +1176,20 @@ function shareWithOther(nodeId) {
     const outNode=children(n.id,cur.nodes).find(c=>c.convRole==='out');
     if (outNode&&!outNode.sharedPeerId) makeTwin(outNode,n.sharedPeerId);
   }
+  // Revision 57: conversion-pair twins created above still need their own shared convGroupId in
+  // the other analysis (twins always form a fresh, independent group there — the source's own
+  // convGroupId lives in a different nodes dict and is never reused). Mirrors migrateLegacy's own
+  // IN-parents-OUT pairing, which always holds for a freshly-created twin pair; only ever touches
+  // the just-created twins since every pre-existing node already has a convGroupId.
+  const otherNodesAfterShare=state.analyses[otherId].nodes;
+  Object.values(otherNodesAfterShare).forEach(tn=>{
+    if (tn.convRole==='in'&&!tn.convGroupId) {
+      const twinOut=children(tn.id,otherNodesAfterShare).find(c=>c.convRole==='out');
+      const gid=uid();
+      tn.convGroupId=gid; tn.phaseOrder=0;
+      if (twinOut) twinOut.convGroupId=gid;
+    }
+  });
   state.currentAnalysis=curId;
   // recalc() always recomputes both analyses in dependency order (Phase 2c), so one call here
   // is enough regardless of which side was just touched.
@@ -1423,6 +1438,8 @@ function migrateLegacy(p) {
     }
     Object.values(an.nodes).forEach(n=>{
       if (n.sharedPeerId===undefined) n.sharedPeerId=null;
+      if (n.convGroupId===undefined) n.convGroupId=null;
+      if (n.phaseOrder===undefined) n.phaseOrder=0;
       if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
       // Revision 36: rowNotes entries reference a shared note-text bank (this analysis's own
       // rowNoteDefs) instead of storing text inline, so the same note can be cited by multiple
@@ -1457,6 +1474,18 @@ function migrateLegacy(p) {
       }
       if (typeof n.netChangeOverride==='number') n.netChangeOverride={w:n.netChangeOverride};
     });
+    // Revision 57: every pre-existing conversion pair predates the multi-phase-input group model
+    // and was always a simple IN-parents-OUT structural link — that relationship alone is enough
+    // to safely assign both sides the same fresh convGroupId, with no ambiguity, the first time
+    // this save is loaded post-upgrade.
+    Object.values(an.nodes).forEach(n=>{
+      if (n.convRole==='in'&&!n.convGroupId) {
+        const outNode=children(n.id,an.nodes).find(c=>c.convRole==='out');
+        const gid=uid();
+        n.convGroupId=gid; n.phaseOrder=0;
+        if (outNode) outNode.convGroupId=gid;
+      }
+    });
   });
   installAnalysisView(p);
 }
@@ -1489,9 +1518,18 @@ function calcNC(node,nodes) {
     } else { sumW+=nc.w||0; sumVAR+=nc.var||0; sumA+=nc.a||0; }
   });
   if (node.convRole==='in'&&node.efficiency>0) {
-    const outW=sumW;
+    // Revision 57: resolve the group's output via convGroupId rather than via structural
+    // children() — additional input phases don't have the output as a structural child (each
+    // phase-input node keeps its own separate parent bus; only the primary input structurally
+    // parents the output), so a group lookup is the only path that works for every input in a
+    // multi-phase TRU while staying correct for a legacy single-input pair too. Falls back to the
+    // children-based sumW if no group is found (e.g. mid-migration), preserving prior behavior.
+    const group=findConversionGroup(node,nodes);
+    const outNode=group&&group.output;
+    const nInputs=(group&&group.inputs.length)?group.inputs.length:1;
+    const outW=outNode?(calcNC(outNode,nodes).w||0):sumW;
     const pf=node.convPf||1.0;
-    const inW=outW/node.efficiency;
+    const inW=(outW/node.efficiency)/nInputs;
     const isAcIn=node.acDc==='ac';
     const inVA=isAcIn&&pf>0?inW/pf:inW;
     // VAR's sign follows W's sign, same convention as deriveAcFromWVar's VA — a negative net
@@ -1740,14 +1778,24 @@ function delNode(id) {
   // would silently orphan its linked peer in the other analysis. Unshare first (no data lost),
   // then delete.
   const branch=subtree(id,state.nodes);
-  const sharedIds=branch.filter(x=>state.nodes[x].sharedPeerId);
+  // Revision 57: a TRU's conversion group (additional input phases + output) can span nodes
+  // outside this subtree — additional inputs live under their own, separate parent buses — so
+  // pull those in too, ensuring deleting the primary input always removes the whole group, never
+  // half of it.
+  const groupExtra=convGroupExtraIds(branch);
+  const toDelete=[...branch,...groupExtra];
+  const sharedIds=toDelete.filter(x=>state.nodes[x].sharedPeerId);
   if (sharedIds.length) {
     const names=sharedIds.map(x=>state.nodes[x].description||'unnamed').join(', ');
     alert(`Can't delete — shared with the other analysis: ${names}. Unshare first.`);
     return;
   }
   const parentId=n.parentId;
-  subtree(id,state.nodes).forEach(x=>delete state.nodes[x]);
+  // groupExtra members live under a parent that isn't itself being deleted, so (unlike the rest
+  // of `branch`, whose parents are also being removed) they need an explicit detach to avoid
+  // leaving a dangling childIds reference on that surviving parent.
+  groupExtra.forEach(x=>{ const nd=state.nodes[x]; if (nd) detachChild(x,nd.parentId); });
+  toDelete.forEach(x=>delete state.nodes[x]);
   detachChild(id,parentId);
   recalc();renderAll();persist();
 }
@@ -3689,30 +3737,17 @@ function showChoiceDialog({title,message,options}) {
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
 function duplicateNodeById(id) {
   const n=state.nodes[id];if (!n) return null;
-  const copy=JSON.parse(JSON.stringify(n));
-  copy.id=uid();
-  copy.childIds=[];
   // Revision 52: a duplicate is a brand-new, independent item — never sharing the source's link.
-  // The JSON deep-clone above copies sharedPeerId verbatim otherwise, leaving the copy "linked"
-  // to the original's peer (which still only points back at the original) — editing the copy's
-  // fields then corrupts the original's real shared link.
-  copy.sharedPeerId=null;
-  copy.description=(copy.description||'')+' (copy)';
+  // cloneNodeShallow strips sharedPeerId for exactly this reason (the JSON deep-clone it starts
+  // from would otherwise copy it verbatim, leaving the copy "linked" to the original's peer,
+  // which still only points back at the original, corrupting the real shared link on edit).
+  const copy=cloneNodeShallow(n);
   state.nodes[copy.id]=copy;
   attachChild(copy.id,copy.parentId);
-  if (n.convRole==='in') {
-    const paired=findPairedNode(n);
-    if (paired) {
-      const outCopy=JSON.parse(JSON.stringify(paired));
-      outCopy.id=uid();
-      outCopy.childIds=[];
-      outCopy.sharedPeerId=null;
-      outCopy.parentId=copy.id;
-      outCopy.description=(paired.description||'')+' (copy)';
-      state.nodes[outCopy.id]=outCopy;
-      attachChild(outCopy.id,copy.id);
-    }
-  }
+  // Revision 57: a TRU's conversion group (up to 3 input phases + 1 output) is duplicated as a
+  // whole — reconcileConvGroups clones whatever group members this single-node copy didn't reach
+  // (in practice, always all of them) and relinks the full set under a fresh convGroupId.
+  if (n.convRole) reconcileConvGroups({[id]:copy.id});
   return copy.id;
 }
 function duplicateBranch(rootId) {
@@ -3730,10 +3765,19 @@ function duplicateBranch(rootId) {
     // Revision 52: same as duplicateNodeById — every node in a duplicated branch is independent,
     // never inheriting the source's shared link.
     copy.sharedPeerId=null;
+    // Revision 57: cleared for the same reason cloneNodeShallow clears it — reconcileConvGroups
+    // scans state.nodes by convGroupId right after this loop; leaving the old id in place would
+    // make these still-uncorrected copies transiently look like extra members of the *original*
+    // group.
+    copy.convGroupId=null;
     copy.description=(copy.description||'')+' (copy)';
     state.nodes[copy.id]=copy;
   });
   attachChild(idMap[rootId],originalParentId);
+  // Revision 57: complete/relink any TRU conversion group touched by this branch — an additional
+  // input phase living outside the duplicated subtree (a separate, un-duplicated ancestor bus)
+  // gets cloned here too, and every group member touched gets a fresh, shared convGroupId.
+  reconcileConvGroups(idMap);
   return idMap[rootId];
 }
 function duplicateNode() {
@@ -3798,6 +3842,85 @@ function findPairedNode(node) {
   if (node.convRole==='in')  return children(node.id,state.nodes).find(c=>c.convRole==='out')||null;
   if (node.convRole==='out') { const p=state.nodes[node.parentId]; return (p&&p.convRole==='in')?p:null; }
   return null;
+}
+// Revision 57: a TRU's up-to-3 input phase nodes and its single output node share a convGroupId
+// instead of being inferrable purely from parent/child structure (additional input phases live
+// under their own, separate parent buses — only the primary input structurally parents the
+// output). Returns {inputs:[...sorted by phaseOrder], output} for any node that's part of a
+// group, or null otherwise. Accepts an explicit `nodes` dict (defaulting to the current
+// analysis's state.nodes) so calcNC can resolve groups correctly while recomputing whichever
+// analysis isn't currently active (see recalc()).
+function findConversionGroup(node,nodes) {
+  nodes=nodes||state.nodes;
+  if (!node||!node.convRole||!node.convGroupId) return null;
+  const members=Object.values(nodes).filter(n=>n.convGroupId===node.convGroupId);
+  const inputs=members.filter(n=>n.convRole==='in').sort((a,b)=>(a.phaseOrder||0)-(b.phaseOrder||0));
+  const output=members.find(n=>n.convRole==='out')||null;
+  if (!inputs.length&&!output) return null;
+  return {inputs,output};
+}
+// Revision 57: given a set of node ids already gathered for some whole-branch operation
+// (deletion), finds any additional TRU conversion-group members — sibling input phases or the
+// output — not already included, so the group is always treated as one indivisible unit
+// regardless of which member's own subtree the caller started from.
+function convGroupExtraIds(ids) {
+  const idSet=new Set(ids);
+  const extra=new Set();
+  ids.forEach(id=>{
+    const n=state.nodes[id];
+    if (!n||!n.convRole) return;
+    const group=findConversionGroup(n);
+    if (!group) return;
+    [...group.inputs,...(group.output?[group.output]:[])].forEach(m=>{
+      if (!idSet.has(m.id)) extra.add(m.id);
+    });
+  });
+  return [...extra];
+}
+// Revision 57: shallow-clones one node as an independent copy — new id, detached from any share
+// link, no children yet (the caller wires it into a parent separately via attachChild).
+// convGroupId is cleared (not just copied verbatim, unlike every other field) because
+// reconcileConvGroups scans state.nodes by convGroupId immediately after this runs — leaving the
+// old id in place would make the still-uncorrected copy transiently look like an extra member of
+// the *original* group and get double-processed.
+function cloneNodeShallow(orig,overrides={}) {
+  const copy=JSON.parse(JSON.stringify(orig));
+  copy.id=uid();
+  copy.childIds=[];
+  copy.sharedPeerId=null;
+  copy.convGroupId=null;
+  copy.description=(copy.description||'')+' (copy)';
+  return Object.assign(copy,overrides);
+}
+// Revision 57: after cloning some set of original nodes into idMap (origId -> copyId), ensures
+// every TRU conversion group touched by the clone ends up complete under its own fresh id —
+// cloning any group member the caller's own clone pass didn't reach (for example an additional
+// input phase living under a separate, un-duplicated ancestor bus) and re-parenting it the same
+// way the caller already reparents anything else: via idMap when the original parent was cloned
+// too, otherwise unchanged.
+function reconcileConvGroups(idMap) {
+  const seenGroupIds=new Set();
+  Object.keys(idMap).forEach(origId=>{
+    const orig=state.nodes[origId];
+    const gid=orig&&orig.convGroupId;
+    if (!gid||seenGroupIds.has(gid)) return;
+    seenGroupIds.add(gid);
+    const group=findConversionGroup(orig);
+    if (!group) return;
+    const newGid=uid();
+    [...group.inputs,...(group.output?[group.output]:[])].forEach(origMember=>{
+      let copyId=idMap[origMember.id];
+      if (!copyId) {
+        const mCopy=cloneNodeShallow(origMember);
+        mCopy.parentId=idMap[origMember.parentId]??origMember.parentId;
+        state.nodes[mCopy.id]=mCopy;
+        attachChild(mCopy.id,mCopy.parentId);
+        idMap[origMember.id]=mCopy.id;
+        copyId=mCopy.id;
+      }
+      state.nodes[copyId].convGroupId=newGid;
+    });
+  });
 }
 
 function efShowSections(type,convRole,status,hasChildren,acDc) {
@@ -4541,12 +4664,17 @@ function doAddSave() {
       };
       const capRow=calcConvPairRow(getN('inCap_a'),getN('inCap_vaw'),getN('outCap_a'),getN('outCap_vaw'),inAcDc,outAcDc,v,outV2,eff,cpf);
       const ldRow=calcConvPairRow(getN('inLd_a'),getN('inLd_vaw'),getN('outLd_a'),getN('outLd_vaw'),inAcDc,outAcDc,v,outV2,eff,cpf);
+      // Revision 57: the Add Item(s) dialog stays single-input at creation time (additional input
+      // phases are managed afterward via the Edit dialog's "+ Parent" — see the requirements doc)
+      // — still needs its own fresh convGroupId shared by both sides, same as every conversion
+      // pair, so it participates correctly in calcNC/duplicate/delete's group-aware logic.
+      const gid=uid();
       const inData={type,status,convRole:'in',description:desc+' (IN)',refDes,voltage,acDc:inAcDc,
         capacity:mkCap(capRow.in,inAcDc),existingLoad:mkLd(ldRow.in,inAcDc,v,inAcDc==='ac'?cpf:1.0),
-        efficiency:eff,convPf:cpf,netChangeOverride:null};
+        efficiency:eff,convPf:cpf,netChangeOverride:null,convGroupId:gid,phaseOrder:0};
       const inId=addNode(pid,inData);
       addNode(inId,{type,status,convRole:'out',description:desc+' (OUT)',refDes,voltage:outVoltage,acDc:outAcDc,
-        capacity:mkCap(capRow.out,outAcDc),existingLoad:mkLd(ldRow.out,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null});
+        capacity:mkCap(capRow.out,outAcDc),existingLoad:mkLd(ldRow.out,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null,convGroupId:gid});
     } else if (isLoad(type)) {
       let lv;
       if (acDc==='ac') lv=calcAcPowerGroup({a:getN('load_a'),va:getN('load_va'),w:getN('load_w'),var:getN('load_var'),pf:getN('load_pf')},v);
