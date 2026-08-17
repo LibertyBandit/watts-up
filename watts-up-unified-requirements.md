@@ -3179,6 +3179,109 @@ fresh `convGroupId` in the target analysis. A classic single-input TRU created a
 through the real Add Item(s)/Edit dialogs behaved identically to before — zero regression. Full tab
 sweep, no console errors. Test data removed after verification.
 
+## 58. Revision 57 (Phase 2) — TRU Multi-Phase Input: Edit Dialog
+
+*Last updated: 2026-08-16*
+
+Second phase of Revision 57 — builds the user-facing dual-pane Edit Item dialog on top of Phase
+1's `convGroupId` data model. Only the Edit dialog changes this phase; the Power Distribution Tree
+and Grids (Phases 3–4) still show a TRU as the old single IN/OUT pair.
+
+**Scope confirmed with the user during Phase 1 planning, applied here:**
+- The Add Item(s) dialog is untouched — a TRU is still created single-input; "+ Parent" (up to 2
+  additional input phases, 3 total) is available only from this new Edit-dialog UI.
+- TRU Share/Unshare stays exactly as Revision 52 Phase 1 left it (input-driven, on the primary
+  row) — the source spec's output-driven reversal proposal remains explicitly deferred.
+- Gated specifically on Item Type TRU (`isTru = isConvPair && type==='TRU'`) — every other
+  conversion type (unreachable via the UI today, `SELECTABLE_CONVERSION_TYPES=['TRU']`, but still
+  possible in an old save) keeps the pre-existing unified single-view `ef-sec-conv-pair` section
+  completely unchanged, sitting alongside the new `ef-sec-tru` section in the same modal.
+
+**Dialog structure** (`ef-sec-tru`): an Input/Output segmented-control toggle (`efConvView`
+module state, styled like the existing Active Project/PCM switch) swaps between two panels whose
+DOM persists regardless of which is showing, so switching tabs mid-edit never loses draft input.
+The generic top-level Parent/Description/Ref Des fields are hidden for TRU specifically (superseded
+by per-side fields inside the new section) — `efShowSections` gates this the same way it already
+gates the old Volts/AC-DC row for every conversion pair.
+
+- **Input panel**: primary Parent/Description/Ref Des, an "+ Parent" button revealing up to 2
+  additional input-phase rows (parent dropdown constrained to AC siblings of the primary at the
+  primary's voltage and distinct from every other already-chosen additional parent; description
+  defaults to the primary's own description + " B"/" C", editable; "✕" to remove, primary
+  un-removable), read-only IN Volts/AC-DC, Total/Phase Capacity and Existing Load (4 fields each,
+  A + VA, cross-derived on blur — Total↔Phase via input count, A↔VA via voltage), Efficiency/Conv.
+  PF (unchanged fields, still always editable regardless of which side is showing).
+- **Output panel**: read-only Parent Item display (always the primary — see below), Description/
+  Ref Des, editable OUT Volts, read-only OUT AC/DC, single-value OUT Capacity/Existing Load (no
+  Total/Phase split — spec scopes that to the input side only). Delete/Duplicate hidden while this
+  panel is showing (§1.1.4) — `efTruSwitchView` toggles the modal footer's buttons alongside the
+  panel swap.
+
+**Output stays structurally parented to the primary input, always** — the source spec's "pair
+output with the last input" is a visual-reference nicety the user authorized dropping if
+impractical; re-parenting on every reorder would ripple into `subtree()`, branch filters,
+duplicate/delete cascade, and recalc, all of which assume a stable structural parent. Left for
+Phase 3 (tree) to revisit as a purely cosmetic render-time placement if it turns out to be cheap.
+
+**Reset/Calculate cross-side prompts** (§1.1.2.3.1/§1.1.2.4.1): Reset always blanks the side that
+was clicked, then asks whether to also blank the other side (`efTruWireResetPrompts`, overriding
+the dialog's generic blank-only Reset wiring for these 4 buttons specifically). Calculate always
+fills blanks on the active side, then — only if there's actually something computed for the other
+side — asks whether to overwrite it (force-write, not just fill-blanks) if confirmed, or leaves it
+completely untouched if declined.
+
+**Total/Phase → IN/OUT math, and a bug caught during verification**: capacity/existing load
+resolve in two stages — first the Total/Phase mesh resolves to a single per-phase value
+(`efResolveTruPhaseValue`: an entered Phase value wins over Total; Total only converts down when
+no Phase value was given at all; A↔VA cross-derives via voltage within whichever pair is
+authoritative), then that phase value must be scaled **up to the combined total across all
+inputs** before running through the existing `calcConvPairRow` IN↔OUT efficiency derivation — the
+initial implementation fed a single phase's value into `calcConvPairRow` directly, which
+understated OUT's derived capacity/load by a factor of the input count whenever OUT was blank
+(matches calcNC's own `outW/efficiency/nInputs` relationship from Phase 1 — the IN↔OUT
+relationship is inherently total-input-to-output, not one-phase-to-output). Caught by hand-checking
+a 2-input save (30A total → OUT should be double a 1-input result, wasn't) rather than assuming the
+straightforward wiring was correct; fixed in both `doEditSaveTru` and `doEditCalculate`'s TRU
+branch by scaling the resolved phase value up to total before the cross-derivation and back down to
+phase afterward for storage on each input node.
+
+**Save** (`doEditSaveTru`): bypasses `doEditSave`'s generic single-node logic entirely. Reconciles
+`efTruAdditionalParents` (draft-only UI state — nothing touches `state.nodes` until Save) against
+the real group: existing nodes get updated in place, slots without a `nodeId` yet get created
+fresh, and real nodes whose slot was removed in this edit session get deleted directly (**not**
+via Phase 1's `delNode` — that cascades the *whole* group via `convGroupExtraIds`, which is exactly
+wrong for dropping one phase from an otherwise-intact group). Every kept input node gets the same
+resolved phase capacity/existing load and the same efficiency/Conv. PF mirrored onto it (calcNC
+reads these from whichever specific input node it's evaluating, so every input must carry identical
+values). Status applies to the whole group uniformly on save (primary, every kept additional input,
+and the output) — a deliberate scope decision, not yet present in the grid (Phase 4 will add the
+"primary controls, others reflect" UI per source spec §3.4.1) but necessary here since there's now
+only one Status field regardless of which pane is showing. Primary reparenting reuses the generic
+path's shared-peer guard/mirror logic (blocks moving a shared item under an unshared parent, mirrors
+the move onto its PCM peer) — additional inputs/output don't participate in cross-analysis reparent
+mirroring in this first pass, consistent with TRU sharing being frozen as-is this round. Row
+Notes/References stay scoped to whichever specific node the dialog happened to open on, unchanged
+from every prior revision.
+
+Verified live: single-input TRU regression (Add Item(s) → Edit → Duplicate, byte-identical to
+pre-Phase-2 behavior, Delete/Duplicate visible only on the Input tab). Added a 2nd input phase via
+"+ Parent" through the real UI (dropdown correctly offered only AC 115V siblings excluding the
+primary), entered Total Cap 30A, confirmed live blur-derivation (→3450VA via voltage, →15A phase
+via ÷2) and, after Save, confirmed both input nodes carry the identical 15A/1725VA phase capacity
+and OUT correctly shows the *combined* two-phase result (2785.875W, matching hand-calculated
+30A×115V×0.95cpf×0.85eff — not the halved 1392.9375W the pre-fix bug produced). Confirmed Calculate
+fills the active side's blanks unconditionally and only touches the off-side after an explicit
+confirm (both accept and decline paths tested). Confirmed removing an additional-parent row via "✕"
+then Save deletes only that one node — primary and output survive, no dangling child reference on
+the dropped node's former parent bus. Confirmed Status change via the dialog propagates to every
+group member. Confirmed a single-input TRU's own net change math is unaffected (no spurious
+division). Confirmed ordinary (non-conversion) items' Edit dialog fields are untouched by the new
+gating. Full tab sweep, no console errors. Test data removed after verification.
+
+**Not yet built**: Power Distribution Tree (Phase 3) and Grid (Phase 4) changes — a TRU with more
+than one input phase currently has no way to be created or viewed as such outside the Edit dialog
+itself (no tree node per phase, no grid row per phase yet).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

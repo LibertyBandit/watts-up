@@ -323,6 +323,19 @@
     .analysis-btn.active{background:var(--accent-blue);color:#fff}
     .analysis-btn.analysis-btn-create{color:var(--text-muted);font-style:italic}
     .analysis-btn.analysis-btn-create:hover{color:var(--accent-blue)}
+    /* Revision 57 (Phase 2): TRU Edit-dialog Input/Output view toggle — same segmented-control
+       look as .analysis-toggle/.analysis-btn, scoped locally since it lives inside the modal. */
+    .tru-view-toggle{display:flex;gap:2px;background:var(--bg-primary);border:1px solid var(--border);
+      border-radius:6px;padding:2px;width:fit-content;margin:.3rem 0 .5rem}
+    .tru-view-btn{background:none;border:none;border-radius:4px;padding:.25rem .9rem;font-size:.75rem;
+      font-weight:700;letter-spacing:.3px;color:var(--text-secondary);cursor:pointer}
+    .tru-view-btn:hover{color:var(--text-primary)}
+    .tru-view-btn.active{background:var(--accent-blue);color:#fff}
+    .tru-parent-row{position:relative}
+    .tru-parent-remove{position:absolute;right:-.3rem;top:-.3rem;background:var(--bg-elevated);
+      border:1px solid var(--border);border-radius:50%;width:18px;height:18px;line-height:16px;
+      text-align:center;font-size:.7rem;color:var(--text-muted);cursor:pointer;padding:0}
+    .tru-parent-remove:hover{color:var(--accent-red);border-color:var(--accent-red)}
     /* ── DOCUMENT PANEL ── */
     #doc-panel{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:1.2rem}
     .doc-section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:.3rem;margin-bottom:.6rem}
@@ -723,6 +736,102 @@
               <div class="form-group hidden" id="ef-convpf-group">
                 <label>Conv. Power Factor</label>
                 <input id="ef-convpf" type="text" inputmode="decimal" value="0.95">
+              </div>
+            </div>
+          </div>
+
+          <!-- Revision 57 (Phase 2): TRU-specific dual-pane editor — replaces ef-sec-conv-pair
+               above for Item Type TRU specifically (other conversion types, currently only
+               reachable via legacy saves since SELECTABLE_CONVERSION_TYPES=['TRU'], keep the
+               unified single-view section unchanged). -->
+          <div id="ef-sec-tru" class="hidden">
+            <div class="section-label">TRU</div>
+            <div class="tru-view-toggle" id="ef-tru-view-toggle">
+              <button type="button" id="ef-tru-tab-in"  class="tru-view-btn active">Input</button>
+              <button type="button" id="ef-tru-tab-out" class="tru-view-btn">Output</button>
+            </div>
+
+            <div id="ef-tru-input-panel">
+              <div class="section-label-row" style="margin-top:.3rem">
+                <div class="section-label" style="font-size:.65rem">Input Phase 1 (Primary)</div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:1.5"><label>Parent Item</label><select id="ef-tru-parent-0"></select></div>
+                <div class="form-group" style="flex:1.3"><label>Description</label><input id="ef-tru-desc-0" type="text"></div>
+                <div class="form-group" style="flex:0 0 85px"><label>Ref Des</label><input id="ef-tru-refdes-0" type="text" placeholder="optional"></div>
+              </div>
+              <div id="ef-tru-additional"></div>
+              <button type="button" id="ef-tru-addparent-btn" class="btn-default" style="margin:.2rem 0 .3rem;padding:.2rem .55rem;font-size:.75rem">+ Parent</button>
+
+              <div class="form-row">
+                <div class="form-group" style="flex:0 0 85px"><label>IN Volts</label><input id="ef-tru-in-volts" type="text" disabled></div>
+                <div class="form-group" style="flex:0 0 75px"><label>IN AC/DC</label><input id="ef-tru-in-acdc" type="text" disabled></div>
+              </div>
+
+              <div class="section-label-row" style="margin-top:.3rem">
+                <div class="section-label" style="font-size:.65rem">Capacity</div>
+                <button type="button" class="btn-reset" id="ef-tru-cap-reset" data-side="in" data-group="cap" data-ids="ef-tru-cap-total-a,ef-tru-cap-total-vaw,ef-tru-cap-phase-a,ef-tru-cap-phase-vaw">Reset</button>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label id="ef-tru-cap-total-a-lbl">Total Cap (A)</label><input id="ef-tru-cap-total-a" type="text" inputmode="decimal" placeholder="optional"></div>
+                <div class="form-group"><label id="ef-tru-cap-total-vaw-lbl">Total Cap (VA)</label><input id="ef-tru-cap-total-vaw" type="text" inputmode="decimal" placeholder="optional"></div>
+                <div class="form-group"><label id="ef-tru-cap-phase-a-lbl">Phase Cap (A)</label><input id="ef-tru-cap-phase-a" type="text" inputmode="decimal" placeholder="optional"></div>
+                <div class="form-group"><label id="ef-tru-cap-phase-vaw-lbl">Phase Cap (VA)</label><input id="ef-tru-cap-phase-vaw" type="text" inputmode="decimal" placeholder="optional"></div>
+              </div>
+
+              <div class="section-label-row" style="margin-top:.3rem">
+                <div class="section-label" style="font-size:.65rem">Existing Load</div>
+                <button type="button" class="btn-reset" id="ef-tru-ld-reset" data-side="in" data-group="ld" data-ids="ef-tru-ld-total-a,ef-tru-ld-total-vaw,ef-tru-ld-phase-a,ef-tru-ld-phase-vaw">Reset</button>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label id="ef-tru-ld-total-a-lbl">Total Load (A)</label><input id="ef-tru-ld-total-a" type="text" inputmode="decimal" value="0"></div>
+                <div class="form-group"><label id="ef-tru-ld-total-vaw-lbl">Total Load (VA)</label><input id="ef-tru-ld-total-vaw" type="text" inputmode="decimal" value="0"></div>
+                <div class="form-group"><label id="ef-tru-ld-phase-a-lbl">Phase Load (A)</label><input id="ef-tru-ld-phase-a" type="text" inputmode="decimal" value="0"></div>
+                <div class="form-group"><label id="ef-tru-ld-phase-vaw-lbl">Phase Load (VA)</label><input id="ef-tru-ld-phase-vaw" type="text" inputmode="decimal" value="0"></div>
+              </div>
+
+              <div class="section-label-row" style="margin-top:.3rem">
+                <div class="section-label" style="font-size:.65rem">Parameters</div>
+                <button type="button" class="btn-reset" data-ids="ef-tru-eff,ef-tru-convpf">Reset</button>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Efficiency (0.01–1.0)</label>
+                  <input id="ef-tru-eff" type="text" inputmode="decimal" value="0.85">
+                  <span id="ef-tru-eff-msg" class="field-error hidden">Must be between 0.01 and 1.0.</span>
+                </div>
+                <div class="form-group">
+                  <label>Conv. Power Factor</label>
+                  <input id="ef-tru-convpf" type="text" inputmode="decimal" value="0.95">
+                </div>
+              </div>
+            </div>
+
+            <div id="ef-tru-output-panel" class="hidden">
+              <div class="form-row">
+                <div class="form-group" style="flex:1.5"><label>Parent Item</label><input id="ef-tru-out-parent" type="text" disabled></div>
+                <div class="form-group" style="flex:1.3"><label>Description</label><input id="ef-tru-out-desc" type="text"></div>
+                <div class="form-group" style="flex:0 0 85px"><label>Ref Des</label><input id="ef-tru-out-refdes" type="text" placeholder="optional"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:0 0 85px"><label>OUT Volts</label><input id="ef-tru-out-volts" type="text" inputmode="decimal" placeholder="e.g. 28"></div>
+                <div class="form-group" style="flex:0 0 75px"><label>OUT AC/DC</label><input id="ef-tru-out-acdc" type="text" disabled></div>
+              </div>
+              <div class="section-label-row" style="margin-top:.3rem">
+                <div class="section-label" style="font-size:.65rem">Capacity</div>
+                <button type="button" class="btn-reset" id="ef-tru-out-cap-reset" data-side="out" data-group="cap" data-ids="ef-tru-out-cap-a,ef-tru-out-cap-vaw">Reset</button>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label id="ef-tru-out-cap-a-lbl">OUT Cap (A)</label><input id="ef-tru-out-cap-a" type="text" inputmode="decimal" placeholder="optional"></div>
+                <div class="form-group"><label id="ef-tru-out-cap-vaw-lbl">OUT Cap (W)</label><input id="ef-tru-out-cap-vaw" type="text" inputmode="decimal" placeholder="optional"></div>
+              </div>
+              <div class="section-label-row" style="margin-top:.3rem">
+                <div class="section-label" style="font-size:.65rem">Existing Load</div>
+                <button type="button" class="btn-reset" id="ef-tru-out-ld-reset" data-side="out" data-group="ld" data-ids="ef-tru-out-ld-a,ef-tru-out-ld-vaw">Reset</button>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label id="ef-tru-out-ld-a-lbl">OUT Load (A)</label><input id="ef-tru-out-ld-a" type="text" inputmode="decimal" value="0"></div>
+                <div class="form-group"><label id="ef-tru-out-ld-vaw-lbl">OUT Load (W)</label><input id="ef-tru-out-ld-vaw" type="text" inputmode="decimal" value="0"></div>
               </div>
             </div>
           </div>
@@ -3815,6 +3924,185 @@ function updateAfAcdcLock(parentId) {
   else acEl.disabled=false;
 }
 
+// ── TRU DUAL-PANE EDITOR (Revision 57, Phase 2) ────────────────────────────────
+// efConvView: which pane is currently showing ('in'|'out'). efTruAdditionalParents: draft-only
+// UI state for input phases 2/3 — {parentId,description,refDes,nodeId(existing node, or null if
+// this slot is new)} — nothing here touches state.nodes until Save; Cancel just discards it.
+let efConvView='in';
+let efTruAdditionalParents=[];
+
+// Additional-parent dropdown: constrained to AC siblings of the primary parent at the primary's
+// own voltage (source spec §1.1.3.1.2), excluding whichever other additional parents are already
+// chosen elsewhere in this draft (the currently-selected option for *this* dropdown stays offered
+// even though it's technically "already chosen" — excludeIds is every *other* slot's choice).
+function fillAdditionalParentSelect(selId,primaryParentId,excludeIds,selectedId) {
+  const sel=document.getElementById(selId);if (!sel) return;
+  sel.innerHTML='';
+  const blank=document.createElement('option');blank.value='';blank.textContent='— Select Parent —';
+  if (!selectedId) blank.selected=true;
+  sel.appendChild(blank);
+  const primaryParent=primaryParentId?state.nodes[primaryParentId]:null;
+  if (!primaryParent) return;
+  const sibs=primaryParent.parentId?children(primaryParent.parentId,state.nodes)
+    :state.rootIds.map(id=>state.nodes[id]).filter(Boolean);
+  const excluded=new Set(excludeIds||[]);
+  sibs.forEach(sn=>{
+    if (!sn||sn.id===primaryParentId) return;
+    if (isLoad(sn.type)||sn.status==='removed') return;
+    if (sn.acDc!=='ac'||sn.voltage!==primaryParent.voltage) return;
+    if (excluded.has(sn.id)&&sn.id!==selectedId) return;
+    const o=document.createElement('option');o.value=sn.id;
+    o.textContent=(sn.description||'unnamed')+(sn.refDes?` [${sn.refDes}]`:'');
+    if (sn.id===selectedId) o.selected=true;
+    sel.appendChild(o);
+  });
+}
+
+function efTruNInputs() { return 1+efTruAdditionalParents.length; }
+
+// Rebuilds the additional-parent rows (slots 2/3) from efTruAdditionalParents, and the +Parent
+// button's own visibility (hidden once 2 additional parents exist — 3 inputs total, the spec's
+// cap). Called after every add/remove/parent-selection so the constraint dropdowns always reflect
+// the other slots' current picks.
+function efTruRenderAdditionalParents() {
+  const wrap=document.getElementById('ef-tru-additional');
+  const primaryParentId=document.getElementById('ef-tru-parent-0').value||null;
+  wrap.innerHTML=efTruAdditionalParents.map((slot,i)=>{
+    const idx=i+1;
+    const label=idx===1?'Input Phase 2':'Input Phase 3';
+    return `<div class="section-label-row" style="margin-top:.3rem">
+        <div class="section-label" style="font-size:.65rem">${label}</div>
+      </div>
+      <div class="form-row tru-parent-row" data-idx="${idx}">
+        <button type="button" class="tru-parent-remove" data-idx="${idx}" title="Remove this input phase">✕</button>
+        <div class="form-group" style="flex:1.5"><label>Parent Item</label><select id="ef-tru-parent-${idx}"></select></div>
+        <div class="form-group" style="flex:1.3"><label>Description</label><input id="ef-tru-desc-${idx}" type="text" value="${esc(slot.description||'')}"></div>
+        <div class="form-group" style="flex:0 0 85px"><label>Ref Des</label><input id="ef-tru-refdes-${idx}" type="text" placeholder="optional" value="${esc(slot.refDes||'')}"></div>
+      </div>`;
+  }).join('');
+  efTruAdditionalParents.forEach((slot,i)=>{
+    const idx=i+1;
+    const others=efTruAdditionalParents.filter((_,j)=>j!==i).map(s=>s.parentId).filter(Boolean);
+    fillAdditionalParentSelect(`ef-tru-parent-${idx}`,primaryParentId,others,slot.parentId);
+    document.getElementById(`ef-tru-parent-${idx}`).onchange=e=>{
+      efTruAdditionalParents[i].parentId=e.target.value||null;
+      efTruRenderAdditionalParents();
+    };
+    document.getElementById(`ef-tru-desc-${idx}`).oninput=e=>{ efTruAdditionalParents[i].description=e.target.value; };
+    document.getElementById(`ef-tru-refdes-${idx}`).oninput=e=>{ efTruAdditionalParents[i].refDes=e.target.value; };
+  });
+  wrap.querySelectorAll('.tru-parent-remove').forEach(btn=>{
+    btn.onclick=()=>efTruRemoveParent(+btn.dataset.idx-1);
+  });
+  document.getElementById('ef-tru-addparent-btn').classList.toggle('hidden',efTruAdditionalParents.length>=2);
+}
+
+function efTruAddParent() {
+  if (efTruAdditionalParents.length>=2) return;
+  const suffix=efTruAdditionalParents.length===0?' B':' C';
+  const primaryDesc=document.getElementById('ef-tru-desc-0').value||'';
+  const primaryRefDes=document.getElementById('ef-tru-refdes-0').value||'';
+  efTruAdditionalParents.push({parentId:null,description:primaryDesc+suffix,refDes:primaryRefDes,nodeId:null});
+  efTruRenderAdditionalParents();
+}
+function efTruRemoveParent(i) {
+  efTruAdditionalParents.splice(i,1);
+  efTruRenderAdditionalParents();
+}
+
+function efTruSwitchView(view) {
+  efConvView=view;
+  document.getElementById('ef-tru-tab-in').classList.toggle('active',view==='in');
+  document.getElementById('ef-tru-tab-out').classList.toggle('active',view==='out');
+  document.getElementById('ef-tru-input-panel').classList.toggle('hidden',view!=='in');
+  document.getElementById('ef-tru-output-panel').classList.toggle('hidden',view!=='out');
+  // Source spec §1.1.4: Delete/Duplicate hidden while viewing Output — only meaningful for a TRU
+  // (openEdit re-applies its own del/duplicate visibility for every other type on each open, so
+  // this only needs to run while the TRU section is actually active).
+  const n=mNode?state.nodes[mNode]:null;
+  if (n&&n.type==='TRU'&&n.convRole) {
+    const isRoot=state.rootIds.includes(mNode);
+    document.getElementById('btn-del').classList.toggle('hidden',view==='out'||(isRoot&&state.rootIds.length<=1));
+    document.getElementById('btn-duplicate').style.display=view==='out'?'none':'';
+  }
+}
+
+// Cross-derives a Total/Phase A+VAW(W) field mesh (4 fields, one cycle: totalA-totalVAW via
+// voltage, totalVAW-phaseVAW via nInputs, phaseVAW-phaseA via voltage, phaseA-totalA via
+// nInputs) — fills only whichever neighbor is still blank on blur, same convention as the
+// existing efAttachDcDerive/efAttachAcCapDerive helpers elsewhere in this dialog.
+function efAttachTotalPhaseDerive(totalAId,totalVAWId,phaseAId,phaseVAWId,nInputsGetter) {
+  const totalA=document.getElementById(totalAId),totalVAW=document.getElementById(totalVAWId);
+  const phaseA=document.getElementById(phaseAId),phaseVAW=document.getElementById(phaseVAWId);
+  const getV=()=>parseF(document.getElementById('ef-tru-in-volts').value)||0;
+  totalA.addEventListener('blur',()=>{
+    const a=parseF(totalA.value),n=nInputsGetter();
+    if (a===null) return;
+    if (phaseA.value==='') phaseA.value=fmtPField(a/n);
+    const v=getV(); if (v>0&&totalVAW.value==='') totalVAW.value=fmtPField(a*v);
+  });
+  totalVAW.addEventListener('blur',()=>{
+    const vaw=parseF(totalVAW.value),n=nInputsGetter();
+    if (vaw===null) return;
+    if (phaseVAW.value==='') phaseVAW.value=fmtPField(vaw/n);
+    const v=getV(); if (v>0&&totalA.value==='') totalA.value=fmtPField(vaw/v);
+  });
+  phaseA.addEventListener('blur',()=>{
+    const a=parseF(phaseA.value),n=nInputsGetter();
+    if (a===null) return;
+    if (totalA.value==='') totalA.value=fmtPField(a*n);
+    const v=getV(); if (v>0&&phaseVAW.value==='') phaseVAW.value=fmtPField(a*v);
+  });
+  phaseVAW.addEventListener('blur',()=>{
+    const vaw=parseF(phaseVAW.value),n=nInputsGetter();
+    if (vaw===null) return;
+    if (totalVAW.value==='') totalVAW.value=fmtPField(vaw*n);
+    const v=getV(); if (v>0&&phaseA.value==='') phaseA.value=fmtPField(vaw/v);
+  });
+}
+
+// Fully resolves a Total/Phase pair to the authoritative per-node Phase value (what actually gets
+// stored on every input node) — used by Calculate and Save, where a one-shot full resolution is
+// needed rather than blur-time partial fills. Priority: an entered Phase value wins over Total (a
+// direct per-phase entry is the more specific of the two); Total is only converted down to Phase
+// when no Phase value was given at all. Cross-derives A<->VAW within whichever pair is
+// authoritative via the input voltage (input side is always AC, so this is a simple A*V<->VA
+// relationship, same as the rest of this app's AC capacity fields).
+function efResolveTruPhaseValue(totalA,totalVAW,phaseA,phaseVAW,nInputs,voltage) {
+  let pa=phaseA,pv=phaseVAW;
+  if (pa===null&&pv===null) {
+    if (totalA!==null) pa=totalA/nInputs;
+    else if (totalVAW!==null) pv=totalVAW/nInputs;
+  }
+  if (pa===null&&pv!==null&&voltage>0) pa=pv/voltage;
+  if (pv===null&&pa!==null&&voltage>0) pv=pa*voltage;
+  return {phaseA:pa,phaseVAW:pv};
+}
+
+// Revision 57 (Phase 2): TRU Capacity/Existing Load Reset buttons — always blanks the side that
+// was clicked, then prompts (source spec §1.1.2.3.1) whether to also blank the other side.
+function efTruWireResetPrompts() {
+  const wireOne=(btnId,ownIds,offSideMsg,offSideIds)=>{
+    const btn=document.getElementById(btnId);if (!btn) return;
+    btn.onclick=()=>{
+      ownIds.forEach(id=>{const el=document.getElementById(id);if (el) el.value='';});
+      if (confirm(offSideMsg)) offSideIds.forEach(id=>{const el=document.getElementById(id);if (el) el.value='';});
+    };
+  };
+  wireOne('ef-tru-cap-reset',
+    ['ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw'],
+    'Reset OUT capacity values too?',['ef-tru-out-cap-a','ef-tru-out-cap-vaw']);
+  wireOne('ef-tru-ld-reset',
+    ['ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw'],
+    'Reset OUT existing load values too?',['ef-tru-out-ld-a','ef-tru-out-ld-vaw']);
+  wireOne('ef-tru-out-cap-reset',['ef-tru-out-cap-a','ef-tru-out-cap-vaw'],
+    'Reset IN capacity values (all input phases)?',
+    ['ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw']);
+  wireOne('ef-tru-out-ld-reset',['ef-tru-out-ld-a','ef-tru-out-ld-vaw'],
+    'Reset IN existing load values (all input phases)?',
+    ['ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw']);
+}
+
 function efReshow() {
   const n=mNode&&state.nodes[mNode]?state.nodes[mNode]:null;
   const cr=n?n.convRole:null;
@@ -3925,6 +4213,10 @@ function reconcileConvGroups(idMap) {
 
 function efShowSections(type,convRole,status,hasChildren,acDc) {
   const isConvPair=!!convRole;
+  // Revision 57 (Phase 2): TRU specifically gets the new dual-pane group editor; every other
+  // conversion type (currently unreachable via the UI — SELECTABLE_CONVERSION_TYPES=['TRU'] — but
+  // still possible in an old save) keeps the pre-existing unified single-view section unchanged.
+  const isTru=isConvPair&&type==='TRU';
   const dc=acDc!=='ac';
   // The top-level Volts/AC-DC row shows/edits whichever specific node the dialog happened to
   // open on, which made the dialog behave differently depending on IN vs OUT (Round 3 report);
@@ -3932,10 +4224,16 @@ function efShowSections(type,convRole,status,hasChildren,acDc) {
   // both sides consistently, so the generic row is redundant (and would risk two editable
   // fields for the same OUT voltage) for these items specifically.
   document.getElementById('ef-voltage-row').classList.toggle('hidden',isConvPair);
+  // TRU's own Parent/Description/Ref Des are edited per-side inside ef-sec-tru instead (source
+  // spec §1.1.2) — the generic top-level fields would otherwise only ever reflect whichever
+  // specific node (in/additional-in/out) the dialog happened to open on.
+  document.getElementById('ef-parent-group').classList.toggle('hidden',isTru);
+  document.getElementById('ef-desc-row'    ).classList.toggle('hidden',isTru);
   document.getElementById('ef-sec-cap'      ).classList.toggle('hidden',isLoad(type)||isConvPair);
   document.getElementById('ef-sec-load'     ).classList.toggle('hidden',!isLoad(type));
   document.getElementById('ef-sec-conv'     ).classList.toggle('hidden',!isConv(type)||isConvPair);
-  document.getElementById('ef-sec-conv-pair').classList.toggle('hidden',!isConvPair);
+  document.getElementById('ef-sec-conv-pair').classList.toggle('hidden',!isConvPair||isTru);
+  document.getElementById('ef-sec-tru'      ).classList.toggle('hidden',!isTru);
   document.getElementById('ef-cap-dc'       ).classList.toggle('hidden',!dc);
   document.getElementById('ef-cap-ac'       ).classList.toggle('hidden', dc);
   document.getElementById('ef-exld-dc'      ).classList.toggle('hidden',!dc);
@@ -3990,7 +4288,7 @@ function doEditCalculate() {
   }
 
   const n=mNode?state.nodes[mNode]:null;
-  if (n&&n.convRole) {
+  if (n&&n.convRole&&n.type!=='TRU') {
     // Conversion pair (Capacity, Existing Load): same cross-derivation calcConvPairRow uses
     // for Save, applied here too so Calculate and Save behave identically (Revision 27
     // Calculate & Save modification's own precedent) — previously this was a complete no-op.
@@ -4011,6 +4309,46 @@ function doEditCalculate() {
     const ldRow=calcConvPairRow(getV('ef-in-ld-a'),getV('ef-in-ld-vaw'),getV('ef-out-ld-a'),getV('ef-out-ld-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
     setIfEmpty('ef-in-ld-a',ldRow.in.a);setIfEmpty('ef-in-ld-vaw',ldRow.in.vaw);
     setIfEmpty('ef-out-ld-a',ldRow.out.a);setIfEmpty('ef-out-ld-vaw',ldRow.out.vaw);
+  } else if (n&&n.convRole&&n.type==='TRU') {
+    // Revision 57 (Phase 2): resolves the Total/Phase mesh on the input side (§1.1.3.5) and
+    // cross-derives IN<->OUT via calcConvPairRow, same as the old path — but which side is
+    // "active" (fill-blanks-only) vs "off-side" (prompt before overwriting, §1.1.2.4.1) depends
+    // on which tab is currently showing (efConvView), not which physical node was clicked to
+    // open the dialog.
+    const inAcDc=CONV_IN_ACDC.TRU, outAcDc=CONV_OUT_ACDC.TRU;
+    const inV=parseF(document.getElementById('ef-tru-in-volts').value)||0;
+    const outV=getV('ef-tru-out-volts')??inV;
+    const eff=getV('ef-tru-eff')||0.85;
+    const cpf=getV('ef-tru-convpf')||1.0;
+    const nInputs=efTruNInputs();
+    const setForce=(id,val)=>{if(val===null||val===undefined)return;const el=g(id);if(el)el.value=fmtPField(val)??'';};
+
+    const truCalcRow=(totalAId,totalVAWId,phaseAId,phaseVAWId,outAId,outVAWId,offsideMsg)=>{
+      // Feeds the *combined total* across all inputs into calcConvPairRow (not a single phase's
+      // value) — matches calcNC's own outW/efficiency/nInputs relationship (Phase 1); a single
+      // phase's value alone would understate the derived OUT side by a factor of nInputs.
+      const resolved=efResolveTruPhaseValue(getV(totalAId),getV(totalVAWId),getV(phaseAId),getV(phaseVAWId),nInputs,inV);
+      const totalInA=resolved.phaseA!=null?resolved.phaseA*nInputs:null;
+      const totalInVAW=resolved.phaseVAW!=null?resolved.phaseVAW*nInputs:null;
+      const row=calcConvPairRow(totalInA,totalInVAW,getV(outAId),getV(outVAWId),inAcDc,outAcDc,inV,outV,eff,cpf);
+      const rowInPhaseA=row.in.a!=null?row.in.a/nInputs:null;
+      const rowInPhaseVAW=row.in.vaw!=null?row.in.vaw/nInputs:null;
+      if (efConvView==='in') {
+        setIfEmpty(phaseAId,rowInPhaseA);setIfEmpty(phaseVAWId,rowInPhaseVAW);
+        setIfEmpty(totalAId,row.in.a);setIfEmpty(totalVAWId,row.in.vaw);
+        if ((row.out.a!=null||row.out.vaw!=null)&&confirm(offsideMsg)) { setForce(outAId,row.out.a);setForce(outVAWId,row.out.vaw); }
+      } else {
+        setIfEmpty(outAId,row.out.a);setIfEmpty(outVAWId,row.out.vaw);
+        if ((row.in.a!=null||row.in.vaw!=null)&&confirm(offsideMsg)) {
+          setForce(phaseAId,rowInPhaseA);setForce(phaseVAWId,rowInPhaseVAW);
+          setForce(totalAId,row.in.a);setForce(totalVAWId,row.in.vaw);
+        }
+      }
+    };
+    truCalcRow('ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw','ef-tru-out-cap-a','ef-tru-out-cap-vaw',
+      efConvView==='in'?'Recalculate OUT capacity values?':'Recalculate IN capacity values (all input phases)?');
+    truCalcRow('ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw','ef-tru-out-ld-a','ef-tru-out-ld-vaw',
+      efConvView==='in'?'Recalculate OUT existing load values?':'Recalculate IN existing load values (all input phases)?');
   } else if (acDc==='ac') {
     // AC cap: A ↔ VA
     const ca=getV('ef-cap-a2'),cva=getV('ef-cap-va');
@@ -4120,8 +4458,8 @@ function openEdit(nodeId) {
   // Old-style conv efficiency
   document.getElementById('ef-eff').value=n.efficiency!==undefined?n.efficiency:0.85;
 
-  // Conv-pair fields
-  if (n.convRole) {
+  // Conv-pair fields (non-TRU only — TRU uses the dual-pane populator below)
+  if (n.convRole&&n.type!=='TRU') {
     const paired=findPairedNode(n);
     const eff=(n.convRole==='in'?n.efficiency:(paired?.efficiency??0.85))||0.85;
     const cpf=(n.convRole==='in'?n.convPf:(paired?.convPf??1.0))||1.0;
@@ -4167,6 +4505,78 @@ function openEdit(nodeId) {
     document.getElementById('ef-convpf-group').classList.toggle('hidden',!showCpf);
   }
 
+  // Revision 57 (Phase 2): TRU dual-pane group population — resolves the whole group (up to 3
+  // inputs + 1 output) via convGroupId rather than findPairedNode's single-pair structural
+  // lookup, so it works correctly regardless of how many input phases already exist or which
+  // specific group member the dialog happened to open on.
+  if (n.convRole&&n.type==='TRU') {
+    const group=findConversionGroup(n)||
+      {inputs:n.convRole==='in'?[n]:[],output:n.convRole==='out'?n:null};
+    const primary=group.inputs[0]||n;
+    const additional=group.inputs.slice(1);
+    const outNode=group.output;
+    const inAcDc=CONV_IN_ACDC.TRU, outAcDc=CONV_OUT_ACDC.TRU;
+    const nInputs=group.inputs.length||1;
+
+    fillParentSelect('ef-tru-parent-0',primary.id,primary.parentId);
+    document.getElementById('ef-tru-parent-0').onchange=()=>efTruRenderAdditionalParents();
+    document.getElementById('ef-tru-desc-0').value=primary.description||'';
+    document.getElementById('ef-tru-refdes-0').value=primary.refDes||'';
+
+    efTruAdditionalParents=additional.map(inp=>(
+      {parentId:inp.parentId,description:inp.description||'',refDes:inp.refDes||'',nodeId:inp.id}));
+    efTruRenderAdditionalParents();
+
+    document.getElementById('ef-tru-in-volts').value=fmtPField(primary.voltage);
+    document.getElementById('ef-tru-in-acdc').value=inAcDc.toUpperCase();
+
+    const capUnit=inAcDc==='ac'?'VA':'W';
+    document.getElementById('ef-tru-cap-total-vaw-lbl').textContent=`Total Cap (${capUnit})`;
+    document.getElementById('ef-tru-cap-phase-vaw-lbl').textContent=`Phase Cap (${capUnit})`;
+    const phaseCapA=primary.capacity?.a??null, phaseCapVAW=primary.capacity?.va??null;
+    document.getElementById('ef-tru-cap-phase-a').value  =fmtPField(phaseCapA);
+    document.getElementById('ef-tru-cap-phase-vaw').value=fmtPField(phaseCapVAW);
+    document.getElementById('ef-tru-cap-total-a').value  =fmtPField(phaseCapA!==null?phaseCapA*nInputs:null);
+    document.getElementById('ef-tru-cap-total-vaw').value=fmtPField(phaseCapVAW!==null?phaseCapVAW*nInputs:null);
+
+    document.getElementById('ef-tru-ld-total-vaw-lbl').textContent=`Total Load (${capUnit})`;
+    document.getElementById('ef-tru-ld-phase-vaw-lbl').textContent=`Phase Load (${capUnit})`;
+    const phaseLdA=primary.existingLoad?.a??0, phaseLdVAW=primary.existingLoad?.va??0;
+    document.getElementById('ef-tru-ld-phase-a').value  =fmtPField(phaseLdA);
+    document.getElementById('ef-tru-ld-phase-vaw').value=fmtPField(phaseLdVAW);
+    document.getElementById('ef-tru-ld-total-a').value  =fmtPField(phaseLdA*nInputs);
+    document.getElementById('ef-tru-ld-total-vaw').value=fmtPField(phaseLdVAW*nInputs);
+
+    document.getElementById('ef-tru-eff').value=primary.efficiency??0.85;
+    document.getElementById('ef-tru-convpf').value=primary.convPf??0.95;
+
+    document.getElementById('ef-tru-out-parent').value=primary.description||'';
+    document.getElementById('ef-tru-out-desc').value=outNode?.description||'';
+    document.getElementById('ef-tru-out-refdes').value=outNode?.refDes||'';
+    document.getElementById('ef-tru-out-volts').value=fmtPField(outNode?.voltage);
+    document.getElementById('ef-tru-out-acdc').value=outAcDc.toUpperCase();
+    const outUnit=outAcDc==='ac'?'VA':'W';
+    document.getElementById('ef-tru-out-cap-a-lbl').textContent='OUT Cap (A)';
+    document.getElementById('ef-tru-out-cap-vaw-lbl').textContent=`OUT Cap (${outUnit})`;
+    document.getElementById('ef-tru-out-ld-a-lbl').textContent='OUT Load (A)';
+    document.getElementById('ef-tru-out-ld-vaw-lbl').textContent=`OUT Load (${outUnit})`;
+    document.getElementById('ef-tru-out-cap-a').value=fmtPField(outNode?.capacity?.a);
+    document.getElementById('ef-tru-out-cap-vaw').value=
+      fmtPField(outAcDc==='ac'?outNode?.capacity?.va:outNode?.capacity?.w);
+    document.getElementById('ef-tru-out-ld-a').value=fmtPField(outNode?.existingLoad?.a??0);
+    document.getElementById('ef-tru-out-ld-vaw').value=
+      fmtPField((outAcDc==='ac'?outNode?.existingLoad?.va:outNode?.existingLoad?.w)??0);
+
+    document.getElementById('ef-tru-eff-msg').classList.add('hidden');
+    document.getElementById('ef-tru-addparent-btn').onclick=efTruAddParent;
+    document.getElementById('ef-tru-tab-in').onclick =()=>efTruSwitchView('in');
+    document.getElementById('ef-tru-tab-out').onclick=()=>efTruSwitchView('out');
+    efTruSwitchView(n.convRole==='out'?'out':'in');
+
+    efAttachTotalPhaseDerive('ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw',efTruNInputs);
+    efAttachTotalPhaseDerive('ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw',efTruNInputs);
+  }
+
   document.getElementById('ef-loadval-msg').classList.add('hidden');
   document.getElementById('ef-eff-msg').classList.add('hidden');
   document.getElementById('ef-conv-pair-eff-msg').classList.add('hidden');
@@ -4191,6 +4601,10 @@ function openEdit(nodeId) {
       });
     };
   });
+  // Revision 57 (Phase 2): TRU's own Capacity/Existing Load Reset buttons override the generic
+  // blank-only wiring above with the source spec's cross-side confirmation (§1.1.2.3.1) — must
+  // run after the generic pass so this wins, not the other way around.
+  if (n.convRole&&n.type==='TRU') efTruWireResetPrompts();
 
   // Show Calculate button in edit mode
   document.getElementById('btn-calculate').style.display='';
@@ -4211,12 +4625,174 @@ function openEdit(nodeId) {
 
   document.getElementById('btn-save').disabled=false;
   document.getElementById('modal-overlay').classList.remove('hidden');
-  document.getElementById('ef-desc').focus();
+  if (n.convRole&&n.type==='TRU') document.getElementById('ef-tru-desc-0').focus();
+  else document.getElementById('ef-desc').focus();
+}
+
+// Revision 57 (Phase 2): TRU save path — reconciles the whole group (primary + up to 2
+// additional input phases + output) from the dual-pane dialog's fields. Bypasses doEditSave's
+// generic single-node logic entirely (parent/description/capacity/load all mean something
+// different here — per-side/per-parent, not a single node's own fields).
+function doEditSaveTru(n) {
+  const eff=+document.getElementById('ef-tru-eff').value;
+  if (isNaN(eff)||eff<=0||eff>1) { document.getElementById('ef-tru-eff-msg').classList.remove('hidden'); return; }
+  document.getElementById('ef-tru-eff-msg').classList.add('hidden');
+  const cpf=+document.getElementById('ef-tru-convpf').value||1.0;
+
+  const group=findConversionGroup(n)||{inputs:n.convRole==='in'?[n]:[],output:n.convRole==='out'?n:null};
+  const primary=group.inputs[0]||n;
+  const outNode=group.output;
+  const existingAdditional=group.inputs.slice(1);
+
+  const pF=id=>{const el=document.getElementById(id);return el?parseF(evalFormula(el.value.trim())):null;};
+  const status=document.getElementById('ef-status').value;
+
+  const newPrimaryParentId=document.getElementById('ef-tru-parent-0').value||null;
+  const primaryDesc=document.getElementById('ef-tru-desc-0').value.trim();
+  const primaryRefDes=document.getElementById('ef-tru-refdes-0').value.trim();
+
+  // Reparent primary if changed — mirrors the generic path's shared-peer guard/mirror (scoped to
+  // primary only; additional inputs/output don't participate in cross-analysis reparent
+  // mirroring in this first multi-phase pass, consistent with TRU Share/Unshare behavior being
+  // explicitly frozen as-is for this round).
+  if (newPrimaryParentId!==primary.parentId) {
+    if (primary.sharedPeerId) {
+      const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+      const other=state.analyses[otherId];
+      const peer=other&&other.nodes[primary.sharedPeerId];
+      const newParentNode=newPrimaryParentId?state.nodes[newPrimaryParentId]:null;
+      const newParentPeerId=newPrimaryParentId?(newParentNode&&newParentNode.sharedPeerId):null;
+      if (newPrimaryParentId&&!newParentPeerId) {
+        alert(`Can't move this item here — "${newParentNode?newParentNode.description||'unnamed':'the new parent'}" isn't shared with ${other?other.label:'the other analysis'}. Share it first, or unshare this item, before moving it.`);
+        return;
+      }
+      if (peer) {
+        const curId=state.currentAnalysis;
+        state.currentAnalysis=otherId;
+        detachChild(primary.sharedPeerId,peer.parentId);
+        attachChild(primary.sharedPeerId,newParentPeerId||null);
+        state.currentAnalysis=curId;
+        peer.parentId=newParentPeerId||null;
+      }
+    }
+    detachChild(primary.id,primary.parentId);
+    attachChild(primary.id,newPrimaryParentId);
+    primary.parentId=newPrimaryParentId;
+  }
+  const primaryParentNode=newPrimaryParentId?state.nodes[newPrimaryParentId]:null;
+  if (primaryParentNode) primary.voltage=primaryParentNode.voltage;
+  primary.description=primaryDesc;
+  primary.refDes=primaryRefDes;
+
+  // Reconcile additional input slots (efTruAdditionalParents, draft UI state built by
+  // efTruAddParent/efTruRemoveParent) against the real group members: update existing nodes,
+  // create new ones for slots that don't have a nodeId yet, and remove real nodes whose slot was
+  // deleted in this edit session. A slot with no parent chosen is treated as never really added.
+  const inV=primary.voltage;
+  const keepSlots=efTruAdditionalParents.filter(s=>s.parentId);
+  const keptNodeIds=new Set();
+  const activeInputNodes=[primary];
+  keepSlots.forEach((slot,i)=>{
+    let node;
+    if (slot.nodeId&&state.nodes[slot.nodeId]) {
+      node=state.nodes[slot.nodeId];
+      if (node.parentId!==slot.parentId) { detachChild(node.id,node.parentId); attachChild(node.id,slot.parentId); node.parentId=slot.parentId; }
+    } else {
+      const newId=addNode(slot.parentId,{type:'TRU',status,convRole:'in',convGroupId:primary.convGroupId,
+        acDc:CONV_IN_ACDC.TRU,voltage:inV,netChangeOverride:null});
+      node=state.nodes[newId];
+    }
+    node.description=slot.description||'';
+    node.refDes=slot.refDes||'';
+    node.phaseOrder=i+1;
+    keptNodeIds.add(node.id);
+    activeInputNodes.push(node);
+  });
+  // Group-aware delNode() would cascade the *whole* remaining group — not what's wanted here
+  // (removing one phase from an otherwise-intact group) — so this detaches/deletes just the one
+  // dropped node directly, same as delNode's own leaf-node case internally.
+  existingAdditional.forEach(oldNode=>{
+    if (keptNodeIds.has(oldNode.id)) return;
+    if (oldNode.sharedPeerId) {
+      const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+      const peer=state.analyses[otherId]&&state.analyses[otherId].nodes[oldNode.sharedPeerId];
+      if (peer) peer.sharedPeerId=null;
+    }
+    detachChild(oldNode.id,oldNode.parentId);
+    delete state.nodes[oldNode.id];
+  });
+
+  const nInputs=activeInputNodes.length;
+  const outAcDc=CONV_OUT_ACDC.TRU, inAcDc=CONV_IN_ACDC.TRU;
+  const outV=pF('ef-tru-out-volts')??(outNode?.voltage||inV);
+
+  // Same cross-derivation calcConvPairRow uses everywhere else in this app (Save behaves like
+  // Calculate then commit — Revision 27 Follow-up precedent) — but calcConvPairRow's IN<->OUT
+  // efficiency-based derivation is inherently a *total*-input-to-output relationship (matches
+  // calcNC's own outW/efficiency/nInputs formula from Phase 1), so the Total/Phase mesh must be
+  // resolved to phase, scaled UP to the combined total across all inputs, run through
+  // calcConvPairRow as "in", then scaled back DOWN to phase for storage on each input node —
+  // feeding a single phase's value in directly would understate OUT's derived capacity/load by
+  // a factor of nInputs whenever OUT itself was blank.
+  const capPhase=efResolveTruPhaseValue(pF('ef-tru-cap-total-a'),pF('ef-tru-cap-total-vaw'),
+    pF('ef-tru-cap-phase-a'),pF('ef-tru-cap-phase-vaw'),nInputs,inV);
+  const capTotalA=capPhase.phaseA!=null?capPhase.phaseA*nInputs:null;
+  const capTotalVAW=capPhase.phaseVAW!=null?capPhase.phaseVAW*nInputs:null;
+  const capRow=calcConvPairRow(capTotalA,capTotalVAW,pF('ef-tru-out-cap-a'),pF('ef-tru-out-cap-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
+  const capInPhaseA=capRow.in.a!=null?capRow.in.a/nInputs:null;
+  const capInPhaseVAW=capRow.in.vaw!=null?capRow.in.vaw/nInputs:null;
+
+  const ldPhase=efResolveTruPhaseValue(pF('ef-tru-ld-total-a'),pF('ef-tru-ld-total-vaw'),
+    pF('ef-tru-ld-phase-a'),pF('ef-tru-ld-phase-vaw'),nInputs,inV);
+  const ldTotalA=ldPhase.phaseA!=null?ldPhase.phaseA*nInputs:null;
+  const ldTotalVAW=ldPhase.phaseVAW!=null?ldPhase.phaseVAW*nInputs:null;
+  const ldRow=calcConvPairRow(ldTotalA,ldTotalVAW,pF('ef-tru-out-ld-a'),pF('ef-tru-out-ld-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
+  const ldInPhaseA=ldRow.in.a!=null?ldRow.in.a/nInputs:null;
+  const ldInPhaseVAW=ldRow.in.vaw!=null?ldRow.in.vaw/nInputs:null;
+
+  const capForInputs=(capInPhaseA==null&&capInPhaseVAW==null)?null:{w:null,var:null,va:capInPhaseVAW,a:capInPhaseA,pf:null};
+  const ldForInputsVAW=ldInPhaseVAW??0;
+  const ldForInputsW=ldForInputsVAW*cpf;
+  const ldForInputsVAR=Math.sqrt(Math.max(0,ldForInputsVAW*ldForInputsVAW-ldForInputsW*ldForInputsW));
+  const ldForInputs={va:ldForInputsVAW,w:ldForInputsW,var:ldForInputsVAR,a:ldInPhaseA??(inV>0?ldForInputsVAW/inV:null),pf:cpf};
+  const capForOutput=(capRow.out.a==null&&capRow.out.vaw==null)?null:{w:capRow.out.vaw,var:null,va:null,a:capRow.out.a,pf:null};
+  const ldOutVAW=ldRow.out.vaw??0;
+  const ldForOutput={w:ldOutVAW,a:ldRow.out.a??(outV>0?ldOutVAW/outV:null),va:null,var:null,pf:null};
+
+  activeInputNodes.forEach(node=>{
+    node.status=status;
+    node.capacity=capForInputs?{...capForInputs}:null;
+    node.existingLoad={...ldForInputs};
+    node.efficiency=eff;
+    node.convPf=cpf;
+    node.netChangeOverride=null;
+    syncSharedFields(node);
+  });
+  if (outNode) {
+    if (outNode.parentId!==primary.id) { detachChild(outNode.id,outNode.parentId); attachChild(outNode.id,primary.id); }
+    outNode.parentId=primary.id;
+    outNode.status=status;
+    outNode.description=document.getElementById('ef-tru-out-desc').value.trim();
+    outNode.refDes=document.getElementById('ef-tru-out-refdes').value.trim();
+    outNode.voltage=outV;
+    outNode.capacity=capForOutput;
+    outNode.existingLoad=ldForOutput;
+    outNode.netChangeOverride=null;
+    syncSharedFields(outNode);
+  }
+
+  if (state.nodes[mNode]) {
+    state.nodes[mNode].rowNotes=collectEfNotes();
+    state.nodes[mNode].rowRefs=collectEfRefs();
+  }
+
+  recalc();persist();renderAll();closeModal();
 }
 
 function doEditSave() {
   const type=document.getElementById('ef-type').value;
   const n=state.nodes[mNode];
+  if (n.convRole&&n.type==='TRU') { doEditSaveTru(n); return; }
   if (isConv(type)&&!n.convRole) {
     const eff=+document.getElementById('ef-eff').value;
     if (isNaN(eff)||eff<=0||eff>1){document.getElementById('ef-eff-msg').classList.remove('hidden');return;}
