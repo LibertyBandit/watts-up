@@ -1936,8 +1936,24 @@ function ncHtml(nc,acDc,hidden) {
   return `<span class="node-nc ${cls}"${vis}>${sign}${fmtN(val)} ${unit}</span>`;
 }
 
+// Revision 57 (Phase 3): a TRU's output node is displayed as a child of whichever input phase
+// currently has the highest phaseOrder (source spec §2.2) — purely a rendering placement, never
+// touching the node's real parentId (which always stays the primary input, per the Phase 2
+// decision to avoid rippling into subtree()/branch filters/duplicate-delete/recalc on every
+// phase reorder). Falls back to the node's real structural children for every non-TRU node and
+// for a single-input TRU (where "last input" already IS the primary — no relocation needed).
+function treeDisplayKids(node,nodes) {
+  const kids=children(node.id,nodes);
+  if (!node.convRole||node.type!=='TRU') return kids;
+  const group=findConversionGroup(node,nodes);
+  if (!group||!group.output||group.inputs.length<2) return kids;
+  const primary=group.inputs[0], lastInput=group.inputs[group.inputs.length-1];
+  if (node.id===primary.id)   return kids.filter(k=>k.id!==group.output.id);
+  if (node.id===lastInput.id) return [...kids,group.output];
+  return kids;
+}
 function buildTreeLi(node,nodes) {
-  const kids=children(node.id,nodes); const hasKids=kids.length>0;
+  const kids=treeDisplayKids(node,nodes); const hasKids=kids.length>0;
   const li=document.createElement('li'); li.dataset.nid=node.id;
   const toggleCls=hasKids?'toggle-btn'+(collapsed.has(node.id)?' is-collapsed':''):'toggle-btn leaf';
   const descCls=node.status==='removed'?'node-desc removed-text':'node-desc';

@@ -3282,6 +3282,52 @@ gating. Full tab sweep, no console errors. Test data removed after verification.
 than one input phase currently has no way to be created or viewed as such outside the Edit dialog
 itself (no tree node per phase, no grid row per phase yet).
 
+## 59. Revision 57 (Phase 3) — TRU Multi-Phase Input: Power Distribution Tree
+
+*Last updated: 2026-08-17*
+
+Third phase of Revision 57. Turned out to be much smaller than originally scoped once actually
+traced through: since Phase 1 and 2 already create/manage every input phase as a real, independent
+tree node (its own real `parentId` under its own real bus), most of the source spec's tree
+requirements (§2.1 "a node for each input phase under its associated parent," §2.1.1's up/down
+reorder and Edit-to-Input-view, §2.2.1's Edit-to-Output-view on the output node) were **already
+true by construction** — `children()`, `moveSibling()`, and `openEdit()` are all generic,
+per-node mechanisms that don't distinguish a TRU input from any other node, and Phase 2 already
+made a TRU's Edit button route to the correct Input/Output view regardless of which specific group
+member was clicked. Verified this directly rather than assuming it, live, before concluding there
+was nothing to build there.
+
+**The one genuinely new piece** (§2.2, "display the output node as a child of the last phase
+input"): a new `treeDisplayKids(node,nodes)` wraps `children()` specifically for tree rendering —
+for a TRU with 2+ input phases, it hides the output from the primary input's rendered children
+(even though the primary is still its real structural parent) and instead appends it to the
+highest-`phaseOrder` input's rendered children. A single-input TRU is unaffected (falls straight
+through to real `children()`, since "last input" already *is* the primary there — zero visual
+change for the common case). This is **purely a rendering placement** — `buildTreeLi` is the only
+call site changed (`children()` → `treeDisplayKids()`); `subtree()`, `preOrder`/`postOrder`,
+branch filters, duplicate/delete cascade, and `recalc()` all keep reading the node's real
+`parentId`/`childIds`, exactly the boundary the Phase 2 design decision drew when it kept output
+structurally parented to the primary always.
+
+Verified live: seeded a 3-phase TRU (3 AC 115V buses, one DC load under the output) and inspected
+both `treeDisplayKids()`'s direct output and the actual rendered tree text — Bus 1/2/3 each show
+their own input phase node; the primary (`TRU 1 (IN)`, under Bus 1) renders as a leaf (no toggle
+arrow); the middle phase (`TRU 1 (IN) B`, under Bus 2) renders as a leaf too; the last phase
+(`TRU 1 (IN) C`, under Bus 3) is the one that gets the toggle arrow and shows `TRU 1 (OUT)` nested
+under it, with the OUT's own real child (the load) nested one level further. Net change values
+confirmed the Phase 1 N-way division is unaffected by the display change (115.6 VA on each of the
+3 phases, correctly rolling up into each phase's own real parent bus). Clicking the tree's Edit
+button on the relocated (visually-under-phase-3) output node correctly opens the dialog straight to
+the Output view. `moveSibling()` on the display-relocated-into node doesn't throw (a true no-op in
+this seed, since it has no real siblings under its own actual bus). Reverted to a single-input TRU
+and confirmed the tree renders byte-identical to pre-Phase-3 behavior — output back under the
+primary, toggle arrow back on the primary, no `treeDisplayKids` divergence at all. Full tab sweep,
+no console errors. Test data removed after verification.
+
+**Not yet built**: Grids (Phase 4) — no per-input-phase grid row yet; a TRU's additional input
+phases remain invisible in both the Existing/Removed and Installed grids, reachable only via the
+tree or the Edit dialog.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
