@@ -3328,6 +3328,72 @@ no console errors. Test data removed after verification.
 phases remain invisible in both the Existing/Removed and Installed grids, reachable only via the
 tree or the Edit dialog.
 
+## 60. Revision 57 (Phase 4) — TRU Multi-Phase Input: Grids
+
+*Last updated: 2026-08-17*
+
+Fourth and final phase of Revision 57 — brings the Existing/Removed and Installed grids in line
+with the tree and Edit dialog from Phases 2–3, completing multi-phase TRU support end to end.
+Share/Unshare is untouched in every respect (still exactly Revision 52 Phase 1's input-driven
+behavior) — the source spec's output-driven reversal (§3.2/§3.2.1) remains the one deliberately
+deferred piece across all four phases.
+
+**Row order matches the tree** (§3.1): `preOrderDisplayWithDepth(rootIds,nodes)` walks
+`treeDisplayKids()` (Phase 3's tree-display relocation) instead of raw structural `children()`,
+computing display depth in the same pass. Both grids' row-gathering swapped from `preOrder()`+a
+separately-reconstructed depth map to this single function — a TRU's output row now follows its
+last input phase, matching exactly what the Power Distribution Tree shows, instead of wherever
+raw structural traversal would place it.
+
+**Role classification** (`truGridRole(n)`): returns `'primary'`, `'additional'`, `'output'`, or
+`null` (everything that isn't a TRU group member, untouched by any of this). Drives:
+- **Duplicate/Delete restricted to the primary row** (§3.4.2) — both already cascade to the whole
+  group via Phase 1's group-aware `duplicateNodeById`/`delNode`, so no separate "duplicate/delete
+  the group" control was needed anywhere else.
+- **Calc suppressed on additional-input rows** — their value cells are locked (see below), so an
+  active Calc button there would silently write past that lock.
+- **Status toggle inhibited for additional inputs and the output** (§3.4.1) — both now show a
+  read-only badge (`gridStatusDisplayCell`) instead of the interactive toggle. Since the primary's
+  toggle click (`data-act="toggle-status"`) is now the *only* place a TRU group's status can
+  change from in the grid, it propagates to every other group member the same way
+  `doEditSaveTru` already does from the Edit dialog — without this, additional inputs and the
+  output would be stuck at whatever status they last had.
+- **Additional-input value cells locked, description/Ref Des stay editable** (§3.5.1/§3.5.2):
+  capacity, existing load, efficiency, and Conv. PF are forced read-only (extended slightly beyond
+  the letter of §3.5.1, which only names capacity/existing-load/load/net-change — efficiency and
+  Conv. PF are mirrored identically across every input by `doEditSaveTru` too, so leaving them
+  independently editable via the grid would let them drift out of sync until the next Edit-dialog
+  save silently overwrote the divergence back). The output row's own values stay independently
+  editable, unchanged from before — they're a genuinely distinct DC rating, not a
+  mirrored-across-phases value. Reorder arrows and the Edit button were already unaffected
+  (generic, per-node mechanisms untouched by any of this).
+
+**One adjacent bug fixed while touching this code**: the Installed grid's direct
+Net-Change-Override entry point (`ncOverridable`) checked only status/load-type/childless, with no
+`!n.convRole` exclusion — meaning a conversion output with no downstream loads yet (a
+pre-existing, likely never-exercised gap, not something Revision 57 introduced) could have slipped
+through and shown an override field a conversion item should never have (Net Change is always
+computed from Capacity/Existing Load for conv items, matching the Edit dialog's own exclusion via
+`isConvPair` hiding that section entirely). Made more reachable by additional TRU input phases
+(which are also real childless nodes), so fixed alongside this phase's other changes rather than
+left for later.
+
+Verified live: a 3-input TRU's Existing/Removed grid rows render in the exact expected order
+(root, Bus 1, primary, Bus 2, additional B, Bus 3, additional C, output — output correctly *after*
+its display host, not structurally after the primary) with the correct role/lock/button state on
+every row (primary: interactive status + Dup/Del; additional: read-only status + no Dup/Del +
+locked values + editable description; output: read-only status + no Dup/Del + independently
+editable values). Clicking the primary's status toggle propagated to all three other members.
+Duplicate and Delete from the primary row correctly cascaded the whole group (verified counts and
+survivors directly). The Installed grid showed the same role/lock pattern for a "new"-status
+group, confirmed no row anywhere offered a Net Change Override field for a conversion item. AC/DC
+grid filter continued to correctly narrow to just the matching rows against the new traversal.
+Single-input TRU regression: primary/output show exactly the same full-control behavior as before
+this phase existed. Full tab sweep, no console errors. Test data removed after verification.
+
+**Revision 57 is now complete across all four phases** — TRU multi-phase input (up to 3 AC input
+phases feeding one TRU) is fully supported from data model through Edit dialog, tree, and grids.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

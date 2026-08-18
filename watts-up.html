@@ -1952,6 +1952,26 @@ function treeDisplayKids(node,nodes) {
   if (node.id===lastInput.id) return [...kids,group.output];
   return kids;
 }
+// Revision 57 (Phase 4): same shape as preOrder(), but walks tree-DISPLAY order
+// (treeDisplayKids) rather than structural children() — so grid row order always matches what
+// the Power Distribution Tree actually shows (source spec §3.1), including a TRU's output
+// appearing right after its last input phase instead of wherever raw structural traversal would
+// put it. Computes display depth in the same pass (depth relative to whichever node visually
+// contains it, not necessarily its real parentId) rather than reconstructing depth from
+// parentId afterward, so an output relocated under a differently-deep "last input" (an unusual
+// case, since additional-parent buses are normally siblings at the same depth as the primary's)
+// still indents correctly.
+function preOrderDisplayWithDepth(rootIds,nodes) {
+  const ids=[]; const depths={};
+  const rids=Array.isArray(rootIds)?rootIds:[rootIds];
+  function visit(id,d) {
+    if (!nodes[id]) return;
+    ids.push(id); depths[id]=d;
+    treeDisplayKids(nodes[id],nodes).forEach(c=>visit(c.id,d+1));
+  }
+  rids.forEach(rid=>visit(rid,0));
+  return {ids,depths};
+}
 function buildTreeLi(node,nodes) {
   const kids=treeDisplayKids(node,nodes); const hasKids=kids.length>0;
   const li=document.createElement('li'); li.dataset.nid=node.id;
@@ -3015,6 +3035,19 @@ function gridDisplayCells(n,field,applicable,forceDisabled){
 function apExistingLoadLocked(n) {
   return !!(state&&state.currentAnalysis==='ap'&&n.sharedPeerId&&hasCap(n.type)&&!isLoad(n.type));
 }
+// Revision 57 (Phase 4): classifies a TRU group member's role for grid-row purposes — 'primary'
+// (full control), 'additional' (input phase 2/3 — read-only values, description/Ref Des stay
+// editable), 'output' (largely unchanged, now also status-inhibited per source spec §3.4.1), or
+// null for anything that isn't part of a TRU group at all (every other item, including legacy
+// non-TRU conversion pairs, is completely untouched by this classification — Share/Unshare in
+// particular is deliberately left exactly as Revision 52 Phase 1 built it, unrelated to this).
+function truGridRole(n) {
+  if (!n.convRole||n.type!=='TRU') return null;
+  if (n.convRole==='out') return 'output';
+  const group=findConversionGroup(n);
+  if (!group) return 'primary'; // ungrouped fallback, shouldn't occur post-migration
+  return group.inputs[0]?.id===n.id ? 'primary' : 'additional';
+}
 function gridShareInfo(n,gridKey){
   if (!state) return {show:false};
   // Revision 52 (items 6/7): a conversion-output row is managed via its IN row's Share/Unshare,
@@ -3042,10 +3075,17 @@ function gridActionsCell(n,readOnly,gridKey){
   const canAddChild=!(isLoad(n.type)||n.status==='removed'||n.convRole==='in'||(n.status==='new'&&n.netChangeOverride!=null));
   // A conversion-output row is structurally paired with its IN parent — duplicating or deleting
   // it independently doesn't make sense (both already happen via the IN row's own Dup/Del).
-  const canDelDup=n.convRole!=='out';
+  // Revision 57 (Phase 4): for a TRU with multiple input phases, restricted further to the
+  // primary input specifically (source spec §3.4.2) — both already cascade to the whole group
+  // via Phase 1's group-aware duplicateNodeById/delNode, so no separate "duplicate/delete the
+  // group" control is needed on the additional-input or output rows.
+  const truRole=truGridRole(n);
+  const canDelDup=truRole?truRole==='primary':(n.convRole!=='out');
   // AC groups no longer auto-derive on every edit (gridCommitPowerGroup) — Calc is the explicit
-  // trigger, shown only for AC rows that actually have an editable AC power group.
-  const canCalc=n.acDc==='ac'&&(hasCap(n.type)||isLoad(n.type));
+  // trigger, shown only for AC rows that actually have an editable AC power group. Suppressed on
+  // an additional-input row since its value cells are locked (mirrored from the primary) —
+  // showing an active Calc button there would silently write past that lock.
+  const canCalc=n.acDc==='ac'&&(hasCap(n.type)||isLoad(n.type))&&truRole!=='additional';
   const shareInfo=gridShareInfo(n,gridKey);
   const shareBtn=shareInfo.show?`<button data-act="${shareInfo.action}" title="${shareInfo.title}">${shareInfo.label}</button>`:'';
   // Revision 52 (item 10): Share/Unshare moved to the right margin — last in the button sequence
@@ -3115,21 +3155,30 @@ function gridStatusDisplayCell(n){
 }
 function buildExRemRow(n,depth){
   const otherStatus=n.status==='existing'?'removed':'existing';
+  // Revision 57 (Phase 4): an additional TRU input phase's values (capacity/existing load/
+  // efficiency/PF) are mirrored across every input by doEditSaveTru — editing one independently
+  // via the grid would desync it until the next Edit-dialog save silently overwrote it back, so
+  // they're locked here (source spec §3.5.1). Description/Ref Des stay editable (§3.5.2). Status
+  // is controlled by the primary alone for the whole group (§3.4.1) — additional inputs and the
+  // output show a read-only badge instead of the interactive toggle.
+  const truRole=truGridRole(n);
+  const truValueLocked=truRole==='additional';
+  const truStatusLocked=truRole==='additional'||truRole==='output';
   // Revision 47 (Phase 2c): a shared non-load item's Existing Load is computed from its PCM
   // peer's new-load, not entered here — shown as a read-only value (gridDisplayCells) instead
   // of the normal editable cells, and its Reset button is hidden (nothing to reset to).
-  const exLoadLocked=apExistingLoadLocked(n);
+  const exLoadLocked=apExistingLoadLocked(n)||truValueLocked;
   const exLoadCells=exLoadLocked
     ?gridDisplayCells(n,'existingLoad',hasCap(n.type))
     :gridPowerGroupCells(n,'existingLoad',hasCap(n.type));
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
     ${gridTypeCell(n,depth)}${gridDescInputCell(n)}${gridRefDesCell(n)}
-    ${gridStatusToggleCell(n,otherStatus)}
+    ${truStatusLocked?gridStatusDisplayCell(n):gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
-    ${gridEffCell(n)}${gridPfCell(n)}
-    ${gridCapCells(n)}${gridGroupResetCell('capacity',hasCap(n.type))}
+    ${gridEffCell(n,truValueLocked)}${gridPfCell(n,truValueLocked)}
+    ${gridCapCells(n,truValueLocked)}${gridGroupResetCell('capacity',hasCap(n.type)&&!truValueLocked)}
     ${exLoadCells}${gridGroupResetCell('existingLoad',hasCap(n.type)&&!exLoadLocked)}
-    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type))}${gridGroupResetCell('loadValue',isLoad(n.type))}
+    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),truValueLocked)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!truValueLocked)}
     ${gridActionsCell(n,false,'exrem')}
   </tr>`;
 }
@@ -3169,18 +3218,27 @@ function gridHeader(group2Label,group3Label,resettable3=true){
 }
 function buildNewRow(n,depth){
   const isExistingCtx=n.status==='existing';
+  // Revision 57 (Phase 4): see buildExRemRow's identical comment — an additional TRU input
+  // phase's values are mirrored across every input by doEditSaveTru, so they're locked here too
+  // (source spec §3.5.1); description/Ref Des stay editable via the existing !isExistingCtx gate.
+  const truValueLocked=truGridRole(n)==='additional';
+  const forceVals=isExistingCtx||truValueLocked;
   // New-status, non-load, childless items can carry a direct Net Change override instead of
   // the usual computed (children-summed) value — the same netChangeOverride field the Edit
-  // modal already supports, just exposed for direct grid entry in this specific case.
-  const ncOverridable=!isExistingCtx&&!isLoad(n.type)&&children(n.id,state.nodes).length===0;
+  // modal already supports, just exposed for direct grid entry in this specific case. Explicitly
+  // excludes every conversion-role node (not just TRU) — conv items always recompute Net Change
+  // from Capacity/Existing Load, never a manual override (matches the Edit dialog's own
+  // exclusion), and without this a conversion output with no downstream loads yet would
+  // otherwise slip through the "childless" check.
+  const ncOverridable=!isExistingCtx&&!isLoad(n.type)&&!n.convRole&&children(n.id,state.nodes).length===0;
   const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
   return `<tr data-nid="${n.id}" class="${rowCls}">
     ${gridTypeCell(n,depth,!isExistingCtx)}${gridDescInputCell(n,!isExistingCtx)}${gridRefDesCell(n,!isExistingCtx)}
     ${gridStatusDisplayCell(n)}
     ${gridVoltAcdcCells(n,isExistingCtx)}
-    ${gridEffCell(n,isExistingCtx)}${gridPfCell(n,isExistingCtx)}
-    ${gridCapCells(n,isExistingCtx)}${gridGroupResetCell('capacity',hasCap(n.type)&&!isExistingCtx)}
-    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),isExistingCtx)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!isExistingCtx)}
+    ${gridEffCell(n,forceVals)}${gridPfCell(n,forceVals)}
+    ${gridCapCells(n,forceVals)}${gridGroupResetCell('capacity',hasCap(n.type)&&!forceVals)}
+    ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),forceVals)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!forceVals)}
     ${ncOverridable?gridPowerGroupCells(n,'netChangeOverride',true,false,'auto'):gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}${gridGroupResetCell('netChangeOverride',ncOverridable&&n.netChangeOverride!=null)}
     ${gridActionsCell(n,isExistingCtx,'new')}
   </tr>`;
@@ -3328,7 +3386,24 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
       else if (act==='dup') gridDuplicateRow(id,renderFn);
       else if (act==='calc') gridCalcRow(id);
       else if (act==='reset-group') gridResetGroup(id,btn.dataset.resetField,renderFn);
-      else if (act==='toggle-status') { const n=state.nodes[id]; if (n) { n.status=btn.dataset.toggleTo; recalc();persist();renderAll(); } }
+      else if (act==='toggle-status') {
+        const n=state.nodes[id];
+        if (n) {
+          n.status=btn.dataset.toggleTo;
+          // Revision 57 (Phase 4): a TRU's primary input controls the whole group's status
+          // (source spec §3.4.1) — additional inputs and the output show a read-only badge
+          // instead of their own toggle, so this is the only place their status can change from;
+          // propagate it the same way doEditSaveTru already does from the Edit dialog.
+          if (truGridRole(n)==='primary') {
+            const group=findConversionGroup(n);
+            if (group) {
+              group.inputs.slice(1).forEach(inp=>{ inp.status=n.status; });
+              if (group.output) group.output.status=n.status;
+            }
+          }
+          recalc();persist();renderAll();
+        }
+      }
       else if (act==='share') shareWithOther(id);
       else if (act==='unshare') unshareNode(id);
     });
@@ -3383,8 +3458,10 @@ function renderExRemGrid(){
   const el=document.getElementById('exrem-container'); if (!el) return;
   const scrollPos=gridScrollPos(el);
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
-  const allIds=preOrder(state.rootIds,state.nodes);
-  const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  // Revision 57 (Phase 4): tree-display order (source spec §3.1) — a TRU's output row now
+  // follows its last input phase, matching the Power Distribution Tree's own relocation, instead
+  // of raw structural traversal order.
+  const {ids:allIds,depths:dm}=preOrderDisplayWithDepth(state.rootIds,state.nodes);
   const statusIds=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='removed'); });
   const ids=applyGridFilters(statusIds,state.nodes);
   const rows=ids.map(id=>buildExRemRow(state.nodes[id],dm[id]||0)).join('');
@@ -3400,8 +3477,8 @@ function renderNewGrid(){
   const el=document.getElementById('new-container'); if (!el) return;
   const scrollPos=gridScrollPos(el);
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
-  const allIds=preOrder(state.rootIds,state.nodes);
-  const dm={}; allIds.forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  // Revision 57 (Phase 4): tree-display order (source spec §3.1) — see renderExRemGrid.
+  const {ids:allIds,depths:dm}=preOrderDisplayWithDepth(state.rootIds,state.nodes);
   const statusIds=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
   const ids=applyGridFilters(statusIds,state.nodes);
   const rows=ids.map(id=>buildNewRow(state.nodes[id],dm[id]||0)).join('');
