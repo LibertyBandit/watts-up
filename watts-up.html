@@ -4023,12 +4023,25 @@ function updateAfAcdcLock(parentId) {
 // this slot is new)} — nothing here touches state.nodes until Save; Cancel just discards it.
 let efConvView='in';
 let efTruAdditionalParents=[];
+// Revision 57 (correction, 2026-08-19): the TRU's own group member ids (primary + output + any
+// already-existing additional inputs), excluded from every additional-parent dropdown's
+// candidate list — set once when the dialog opens (see openEdit's TRU population block).
+let efTruOwnGroupIds=[];
+// Revision 57 (correction, 2026-08-19): snapshot of the 8 Total/Phase Capacity+Existing-Load
+// field values as populated when the dialog opened, used to detect which pair the user actually
+// edited this session (see efTruFieldChanged/efResolveTruPhaseValue below) — needed because
+// Existing Load's Phase fields always start at a real "0" (never blank), so comparing against
+// null can't tell "user left it alone" apart from "user explicitly re-entered zero."
+let efTruInitialVals={};
 
-// Additional-parent dropdown: constrained to AC siblings of the primary parent at the primary's
-// own voltage (source spec §1.1.3.1.2), excluding whichever other additional parents are already
-// chosen elsewhere in this draft (the currently-selected option for *this* dropdown stays offered
-// even though it's technically "already chosen" — excludeIds is every *other* slot's choice).
-function fillAdditionalParentSelect(selId,primaryParentId,excludeIds,selectedId) {
+// Additional-parent dropdown: every AC bus in the analysis at the primary's own voltage is a
+// valid candidate (the sibling-of-primary constraint was removed — source spec §1.1.3.1.2's own
+// wording, but it doesn't hold once a TRU is fed by lower-level three-phase buses that aren't
+// structural siblings of each other), excluding the TRU's own group members (ownGroupIds — never
+// let one of a TRU's own inputs/output be picked as if it were an external parent bus) and
+// whichever other additional-parent slots already chose it (the currently-selected option for
+// *this* dropdown stays offered even though it's technically "already chosen" elsewhere).
+function fillAdditionalParentSelect(selId,primaryParentId,excludeIds,selectedId,ownGroupIds) {
   const sel=document.getElementById(selId);if (!sel) return;
   sel.innerHTML='';
   const blank=document.createElement('option');blank.value='';blank.textContent='— Select Parent —';
@@ -4036,16 +4049,17 @@ function fillAdditionalParentSelect(selId,primaryParentId,excludeIds,selectedId)
   sel.appendChild(blank);
   const primaryParent=primaryParentId?state.nodes[primaryParentId]:null;
   if (!primaryParent) return;
-  const sibs=primaryParent.parentId?children(primaryParent.parentId,state.nodes)
-    :state.rootIds.map(id=>state.nodes[id]).filter(Boolean);
   const excluded=new Set(excludeIds||[]);
-  sibs.forEach(sn=>{
-    if (!sn||sn.id===primaryParentId) return;
+  const ownGroup=new Set(ownGroupIds||[]);
+  preOrder(state.rootIds,state.nodes).forEach(id=>{
+    const sn=state.nodes[id]; if (!sn) return;
+    if (sn.id===primaryParentId||ownGroup.has(sn.id)) return;
     if (isLoad(sn.type)||sn.status==='removed') return;
     if (sn.acDc!=='ac'||sn.voltage!==primaryParent.voltage) return;
     if (excluded.has(sn.id)&&sn.id!==selectedId) return;
     const o=document.createElement('option');o.value=sn.id;
-    o.textContent=(sn.description||'unnamed')+(sn.refDes?` [${sn.refDes}]`:'');
+    const d=nodeDepth(sn.id,state.nodes);
+    o.textContent=' '.repeat(d*2)+(sn.description||'unnamed')+(sn.refDes?` [${sn.refDes}]`:'');
     if (sn.id===selectedId) o.selected=true;
     sel.appendChild(o);
   });
@@ -4076,7 +4090,7 @@ function efTruRenderAdditionalParents() {
   efTruAdditionalParents.forEach((slot,i)=>{
     const idx=i+1;
     const others=efTruAdditionalParents.filter((_,j)=>j!==i).map(s=>s.parentId).filter(Boolean);
-    fillAdditionalParentSelect(`ef-tru-parent-${idx}`,primaryParentId,others,slot.parentId);
+    fillAdditionalParentSelect(`ef-tru-parent-${idx}`,primaryParentId,others,slot.parentId,efTruOwnGroupIds);
     document.getElementById(`ef-tru-parent-${idx}`).onchange=e=>{
       efTruAdditionalParents[i].parentId=e.target.value||null;
       efTruRenderAdditionalParents();
@@ -4154,22 +4168,61 @@ function efAttachTotalPhaseDerive(totalAId,totalVAWId,phaseAId,phaseVAWId,nInput
   });
 }
 
+// Revision 57 (correction, 2026-08-19): a field's current value comparison can't tell "the user
+// left this alone" apart from "the user explicitly re-entered whatever it already showed" —
+// Existing Load's Phase fields in particular always start at a real "0" (never blank), so a
+// simple null-check on Phase alone made Total silently unusable for Existing Load specifically
+// (Phase's pre-filled "0" always looked "given"). Comparing against a snapshot taken when the
+// dialog opened (efTruInitialVals) tells the two apart correctly.
+function efTruFieldChanged(id) {
+  const el=document.getElementById(id);
+  return !!el && el.value!==efTruInitialVals[id];
+}
 // Fully resolves a Total/Phase pair to the authoritative per-node Phase value (what actually gets
 // stored on every input node) — used by Calculate and Save, where a one-shot full resolution is
-// needed rather than blur-time partial fills. Priority: an entered Phase value wins over Total (a
-// direct per-phase entry is the more specific of the two); Total is only converted down to Phase
-// when no Phase value was given at all. Cross-derives A<->VAW within whichever pair is
-// authoritative via the input voltage (input side is always AC, so this is a simple A*V<->VA
-// relationship, same as the rest of this app's AC capacity fields).
-function efResolveTruPhaseValue(totalA,totalVAW,phaseA,phaseVAW,nInputs,voltage) {
-  let pa=phaseA,pv=phaseVAW;
-  if (pa===null&&pv===null) {
-    if (totalA!==null) pa=totalA/nInputs;
-    else if (totalVAW!==null) pv=totalVAW/nInputs;
+// needed rather than blur-time partial fills. `preferTotal` (computed by the caller from
+// efTruFieldChanged) decides which pair is authoritative when both have values: true unless the
+// user edited Phase without also touching Total this session, matching the source spec's own
+// principle that the Total is the foundational quantity — Phase is always Total÷inputs unless the
+// user specifically overrode Phase directly. Cross-derives A<->VAW within whichever pair wins via
+// the input voltage (input side is always AC, so this is a simple A×V<->VA relationship, same as
+// the rest of this app's AC capacity fields).
+function efResolveTruPhaseValue(totalA,totalVAW,phaseA,phaseVAW,nInputs,voltage,preferTotal) {
+  const totalGiven=totalA!==null||totalVAW!==null;
+  const phaseGiven=phaseA!==null||phaseVAW!==null;
+  const useTotal=totalGiven&&(preferTotal||!phaseGiven);
+  let pa,pv;
+  if (useTotal) {
+    pa=totalA!==null?totalA/nInputs:null;
+    pv=totalVAW!==null?totalVAW/nInputs:null;
+  } else {
+    pa=phaseA; pv=phaseVAW;
   }
   if (pa===null&&pv!==null&&voltage>0) pa=pv/voltage;
   if (pv===null&&pa!==null&&voltage>0) pv=pa*voltage;
   return {phaseA:pa,phaseVAW:pv};
+}
+// Within one field pair (e.g. Total A + Total VAW), a sub-field the user didn't individually
+// touch is treated as blank rather than trusting its stale pre-filled value — otherwise editing
+// just Total A while Total VAW still shows its untouched "0" would block A<->VAW cross-derivation
+// entirely (the "0" looks like a deliberate entry). If *neither* sub-field was touched, the pair
+// is passed through exactly as pre-filled (self-consistent from when the dialog opened; nothing
+// to reconcile).
+function efTruPickPairValue(aChanged,vChanged,aVal,vVal) {
+  if (!aChanged&&!vChanged) return {a:aVal,vaw:vVal};
+  return {a:aChanged?aVal:null,vaw:vChanged?vVal:null};
+}
+// Revision 57 (correction, 2026-08-19): reads one Total/Phase field-pair-of-pairs and resolves it
+// to the authoritative per-node Phase value in a single call — combines efTruPickPairValue (which
+// sub-fields to trust) with efResolveTruPhaseValue's pair-of-pairs resolution (which pair —
+// Total or Phase — to trust), used identically by both Save and Calculate.
+function efTruResolvePhasePair(totalAId,totalVAWId,phaseAId,phaseVAWId,nInputs,voltage,parseFn) {
+  const totalAChanged=efTruFieldChanged(totalAId), totalVAWChanged=efTruFieldChanged(totalVAWId);
+  const phaseAChanged=efTruFieldChanged(phaseAId), phaseVAWChanged=efTruFieldChanged(phaseVAWId);
+  const preferTotal=(totalAChanged||totalVAWChanged)||!(phaseAChanged||phaseVAWChanged);
+  const total=efTruPickPairValue(totalAChanged,totalVAWChanged,parseFn(totalAId),parseFn(totalVAWId));
+  const phase=efTruPickPairValue(phaseAChanged,phaseVAWChanged,parseFn(phaseAId),parseFn(phaseVAWId));
+  return efResolveTruPhaseValue(total.a,total.vaw,phase.a,phase.vaw,nInputs,voltage,preferTotal);
 }
 
 // Revision 57 (Phase 2): TRU Capacity/Existing Load Reset buttons — always blanks the side that
@@ -4420,7 +4473,10 @@ function doEditCalculate() {
       // Feeds the *combined total* across all inputs into calcConvPairRow (not a single phase's
       // value) — matches calcNC's own outW/efficiency/nInputs relationship (Phase 1); a single
       // phase's value alone would understate the derived OUT side by a factor of nInputs.
-      const resolved=efResolveTruPhaseValue(getV(totalAId),getV(totalVAWId),getV(phaseAId),getV(phaseVAWId),nInputs,inV);
+      // See doEditSaveTru's identical comment — Existing Load's fields always start at a real
+      // "0", so a plain current-value check can't tell "left alone" apart from "explicitly
+      // re-entered zero."
+      const resolved=efTruResolvePhasePair(totalAId,totalVAWId,phaseAId,phaseVAWId,nInputs,inV,getV);
       const totalInA=resolved.phaseA!=null?resolved.phaseA*nInputs:null;
       const totalInVAW=resolved.phaseVAW!=null?resolved.phaseVAW*nInputs:null;
       const row=calcConvPairRow(totalInA,totalInVAW,getV(outAId),getV(outVAWId),inAcDc,outAcDc,inV,outV,eff,cpf);
@@ -4610,6 +4666,9 @@ function openEdit(nodeId) {
     const outNode=group.output;
     const inAcDc=CONV_IN_ACDC.TRU, outAcDc=CONV_OUT_ACDC.TRU;
     const nInputs=group.inputs.length||1;
+    // Revision 57 (correction, 2026-08-19): the whole group's own ids — never offered as an
+    // additional-parent candidate for this same TRU (see fillAdditionalParentSelect).
+    efTruOwnGroupIds=[primary.id,outNode?.id,...additional.map(a=>a.id)].filter(Boolean);
 
     fillParentSelect('ef-tru-parent-0',primary.id,primary.parentId);
     document.getElementById('ef-tru-parent-0').onchange=()=>efTruRenderAdditionalParents();
@@ -4639,6 +4698,14 @@ function openEdit(nodeId) {
     document.getElementById('ef-tru-ld-phase-vaw').value=fmtPField(phaseLdVAW);
     document.getElementById('ef-tru-ld-total-a').value  =fmtPField(phaseLdA*nInputs);
     document.getElementById('ef-tru-ld-total-vaw').value=fmtPField(phaseLdVAW*nInputs);
+
+    // Revision 57 (correction, 2026-08-19): snapshot for efTruFieldChanged — must run after every
+    // one of these 8 fields has its opening value set above.
+    efTruInitialVals={};
+    ['ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw',
+     'ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw'].forEach(id=>{
+      efTruInitialVals[id]=document.getElementById(id).value;
+    });
 
     document.getElementById('ef-tru-eff').value=primary.efficiency??0.85;
     document.getElementById('ef-tru-convpf').value=primary.convPf??0.95;
@@ -4827,16 +4894,19 @@ function doEditSaveTru(n) {
   // calcConvPairRow as "in", then scaled back DOWN to phase for storage on each input node —
   // feeding a single phase's value in directly would understate OUT's derived capacity/load by
   // a factor of nInputs whenever OUT itself was blank.
-  const capPhase=efResolveTruPhaseValue(pF('ef-tru-cap-total-a'),pF('ef-tru-cap-total-vaw'),
-    pF('ef-tru-cap-phase-a'),pF('ef-tru-cap-phase-vaw'),nInputs,inV);
+  // Resolves each Total/Phase field-pair-of-pairs to the authoritative per-node Phase value —
+  // see efTruResolvePhasePair/efTruPickPairValue for why a plain current-value check isn't
+  // enough (Existing Load's fields always start at a real "0", never blank).
+  const capPhase=efTruResolvePhasePair('ef-tru-cap-total-a','ef-tru-cap-total-vaw',
+    'ef-tru-cap-phase-a','ef-tru-cap-phase-vaw',nInputs,inV,pF);
   const capTotalA=capPhase.phaseA!=null?capPhase.phaseA*nInputs:null;
   const capTotalVAW=capPhase.phaseVAW!=null?capPhase.phaseVAW*nInputs:null;
   const capRow=calcConvPairRow(capTotalA,capTotalVAW,pF('ef-tru-out-cap-a'),pF('ef-tru-out-cap-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
   const capInPhaseA=capRow.in.a!=null?capRow.in.a/nInputs:null;
   const capInPhaseVAW=capRow.in.vaw!=null?capRow.in.vaw/nInputs:null;
 
-  const ldPhase=efResolveTruPhaseValue(pF('ef-tru-ld-total-a'),pF('ef-tru-ld-total-vaw'),
-    pF('ef-tru-ld-phase-a'),pF('ef-tru-ld-phase-vaw'),nInputs,inV);
+  const ldPhase=efTruResolvePhasePair('ef-tru-ld-total-a','ef-tru-ld-total-vaw',
+    'ef-tru-ld-phase-a','ef-tru-ld-phase-vaw',nInputs,inV,pF);
   const ldTotalA=ldPhase.phaseA!=null?ldPhase.phaseA*nInputs:null;
   const ldTotalVAW=ldPhase.phaseVAW!=null?ldPhase.phaseVAW*nInputs:null;
   const ldRow=calcConvPairRow(ldTotalA,ldTotalVAW,pF('ef-tru-out-ld-a'),pF('ef-tru-out-ld-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);

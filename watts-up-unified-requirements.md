@@ -55,6 +55,12 @@ Power conversion input formulas:
 convPf applies to **all** AC conv-item calculations (capacity, existing load, load, net change,
 new load). convPf field is visible in the dialog for TRU, Inverter, and Frequency Converter.
 
+**Multi-phase TRU input (Revision 57):** the formulas above, and the New Load/Reserve formulas in
+§4, describe the TRU as a whole — they always resolve to a single **total** input-side value
+first. When a TRU has more than one input phase, that total is then divided evenly by the number
+of input phases, and the resulting per-phase value is applied to every input node identically. See
+§61 for the full correction and how it's implemented.
+
 **Only TRU is offered for new items** *(2026-07-24)* — the other four conversion types are rare
 enough in practice that they're no longer actively supported for new item creation. This is a
 dropdown-level filter only (`SELECTABLE_CONVERSION_TYPES`): the table above, the IN/OUT AC-DC
@@ -3393,6 +3399,69 @@ this phase existed. Full tab sweep, no console errors. Test data removed after v
 
 **Revision 57 is now complete across all four phases** — TRU multi-phase input (up to 3 AC input
 phases feeding one TRU) is fully supported from data model through Edit dialog, tree, and grids.
+
+## 61. Revision 57 Corrections — Total-First Division, Sibling Constraint Removed
+
+*Last updated: 2026-08-19*
+
+Two corrections to Revision 57 (Phases 1–4), reported after the user's own post-Revision testing.
+
+**Correction 1 — Capacity/Existing Load/Net Change/New Load/Reserve must all divide from a true
+total.** §3.3/§4's formulas always describe the TRU's combined total (as if it had one input);
+when there are multiple input phases, that total must be divided by the input count and the
+result applied identically to every input. Net Change was already correct (Phase 1's
+`calcNC`/`recalcAnalysis` compute New Load and Reserve *from* Net Change and Existing Load
+per-node, so once those two are right, New Load/Reserve follow automatically — linear formulas
+distribute over division cleanly). **Existing Load specifically was not** — traced to a genuine
+bug, not just a documentation gap: Existing Load's Phase fields default to a real, stored `"0"`
+(never blank, matching the rest of the app's Existing Load convention), so the Phase-vs-Total
+resolution logic (`efResolveTruPhaseValue`) always saw Phase as "already given" and silently
+ignored whatever the user typed into Total — confirmed live by entering Total Existing Load = 30A
+on a 3-input TRU and finding every input's stored Existing Load stayed at 0. Capacity didn't show
+this specific symptom (its fields start genuinely blank until entered), but the same class of bug
+existed one level deeper: even after fixing Total-vs-Phase, a *sub-field* within the winning pair
+(e.g. Total A entered but Total VA/W left at its own stale "0" pre-fill) still blocked the A↔VA
+cross-derivation the same way.
+
+**Fix** (`efTruFieldChanged`, `efTruPickPairValue`, `efTruResolvePhasePair`, all in
+`watts-up.html`): a snapshot of all 8 Total/Phase Capacity+Existing-Load field values is taken the
+moment the Edit dialog opens (`efTruInitialVals`); resolution now compares each field's *current*
+value against that snapshot rather than checking for null, so "the user left this alone" and "the
+user explicitly re-entered what was already there" are told apart correctly at both levels —
+which pair (Total vs. Phase) is authoritative, and which sub-field (A vs. VA/W) within that pair.
+Total wins by default (matching the "totals are the foundational quantity, phases are always
+Total÷inputs" principle) unless the user edited Phase without also touching Total this session;
+within the winning pair, an untouched sub-field is treated as blank so it correctly cross-derives
+from its sibling via voltage instead of trusting a stale value. One direct, useful consequence:
+adding an input phase to an existing TRU *without* touching any value fields now correctly
+redistributes the *original* total across the new phase count (e.g. a 45A single-phase TRU
+becomes three 15A phases when two more inputs are added), rather than silently tripling the total
+by treating the old phase value as if it still applied to each new phase unchanged.
+
+Both `doEditSaveTru` (Save) and `doEditCalculate`'s TRU branch now route through the same
+`efTruResolvePhasePair` helper, so Save and Calculate resolve identically — consistent with every
+other Calculate/Save unification already in this app (Revision 27 Follow-up).
+
+**Correction 2 — sibling constraint removed for additional input parents.** §1.1.3.1.2's original
+wording ("constrained to siblings of the first parent") doesn't hold once a TRU is fed by
+lower-level three-phase buses that aren't structural siblings of each other — e.g. each phase's
+bus sitting under a different intermediate distribution node. `fillAdditionalParentSelect` no
+longer requires a candidate to share the primary parent's own structural parent; it now searches
+every node in the analysis (`preOrder`, matching how the primary's own parent dropdown already
+works), keeping only the AC + matching-voltage + not-already-chosen constraints, plus a new
+exclusion for the TRU's own group members specifically (primary, output, and any already-existing
+additional input — necessary now that the search isn't naturally scoped to a small sibling set
+that would rarely include the TRU's own nodes anyway).
+
+Verified live: a 3-input TRU built with Bus 2/Bus 3 nested under an intermediate Feeder (not
+siblings of Bus 1, the primary's own parent) — the additional-parent dropdown correctly offered
+both. Entering Total Existing Load = 30A on a 3-input TRU now correctly yields 10A/1150VA/
+1092.5W/359.1VAR per phase (previously silently stayed at 0). New Load and Reserve confirmed
+correct at every phase (hand-verified against Total÷3 for all five quantities: Capacity, Existing
+Load, Net Change, New Load, Reserve). Directly editing a Phase field (not Total) still works and
+leaves Total's *other*, untouched values alone. Adding a phase to an existing TRU without touching
+any value field correctly redistributes the original total. Single-input TRU regression confirmed
+unchanged. Full tab sweep, no console errors. Test data removed after verification.
 
 ## Appendix A: Future Enhancements
 
