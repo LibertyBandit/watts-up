@@ -3463,6 +3463,56 @@ leaves Total's *other*, untouched values alone. Adding a phase to an existing TR
 any value field correctly redistributes the original total. Single-input TRU regression confirmed
 unchanged. Full tab sweep, no console errors. Test data removed after verification.
 
+## 62. Revision 57 Corrections (Round 2) — Grid Display, Auto-Calc, Filter Cascade, W5 Fix
+
+*Last updated: 2026-08-19*
+
+Four further corrections, reported after continued post-Revision-57 testing.
+
+**1.1 — Additional-input capacity was hidden, not just locked.** `gridCapCells`'s `forceDisabled`
+branch rendered a blank `<input disabled>` with no value at all — correct for the New grid's
+existing-context rows (Revision 23's deliberate "no old values in context rows" behavior) but
+wrong for a TRU additional-input row, whose locked value is still meaningful to see (it's the
+mirrored per-phase share, not stale data). Added a `showLockedValue` parameter to
+`gridCapCells`/`gridEffCell`/`gridPfCell`: when true, the disabled cell now shows its current
+value (matching how `gridDisplayCells` already behaved for Existing Load's own locked case).
+`buildExRemRow` passes `showLockedValue=truValueLocked` (locking only ever comes from the TRU
+role there); `buildNewRow` passes `truValueLocked&&!isExistingCtx` — existing-context hiding still
+wins when both apply, preserving Revision 23's behavior exactly.
+
+**1.2 — Auto-Calculate before opening Edit from a grid row.** A row with partial AC entries (e.g.
+only Existing Load A typed, VA/W/VAR/PF never resolved because Calc wasn't explicitly clicked)
+opened the Edit dialog showing that same incomplete data. The grid's Edit button (`data-act="edit"`
+in `wireGridEvents`) now calls `gridCalcRow(id)` immediately before `openEdit(id)` — safe
+unconditionally since `gridCalcNodeAcGroups` only fills blanks and no-ops on DC rows.
+
+**1.3 — AC/DC filter cascades into the Branch dropdown.** Previously the Branch filter listed
+every item regardless of the AC/DC selection, so the two could combine into a selection guaranteed
+to show nothing (or worse, silently keep a stale branch filter applied while the dropdown itself
+no longer showed it as selected). `gridFilterBar()` now narrows the Branch dropdown's own option
+list to items matching the active AC/DC filter (depth/indentation still computed from the full,
+unfiltered tree). The AC/DC filter's own `change` handler additionally clears `gridFilterBranchId`
+if the currently-selected branch no longer matches the newly-picked AC/DC value, so the filter
+state and the UI never drift apart.
+
+**2 — W5 ("children's existing/removed load exceeds this item's") false-fired for any multi-input
+TRU.** A TRU input's own `existingLoad.w` is deliberately the *per-phase* share (total ÷ input
+count, Phases 1–2) — comparing that directly against the primary's real structural child
+(output's own, much larger combined existing load) meant W5 fired for nearly every multi-input
+TRU regardless of whether anything was actually wrong. `warnNode`'s W5 check now reconstructs the
+group's *total* existing load (phase × input count) via `findConversionGroup` before comparing,
+for any node that's a TRU input specifically — a no-op for single-input TRUs, where the phase
+value already *is* the total.
+
+Verified live: a 3-input TRU's additional-input row correctly shows its capacity value (disabled,
+not blank); an ordinary bus with only Existing Load A entered opens the Edit dialog with VA/W
+already resolved after clicking the grid's Edit button; selecting "DC only" narrows the Branch
+dropdown to DC items only, and switching back to "AC only" after picking a DC branch correctly
+clears the branch filter; a 3-input TRU with realistic existing-load values no longer trips W5 on
+its own input rows (confirmed by giving the parent buses matching existing loads to isolate the
+check). Confirmed the New grid's existing-context rows still hide values entirely (Revision 23
+behavior unchanged). Full tab sweep, no console errors. Test data removed after verification.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

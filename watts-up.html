@@ -1692,7 +1692,17 @@ function warnNode(node,nodes) {
       const src=isLoad(c.type)?c.loadValue:c.existingLoad;
       sumW+=src?.w||0;
     });
-    const ownW=node.existingLoad?.w||0;
+    // Revision 57 correction (item 2): a TRU input's own existingLoad.w is deliberately the
+    // PER-PHASE share (total ÷ input count, Phase 1/2) — comparing that directly against
+    // children's combined (output-side) existing load would almost always incorrectly flag this
+    // warning for any multi-input TRU. Reconstruct the group's TOTAL existing load for the
+    // comparison instead; a single-input TRU's own existingLoad.w already *is* the total, so this
+    // is a no-op there.
+    let ownW=node.existingLoad?.w||0;
+    if (node.convRole==='in'&&node.type==='TRU') {
+      const group=findConversionGroup(node,nodes);
+      if (group) ownW*=Math.max(1,group.inputs.length);
+    }
     if (sumW>ownW+1e-6)
       w.push({code:'W5',message:`Children's existing/removed load exceeds this item's existing load — "${esc(node.description)}".`});
   }
@@ -2657,7 +2667,12 @@ function gridFilterBar() {
   const nodes=state.nodes;
   const ids=preOrder(state.rootIds,nodes);
   const dm={}; ids.forEach(id=>{ const p=nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
-  const branchOptions=ids.map(id=>{
+  // Revision 57 correction (item 1.3): cascade the AC/DC filter into the Branch dropdown's own
+  // options — picking "AC only"/"DC only" narrows Branch to matching items only, so the two
+  // filters can never be combined into a selection guaranteed to show nothing. Depth (dm) is
+  // still computed from the full, unfiltered tree above so indentation stays consistent.
+  const branchIds=gridFilterAcDc==='all'?ids:ids.filter(id=>nodes[id]?.acDc===gridFilterAcDc);
+  const branchOptions=branchIds.map(id=>{
     const n=nodes[id]; if (!n) return '';
     const indent='&nbsp;&nbsp;'.repeat(dm[id]||0);
     return `<option value="${id}"${gridFilterBranchId===id?' selected':''}>${indent}${esc(n.description||'unnamed')}</option>`;
@@ -2980,23 +2995,32 @@ function gridRefDesCell(n,editable=true){
   if (!editable) return `<td class="grid-col-refdes"><span class="grid-refdes-readonly">${esc(n.refDes||'')}</span></td>`;
   return `<td class="grid-col-refdes"><input data-field="refDes" value="${esc(n.refDes||'')}" placeholder="Ref Des"></td>`;
 }
-function gridEffCell(n,forceDisabled){
-  const showVal=isConv(n.type)&&n.convRole!=='out'&&!forceDisabled;
-  return `<td class="num">${showVal?gridNumInput('efficiency',null,n.efficiency):'<input disabled>'}</td>`;
+// showLockedValue: when forceDisabled, render the disabled input WITH its current value instead
+// of blank (Revision 57 correction, item 1.1) — used for a TRU additional-input row, whose
+// values are locked but still meaningful to see; left false (the original behavior) for the New
+// grid's existing-context rows, where hiding the value entirely is deliberate (Revision 23 —
+// those rows are structural context only, not meant to surface old values at all).
+function gridEffCell(n,forceDisabled,showLockedValue){
+  const applicable=isConv(n.type)&&n.convRole!=='out';
+  if (applicable&&!forceDisabled) return `<td class="num">${gridNumInput('efficiency',null,n.efficiency)}</td>`;
+  if (applicable&&forceDisabled&&showLockedValue) return `<td class="num"><input disabled value="${n.efficiency!=null?fmtN(n.efficiency):''}"></td>`;
+  return `<td class="num"><input disabled></td>`;
 }
-function gridPfCell(n,forceDisabled){
-  const showCpf=['TRU','Inverter','Frequency Converter'].includes(n.type);
-  const showVal=showCpf&&n.convRole!=='out'&&!forceDisabled;
-  return `<td class="num">${showVal?gridNumInput('convPf',null,n.convPf):'<input disabled>'}</td>`;
+function gridPfCell(n,forceDisabled,showLockedValue){
+  const applicable=['TRU','Inverter','Frequency Converter'].includes(n.type)&&n.convRole!=='out';
+  if (applicable&&!forceDisabled) return `<td class="num">${gridNumInput('convPf',null,n.convPf)}</td>`;
+  if (applicable&&forceDisabled&&showLockedValue) return `<td class="num"><input disabled value="${n.convPf!=null?fmtN(n.convPf):''}"></td>`;
+  return `<td class="num"><input disabled></td>`;
 }
 // Capacity is split into three always-present columns (A, VA (AC), W (DC)) rather than one
 // dynamic column, so AC and DC rows show the same column set with the inapplicable one inhibited.
-function gridCapCells(n,forceDisabled){
+function gridCapCells(n,forceDisabled,showLockedValue){
   if (!hasCap(n.type)) return `<td class="num grp-first"><input disabled></td><td class="num"><input disabled></td><td class="num"><input disabled></td>`;
   const isAc=n.acDc==='ac';
-  const aCell=forceDisabled?`<td class="num grp-first"><input disabled></td>`:`<td class="num grp-first">${gridNumInput('capacity','a',n.capacity?.a)}</td>`;
-  const vaCell=(!isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num"><input disabled></td>`:`<td class="num">${gridNumInput('capacity','va',n.capacity?.va)}</td>`);
-  const wCell=(isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num"><input disabled></td>`:`<td class="num">${gridNumInput('capacity','w',n.capacity?.w)}</td>`);
+  const lockedOrBlank=val=>showLockedValue?`<input disabled value="${val!=null?fmtN(val):''}">`:'<input disabled>';
+  const aCell=forceDisabled?`<td class="num grp-first">${lockedOrBlank(n.capacity?.a)}</td>`:`<td class="num grp-first">${gridNumInput('capacity','a',n.capacity?.a)}</td>`;
+  const vaCell=(!isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num">${lockedOrBlank(n.capacity?.va)}</td>`:`<td class="num">${gridNumInput('capacity','va',n.capacity?.va)}</td>`);
+  const wCell=(isAc)?`<td class="num"><input disabled></td>`:(forceDisabled?`<td class="num">${lockedOrBlank(n.capacity?.w)}</td>`:`<td class="num">${gridNumInput('capacity','w',n.capacity?.w)}</td>`);
   return aCell+vaCell+wCell;
 }
 function gridPowerGroupCells(n,field,applicable,forceDisabled,placeholder){
@@ -3175,8 +3199,8 @@ function buildExRemRow(n,depth){
     ${gridTypeCell(n,depth)}${gridDescInputCell(n)}${gridRefDesCell(n)}
     ${truStatusLocked?gridStatusDisplayCell(n):gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
-    ${gridEffCell(n,truValueLocked)}${gridPfCell(n,truValueLocked)}
-    ${gridCapCells(n,truValueLocked)}${gridGroupResetCell('capacity',hasCap(n.type)&&!truValueLocked)}
+    ${gridEffCell(n,truValueLocked,truValueLocked)}${gridPfCell(n,truValueLocked,truValueLocked)}
+    ${gridCapCells(n,truValueLocked,truValueLocked)}${gridGroupResetCell('capacity',hasCap(n.type)&&!truValueLocked)}
     ${exLoadCells}${gridGroupResetCell('existingLoad',hasCap(n.type)&&!exLoadLocked)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),truValueLocked)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!truValueLocked)}
     ${gridActionsCell(n,false,'exrem')}
@@ -3223,6 +3247,10 @@ function buildNewRow(n,depth){
   // (source spec §3.5.1); description/Ref Des stay editable via the existing !isExistingCtx gate.
   const truValueLocked=truGridRole(n)==='additional';
   const forceVals=isExistingCtx||truValueLocked;
+  // Show the locked value for a TRU additional-input row, unless existing-context hiding also
+  // applies — that takes precedence (Revision 23's deliberate "no old values in New-grid context"
+  // behavior wins over Revision 57's "show the mirrored value" for additional-input rows).
+  const showLockedVals=truValueLocked&&!isExistingCtx;
   // New-status, non-load, childless items can carry a direct Net Change override instead of
   // the usual computed (children-summed) value — the same netChangeOverride field the Edit
   // modal already supports, just exposed for direct grid entry in this specific case. Explicitly
@@ -3236,8 +3264,8 @@ function buildNewRow(n,depth){
     ${gridTypeCell(n,depth,!isExistingCtx)}${gridDescInputCell(n,!isExistingCtx)}${gridRefDesCell(n,!isExistingCtx)}
     ${gridStatusDisplayCell(n)}
     ${gridVoltAcdcCells(n,isExistingCtx)}
-    ${gridEffCell(n,forceVals)}${gridPfCell(n,forceVals)}
-    ${gridCapCells(n,forceVals)}${gridGroupResetCell('capacity',hasCap(n.type)&&!forceVals)}
+    ${gridEffCell(n,forceVals,showLockedVals)}${gridPfCell(n,forceVals,showLockedVals)}
+    ${gridCapCells(n,forceVals,showLockedVals)}${gridGroupResetCell('capacity',hasCap(n.type)&&!forceVals)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),forceVals)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!forceVals)}
     ${ncOverridable?gridPowerGroupCells(n,'netChangeOverride',true,false,'auto'):gridDisplayCells(n,'_netChange',!isLoad(n.type),isExistingCtx)}${gridGroupResetCell('netChangeOverride',ncOverridable&&n.netChangeOverride!=null)}
     ${gridActionsCell(n,isExistingCtx,'new')}
@@ -3381,7 +3409,7 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
       if (act==='up') { moveSibling(id,-1); renderAll(); }
       else if (act==='down') { moveSibling(id,1); renderAll(); }
       else if (act==='child') gridAddChildRow(id,defaultChildStatus,renderFn);
-      else if (act==='edit') openEdit(id);
+      else if (act==='edit') { gridCalcRow(id); openEdit(id); }
       else if (act==='del') gridDeleteRow(id,renderFn);
       else if (act==='dup') gridDuplicateRow(id,renderFn);
       else if (act==='calc') gridCalcRow(id);
@@ -3431,7 +3459,18 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
   // either just re-renders this grid; the other grid picks up the same shared values whenever it
   // next renders (e.g. on tab switch).
   const acdcFilterSel=el.querySelector('#grid-filter-acdc');
-  if (acdcFilterSel) acdcFilterSel.addEventListener('change',()=>{ gridFilterAcDc=acdcFilterSel.value; renderFn(); });
+  if (acdcFilterSel) acdcFilterSel.addEventListener('change',()=>{
+    gridFilterAcDc=acdcFilterSel.value;
+    // Revision 57 correction (item 1.3): if the newly-selected AC/DC filter no longer matches
+    // the currently-selected branch, clear the branch filter too — the Branch dropdown's own
+    // option list is narrowed the same way (see gridFilterBar), so leaving this set would apply
+    // a filter no longer reflected as selected anywhere in the UI.
+    if (gridFilterBranchId&&gridFilterAcDc!=='all') {
+      const bn=state&&state.nodes[gridFilterBranchId];
+      if (!bn||bn.acDc!==gridFilterAcDc) gridFilterBranchId='';
+    }
+    renderFn();
+  });
   const branchFilterSel=el.querySelector('#grid-filter-branch');
   if (branchFilterSel) branchFilterSel.addEventListener('change',()=>{ gridFilterBranchId=branchFilterSel.value; renderFn(); });
   const filterClearBtn=el.querySelector('#grid-filter-clear');
