@@ -3498,20 +3498,32 @@ state and the UI never drift apart.
 **2 — W5 ("children's existing/removed load exceeds this item's") false-fired for any multi-input
 TRU.** A TRU input's own `existingLoad.w` is deliberately the *per-phase* share (total ÷ input
 count, Phases 1–2) — comparing that directly against the primary's real structural child
-(output's own, much larger combined existing load) meant W5 fired for nearly every multi-input
-TRU regardless of whether anything was actually wrong. `warnNode`'s W5 check now reconstructs the
-group's *total* existing load (phase × input count) via `findConversionGroup` before comparing,
-for any node that's a TRU input specifically — a no-op for single-input TRUs, where the phase
-value already *is* the total.
+(output's own existing load) meant W5 fired for nearly every multi-input TRU regardless of
+whether anything was actually wrong. `warnNode`'s W5 check reconstructs the group's *total*
+existing load (phase × input count) via `findConversionGroup` before comparing, for any node
+that's a TRU input specifically — a no-op for single-input TRUs, where the phase value already
+*is* the total.
+
+**Follow-up (still 2026-08-19): this first pass was itself incomplete.** It fixed the "own"
+(input) side of the comparison but left the "children" (output) side unconverted — output's
+existing load sits on the *other* side of the efficiency boundary from the input side's declared
+value, so comparing the two directly (without accounting for efficiency) still produced the wrong
+threshold. Per the user's own worked example — output existing load 510 W at 85% efficiency across
+3 inputs should be checked against (510/0.85) = 600 W total, or 200 W per phase — the children-side
+sum now also converts a TRU output child's existing load through `/efficiency` before summing
+(the same `outW/efficiency` relationship `calcNC` already uses for Net Change), so both sides of
+the comparison are expressed in the same input-side terms.
 
 Verified live: a 3-input TRU's additional-input row correctly shows its capacity value (disabled,
 not blank); an ordinary bus with only Existing Load A entered opens the Edit dialog with VA/W
 already resolved after clicking the grid's Edit button; selecting "DC only" narrows the Branch
 dropdown to DC items only, and switching back to "AC only" after picking a DC branch correctly
-clears the branch filter; a 3-input TRU with realistic existing-load values no longer trips W5 on
-its own input rows (confirmed by giving the parent buses matching existing loads to isolate the
-check). Confirmed the New grid's existing-context rows still hide values entirely (Revision 23
-behavior unchanged). Full tab sweep, no console errors. Test data removed after verification.
+clears the branch filter; New grid's existing-context rows still hide values entirely (Revision 23
+behavior unchanged). For W5 specifically: an output existing load of 510 W at 85% efficiency
+across 3 inputs, each phase declaring exactly 200 W (600 W total, matching 510/0.85), correctly
+does *not* warn; the same setup with each phase under-declared at 150 W (450 W total, short of the
+required 600 W) correctly *does* warn. Full tab sweep, no console errors. Test data removed after
+verification.
 
 ## Appendix A: Future Enhancements
 

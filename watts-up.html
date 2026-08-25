@@ -1690,14 +1690,23 @@ function warnNode(node,nodes) {
     children(node.id,nodes).forEach(c=>{
       if (c.status!=='existing'&&c.status!=='removed') return;
       const src=isLoad(c.type)?c.loadValue:c.existingLoad;
-      sumW+=src?.w||0;
+      let childW=src?.w||0;
+      // Revision 57 correction (round 2): a TRU input's structural child is its OUTPUT — its
+      // existing load is a DC (or otherwise output-side) value on the *other* side of the
+      // efficiency boundary, not directly comparable to the input side's declared value.
+      // Converting it to the equivalent input-side demand first (outW/efficiency, the same
+      // relationship calcNC already uses for Net Change) is what makes the comparison meaningful.
+      if (node.convRole==='in'&&node.type==='TRU'&&c.convRole==='out'&&node.efficiency>0) {
+        childW=childW/node.efficiency;
+      }
+      sumW+=childW;
     });
-    // Revision 57 correction (item 2): a TRU input's own existingLoad.w is deliberately the
-    // PER-PHASE share (total ÷ input count, Phase 1/2) — comparing that directly against
-    // children's combined (output-side) existing load would almost always incorrectly flag this
-    // warning for any multi-input TRU. Reconstruct the group's TOTAL existing load for the
-    // comparison instead; a single-input TRU's own existingLoad.w already *is* the total, so this
-    // is a no-op there.
+    // Revision 57 correction: a TRU input's own existingLoad.w is deliberately the PER-PHASE
+    // share (total ÷ input count, Phase 1/2) — comparing that directly against children's
+    // combined (output-side) existing load would almost always incorrectly flag this warning for
+    // any multi-input TRU. Reconstruct the group's TOTAL existing load for the comparison
+    // instead; a single-input TRU's own existingLoad.w already *is* the total, so this is a no-op
+    // there.
     let ownW=node.existingLoad?.w||0;
     if (node.convRole==='in'&&node.type==='TRU') {
       const group=findConversionGroup(node,nodes);
