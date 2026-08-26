@@ -3525,6 +3525,52 @@ does *not* warn; the same setup with each phase under-declared at 150 W (450 W t
 required 600 W) correctly *does* warn. Full tab sweep, no console errors. Test data removed after
 verification.
 
+## 63. Revision 57 Correction — Cross-Analysis Existing-Load Substitution for Multi-Input TRUs
+
+*Last updated: 2026-08-19*
+
+Reported from the user's own in-progress project: the W5 warning fired in Active Project (AP) for
+several TRUs' primary input rows, but not in Previous & Concurrent Modifications (PCM), for TRUs
+shared between the two analyses.
+
+**Root cause, confirmed by direct reproduction** (not assumed): `recalc()`'s cross-analysis
+substitution (spec §3.3.2 — a shared, non-load AP item's Existing Load is overwritten with its
+PCM peer's own computed New Load) copies the peer's `_newLoad` **verbatim** onto the AP node. For
+a shared TRU, only the *primary* input is ever twinned into PCM (additional input phases were
+never twinned, per the sharing scope this round explicitly left frozen) — so PCM's twin
+necessarily represents the TRU as a single node, and its `_newLoad` is that node's own total, not
+a phase share. But AP's own primary `existingLoad` is deliberately a *per-phase* value
+(Revision 57, Phases 1–2) — so copying PCM's twin's total straight across left AP's primary
+holding its whole group's combined total instead of its own one-third (or one-half) share,
+inflated by a factor of the input count. Reproduced directly: seeded a 3-input TRU, shared the
+primary, set the PCM twin's Existing Load, and confirmed AP's primary ended up with the twin's
+full total rather than that total divided by 3.
+
+**Fix**: the substitution in `recalc()` now divides the peer's `_newLoad` by the AP node's own
+real input count (via `findConversionGroup`) before applying it, whenever the shared node is a
+TRU input — a no-op for a single-input TRU (division by 1) and completely untouched for any
+ordinary (non-TRU) shared item.
+
+Verified live: a 3-input TRU's shared primary now receives exactly total÷3 of its PCM peer's new
+load (570 W peer total → 190 W on the AP primary, confirmed down to the full power object, not
+just W). Single-input shared TRU regression confirmed unchanged (peer total applied directly, as
+before). An ordinary shared Bus confirmed completely unaffected. Full tab sweep, no console
+errors. Test data removed after verification.
+
+**Issue 2 (also reported, still open)**: the user separately reported the "Overloaded: new load
+exceeds capacity" warning firing incorrectly for two TRUs, describing the underlying cause as the
+TRU's total Net Change being applied entirely to the primary input while the second and third
+inputs showed 0 — which would matter for calcNC's `outW/efficiency/nInputs` division (Phase 1),
+not the Existing-Load substitution above. This was **not reproduced** despite testing the most
+likely mechanisms directly against the current code: a fresh multi-input TRU, the same TRU shared
+with PCM (primary and its OUT twin both created), and the same TRU duplicated via both
+`duplicateNodeById` and `duplicateBranch` — every one of these divided Net Change correctly (each
+phase showing an equal one-third share). Since the live project has been edited across many
+iterations of this feature, the specific data state that triggers this is likely something an
+isolated repro can't reconstruct; needs a diagnostic dump from the actual project (e.g. each
+affected TRU's members' `convGroupId`/`phaseOrder`/`efficiency`/`netChangeOverride`/`_netChange`)
+to pin down before a fix can be written with confidence.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

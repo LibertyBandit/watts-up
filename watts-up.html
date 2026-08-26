@@ -1755,7 +1755,29 @@ function recalc() {
       if (!n.sharedPeerId||isLoad(n.type)||!hasCap(n.type)) return;
       const peer=pcm.nodes[n.sharedPeerId];
       if (!peer) return;
-      n.existingLoad=peer._newLoad?{...peer._newLoad}:mkPow(0,0,0,0,1);
+      let newLoad=peer._newLoad?{...peer._newLoad}:mkPow(0,0,0,0,1);
+      // Revision 57 correction: a TRU input's own existingLoad is deliberately a PER-PHASE share
+      // — but PCM's twin only ever represents ONE node's worth of total demand (additional input
+      // phases are never twinned, per the sharing scope frozen this round), so its _newLoad is
+      // this TRU's combined TOTAL, not one phase's share. Divide it by however many real input
+      // phases AP's own group actually has before applying it here — otherwise a shared TRU
+      // primary ends up holding its whole group's total instead of its own phase's share,
+      // inflated by a factor of the input count.
+      if (n.convRole==='in'&&n.type==='TRU') {
+        const group=findConversionGroup(n,ap.nodes);
+        const nInputs=group?Math.max(1,group.inputs.length):1;
+        if (nInputs>1) {
+          const f=1/nInputs;
+          newLoad={
+            w:newLoad.w!=null?newLoad.w*f:null,
+            var:newLoad.var!=null?newLoad.var*f:null,
+            va:newLoad.va!=null?newLoad.va*f:null,
+            a:newLoad.a!=null?newLoad.a*f:null,
+            pf:newLoad.pf,
+          };
+        }
+      }
+      n.existingLoad=newLoad;
     });
   }
   recalcAnalysis(state.analyses.ap);
