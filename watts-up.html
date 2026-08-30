@@ -1229,6 +1229,13 @@ function switchAnalysis(id) {
 // twins default to Existing status regardless of the source's own status — they're structural
 // scaffolding the user didn't explicitly choose, not something being actively documented as
 // new/removed. Field sync going forward (beyond this initial copy) is Phase 2b.
+// Revision 64 (Phase B): a TRU's whole conversion group is shared as one unit — primary, every
+// additional input, and the output — never just the specific node clicked (Share/Unshare is
+// restricted to the primary row's grid button, but this stays generic so any caller reaches the
+// same whole-group behavior). Every group member other than the output may sit under a
+// completely different parent bus (that's the reason the sibling constraint on additional inputs
+// was removed), so each one needs its own independent ancestor walk up to a shared ancestor —
+// unlike the single-chain walk this function used before multi-input TRUs existed.
 function shareWithOther(nodeId) {
   if (!state) return;
   const curId=state.currentAnalysis, otherId=curId==='ap'?'pcm':'ap';
@@ -1237,17 +1244,29 @@ function shareWithOther(nodeId) {
   if (!n||n.sharedPeerId) return;
   if (!state.analyses[otherId]) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
 
-  const chain=[]; let cursor=n;
-  while (cursor&&!cursor.sharedPeerId) { chain.unshift(cursor); cursor=cursor.parentId?cur.nodes[cursor.parentId]:null; }
-  if (!cursor) { alert('Could not find a shared ancestor to attach to — this should not happen.'); return; }
+  const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n,cur.nodes):null;
+  const shareTargets=group?group.inputs.filter(inp=>!inp.sharedPeerId):[n];
 
-  if (chain.length>1) {
-    const names=chain.slice(0,-1).map(x=>x.description||'unnamed').join(', ');
+  const buildChain=node=>{
+    const chain=[]; let cursor=node;
+    while (cursor&&!cursor.sharedPeerId) { chain.unshift(cursor); cursor=cursor.parentId?cur.nodes[cursor.parentId]:null; }
+    return {chain,root:cursor};
+  };
+  const chains=shareTargets.map(buildChain);
+  if (chains.some(c=>!c.root)) { alert('Could not find a shared ancestor to attach to — this should not happen.'); return; }
+
+  // One combined confirmation covering every new ancestor across every target's own chain,
+  // rather than one prompt per input — the targets themselves are always being shared and aren't
+  // listed here, only whatever additional ancestors that requires.
+  const allNewAncestorNames=[];
+  chains.forEach(({chain})=>{ chain.slice(0,-1).forEach(a=>allNewAncestorNames.push(a.description||'unnamed')); });
+  if (allNewAncestorNames.length) {
     const otherLabel=state.analyses[otherId].label;
-    if (!confirm(`Sharing "${n.description||'unnamed'}" with ${otherLabel} will also share its ancestor(s): ${names}. Continue?`)) return;
+    const label=group?`this TRU's items`:`"${n.description||'unnamed'}"`;
+    if (!confirm(`Sharing ${label} with ${otherLabel} will also share its ancestor(s): ${allNewAncestorNames.join(', ')}. Continue?`)) return;
   }
 
-  // Create the twin chain top-down in the other analysis. Temporarily flipping
+  // Create the twin chains top-down in the other analysis. Temporarily flipping
   // state.currentAnalysis lets addNode/attachChild (which always operate on the currently
   // aliased state.nodes/state.rootIds) create nodes there unchanged, instead of needing a
   // parallel "other analysis" version of every node-creation helper.
@@ -1264,40 +1283,39 @@ function shareWithOther(nodeId) {
       // Active Project twin is now shared and non-load), so no direction check is needed.
       overrides.existingLoad=node.existingLoad?{...node.existingLoad}:mkPow(0,0,0,0,1);
     }
-    if (isConv(node.type)) { overrides.efficiency=node.efficiency; overrides.convPf=node.convPf; }
+    if (isConv(node.type)) { overrides.efficiency=node.efficiency; overrides.convPf=node.convPf; overrides.phaseOrder=node.phaseOrder; }
     if (isLoad(node.type)) overrides.loadValue=node.loadValue?{...node.loadValue}:mkPow();
     const twinId=addNode(parentId,{type:node.type,...overrides});
     node.sharedPeerId=twinId;
     return twinId;
   };
-  let parentId=cursor.sharedPeerId;
-  chain.forEach(node=>{ parentId=makeTwin(node,parentId); });
-  // Revision 52 (items 6/7): a conversion-IN node's paired OUT node must always be shared
-  // alongside it — a TRU is documented and edited as one paired item, not two independent ones,
-  // and previously the twin never got convRole set at all (making it an unpaired, effectively
-  // broken node) nor did OUT ever get created when sharing IN directly. This only needs handling
-  // here for the share *target* itself (`n`, the chain's last entry): the upward-only ancestor
-  // walk above never visits a node's children, so if `n` is convRole 'in', its OUT child was
-  // never visited and needs its own twin now. If the original target was instead somewhere
-  // *below* OUT, OUT was already a normal ancestor in `chain` and already got its twin created
-  // in its correct place by the loop above — this only fires when it wasn't.
-  if (n.convRole==='in') {
-    const outNode=children(n.id,cur.nodes).find(c=>c.convRole==='out');
-    if (outNode&&!outNode.sharedPeerId) makeTwin(outNode,n.sharedPeerId);
+  chains.forEach(({chain,root})=>{
+    let parentId=root.sharedPeerId;
+    chain.forEach(node=>{ parentId=makeTwin(node,parentId); });
+  });
+  // The output is always shared as a child of the primary's twin — this only needs explicit
+  // handling here if it wasn't already covered by one of the ancestor chains above (only possible
+  // when the original share target was somewhere *below* the output).
+  const outputSource=group?group.output:(n.convRole==='in'?children(n.id,cur.nodes).find(c=>c.convRole==='out'):null);
+  if (outputSource&&!outputSource.sharedPeerId) {
+    const primarySource=group?group.inputs[0]:n;
+    if (primarySource.sharedPeerId) makeTwin(outputSource,primarySource.sharedPeerId);
   }
-  // Revision 57: conversion-pair twins created above still need their own shared convGroupId in
-  // the other analysis (twins always form a fresh, independent group there — the source's own
-  // convGroupId lives in a different nodes dict and is never reused). Mirrors migrateLegacy's own
-  // IN-parents-OUT pairing, which always holds for a freshly-created twin pair; only ever touches
-  // the just-created twins since every pre-existing node already has a convGroupId.
+  // Group the newly-created twins on the target side by matching each one back to its *source's*
+  // convGroupId — not by structural position, since an additional-input twin isn't a structural
+  // child of the primary's twin (it sits under a different bus twin entirely). Only ever touches
+  // twins just created this call (every pre-existing node already has a convGroupId).
   const otherNodesAfterShare=state.analyses[otherId].nodes;
+  const bySourceGid={};
   Object.values(otherNodesAfterShare).forEach(tn=>{
-    if (tn.convRole==='in'&&!tn.convGroupId) {
-      const twinOut=children(tn.id,otherNodesAfterShare).find(c=>c.convRole==='out');
-      const gid=uid();
-      tn.convGroupId=gid; tn.phaseOrder=0;
-      if (twinOut) twinOut.convGroupId=gid;
-    }
+    if (!tn.convRole||tn.convGroupId) return;
+    const source=cur.nodes[tn.sharedPeerId];
+    if (!source||!source.convGroupId) return;
+    (bySourceGid[source.convGroupId]=bySourceGid[source.convGroupId]||[]).push(tn);
+  });
+  Object.values(bySourceGid).forEach(members=>{
+    const gid=uid();
+    members.forEach(tn=>{ tn.convGroupId=gid; });
   });
   state.currentAnalysis=curId;
   // recalc() always recomputes both analyses in dependency order (Phase 2c), so one call here
@@ -1309,7 +1327,13 @@ function unshareNode(id) {
   if (!state) return;
   const n=curAn().nodes[id];
   if (!n||!n.sharedPeerId) return;
-  if (!confirm(`Stop sharing "${n.description||'unnamed'}"? Both items remain — they just won't stay linked anymore.`)) return;
+  // Revision 64 (Phase B): unshares a TRU's whole conversion group together — every input plus
+  // the output — symmetric with shareWithOther's whole-group sharing, same reasoning as the
+  // original IN/OUT-pair-only version (Revision 52 items 6/7): never leave the group in an
+  // inconsistent, half-shared state.
+  const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n):null;
+  const label=group?`this TRU's items`:`"${n.description||'unnamed'}"`;
+  if (!confirm(`Stop sharing ${label}? Both items remain — they just won't stay linked anymore.`)) return;
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   const other=state.analyses[otherId];
   const unlinkOne=node=>{
@@ -1317,12 +1341,15 @@ function unshareNode(id) {
     if (peer) peer.sharedPeerId=null;
     node.sharedPeerId=null;
   };
-  unlinkOne(n);
-  // Revision 52 (items 6/7): unshare a TRU's IN/OUT pair together, same reasoning as sharing —
-  // never leave the pair in an inconsistent half-shared state.
-  if (n.convRole==='in') {
-    const outNode=children(n.id,curAn().nodes).find(c=>c.convRole==='out');
-    if (outNode&&outNode.sharedPeerId) unlinkOne(outNode);
+  if (group) {
+    group.inputs.forEach(inp=>{ if (inp.sharedPeerId) unlinkOne(inp); });
+    if (group.output&&group.output.sharedPeerId) unlinkOne(group.output);
+  } else {
+    unlinkOne(n);
+    if (n.convRole==='in') {
+      const outNode=children(n.id,curAn().nodes).find(c=>c.convRole==='out');
+      if (outNode&&outNode.sharedPeerId) unlinkOne(outNode);
+    }
   }
   persist();renderAll();
 }
@@ -1755,29 +1782,12 @@ function recalc() {
       if (!n.sharedPeerId||isLoad(n.type)||!hasCap(n.type)) return;
       const peer=pcm.nodes[n.sharedPeerId];
       if (!peer) return;
-      let newLoad=peer._newLoad?{...peer._newLoad}:mkPow(0,0,0,0,1);
-      // Revision 57 correction: a TRU input's own existingLoad is deliberately a PER-PHASE share
-      // — but PCM's twin only ever represents ONE node's worth of total demand (additional input
-      // phases are never twinned, per the sharing scope frozen this round), so its _newLoad is
-      // this TRU's combined TOTAL, not one phase's share. Divide it by however many real input
-      // phases AP's own group actually has before applying it here — otherwise a shared TRU
-      // primary ends up holding its whole group's total instead of its own phase's share,
-      // inflated by a factor of the input count.
-      if (n.convRole==='in'&&n.type==='TRU') {
-        const group=findConversionGroup(n,ap.nodes);
-        const nInputs=group?Math.max(1,group.inputs.length):1;
-        if (nInputs>1) {
-          const f=1/nInputs;
-          newLoad={
-            w:newLoad.w!=null?newLoad.w*f:null,
-            var:newLoad.var!=null?newLoad.var*f:null,
-            va:newLoad.va!=null?newLoad.va*f:null,
-            a:newLoad.a!=null?newLoad.a*f:null,
-            pf:newLoad.pf,
-          };
-        }
-      }
-      n.existingLoad=newLoad;
+      // Revision 64 (Phase B): reverts the Revision 57 "divide peer's New Load by input count"
+      // workaround — that compensated for the old sharing shape, where one PCM twin stood in for
+      // an entire multi-input TRU group. Now every input phase (and the output) gets its own real
+      // twin (shareWithOther), so each twin's own New Load already IS the correct per-phase share
+      // — applying it directly here is correct again, exactly like any other shared item.
+      n.existingLoad=peer._newLoad?{...peer._newLoad}:mkPow(0,0,0,0,1);
     });
   }
   recalcAnalysis(state.analyses.ap);
@@ -3108,7 +3118,11 @@ function gridShareInfo(n,gridKey){
   // Revision 52 (items 6/7): a conversion-output row is managed via its IN row's Share/Unshare,
   // same as Dup/Del already are (canDelDup) — sharing/unsharing always handles the IN/OUT pair
   // together, so a separate control on OUT would be redundant at best and confusing at worst.
-  if (n.convRole==='out') return {show:false};
+  // Revision 64 (Phase B): for a multi-input TRU, restricted further to the primary input
+  // specifically (matching Duplicate/Delete's existing primary-only convention) — sharing
+  // already cascades to the whole group via shareWithOther, so a separate control on an
+  // additional-input row would be redundant at best and inconsistent at worst.
+  if (n.convRole==='out'||truGridRole(n)==='additional') return {show:false};
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   if (n.sharedPeerId) {
     const otherLabel=state.analyses[otherId]?.label||'the other analysis';

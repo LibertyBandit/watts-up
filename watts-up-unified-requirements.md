@@ -3598,6 +3598,69 @@ untouched. Confirmed the dynamic confirmation message reads correctly for a New�
 transition ("Changing status to Existing will clear..."). Full tab sweep, no console errors. Test
 data removed after verification.
 
+## 65. Revision 64 (Phase B) — TRU Whole-Group Sharing
+
+*Last updated: 2026-08-20*
+
+Second phase of "Watts Up Revision 64 (+) – Miscellaneous Clean-up Items.txt" (item 3). Sharing a
+multi-input TRU previously only ever created a twin for the specific node clicked plus its paired
+output — the second and third inputs were left as ordinary, unshared nodes, so the other analysis
+never had a real group to compute through. This is what caused both the W5 false-positives (the
+comparator only ever saw one phase) and the "output net change only reaches the primary" symptom
+from the two prior corrections (§62/§63) — those were both downstream consequences of sharing
+never having created a complete group in the first place, not separate bugs in their own right.
+
+**Design confirmed with the user**: Share/Unshare lives on the primary input's row only (matching
+the existing Duplicate/Delete convention, Phase 4) rather than the alternative of moving it to the
+output — keeps one consistent "primary controls the group" rule across every group-wide action.
+
+**Fix, `shareWithOther`**: when the share target is a TRU input, the whole group (every input via
+`findConversionGroup`, plus the output) is shared as one unit instead of just the clicked node.
+Each input other than the output may sit under a *different* parent bus — the whole reason the
+sibling constraint on additional inputs was removed — so each one gets its own independent
+ancestor walk up to a shared ancestor, rather than the single combined chain the old (pre-multi-
+input) design assumed. All the resulting "this will also share X, Y, Z" prompts are folded into
+one combined confirmation instead of one prompt per input. The output is still always parented
+under the primary's twin, unchanged from before. The new twins are grouped together on the target
+side by matching each one back to its *source's* `convGroupId` — not by structural position,
+since an additional-input twin isn't a structural child of the primary's twin the way it was in
+the old single-pair model.
+
+**Fix, `unshareNode`**: symmetric whole-group unsharing — unsharing the primary unshares every
+input plus the output together, never leaving the group half-shared.
+
+**Fix, `gridShareInfo`**: Share/Unshare hidden on additional-input rows (already hidden on output);
+shown only on the primary row, per the confirmed design.
+
+**Reverts §63's "divide PCM peer's New Load by input count" workaround.** That correction
+compensated for the *old* sharing shape, where one PCM twin stood in for an entire multi-input AP
+group — dividing its single total across AP's real input count was the only way to get a
+per-phase value out of a fundamentally single-node representation. Now that every input has its
+own real twin, each twin's own New Load already **is** the correct per-phase share (computed the
+ordinary way, through a real multi-input group on the twin's own side) — dividing it again would
+double the correction. `recalc()`'s substitution is back to a plain, unconditional
+`n.existingLoad = peer._newLoad`, identical to how every other shared item already works.
+
+Verified live, in both directions: built a 3-input TRU from scratch (three separate buses, no two
+inputs sharing a parent) and shared the primary from PCM into Active Project — confirmed all three
+buses were independently twinned, all three inputs plus the output ended up in one shared group in
+AP (single matching `convGroupId` across all four), each twin correctly parented under its own
+twinned bus, and each AP input's Existing Load exactly matched its own PCM twin's per-phase New
+Load with no further division needed. Added a load under AP's own output twin and confirmed AP's
+group divides Net Change correctly across its own three inputs, the same as PCM's. Repeated the
+whole scenario in the other direction (built fresh in Active Project, shared into PCM) with
+identical results. Confirmed the grid's Share/Unshare button appears only on the primary row.
+Confirmed unsharing the primary correctly unshared all four members (twins remain in place,
+un-linked, nothing deleted). Confirmed no W5 false-positives on the correctly-shared group.
+Single-input TRU sharing and ordinary (non-TRU) item sharing both regression-tested unaffected.
+Full tab sweep, no console errors. Test data removed after verification.
+
+**Repair path for pre-existing, partially-shared TRUs** (like the user's real "TRU 1", shared under
+the old shape before this fix): the simplest, safest fix is to Unshare then re-Share from the
+primary using the new mechanism — that rebuilds every input's twin correctly rather than trying to
+patch the old partial state in place. Not yet attempted against the user's actual project as of
+this writing.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
