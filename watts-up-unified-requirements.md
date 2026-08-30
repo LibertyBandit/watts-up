@@ -3571,6 +3571,33 @@ isolated repro can't reconstruct; needs a diagnostic dump from the actual projec
 affected TRU's members' `convGroupId`/`phaseOrder`/`efficiency`/`netChangeOverride`/`_netChange`)
 to pin down before a fix can be written with confidence.
 
+## 64. Revision 64 (Phase A) — Status-Transition Clearing, All Four Directions
+
+*Last updated: 2026-08-19*
+
+First phase of "Watts Up Revision 64 (+) – Miscellaneous Clean-up Items.txt". §53's status-
+transition fix (items 2/3) only covered Removed→Installed (clears Existing Load) and
+Installed→Removed (clears Net Change) — missing the other two transitions into/out of Installed
+that have the exact same problem: Existing→Installed also needs Existing Load cleared, and
+Installed→Existing also needs Net Change cleared.
+
+**Fix** (`doEditSave`): generalized the two conditions from matching a *specific* prior status to
+matching either Existing-Load-tracking status. `oldTracksExisting = status==='existing'||
+status==='removed'` triggers the Existing-Load-clear warning when transitioning into Installed;
+`newTracksExisting` (same shape, evaluated against the *new* status) triggers the Net-Change-clear
+warning when transitioning *out of* Installed into either Existing or Removed. Existing↔Removed
+itself still clears nothing — Existing Load stays meaningful across that transition, matching the
+original design. The confirmation message's target-status wording is now dynamic
+(`statusLabel(data.status)`) instead of hardcoded "Installed"/"Removed", since Net Change can now
+clear on the way to *either* Existing or Removed.
+
+Verified live: all four clearing transitions (Removed→Installed, Existing→Installed,
+Installed→Removed, Installed→Existing) correctly clear the appropriate field on accept; both
+non-clearing transitions (Existing→Removed, Removed→Existing) correctly leave existing values
+untouched. Confirmed the dynamic confirmation message reads correctly for a New→Existing
+transition ("Changing status to Existing will clear..."). Full tab sweep, no console errors. Test
+data removed after verification.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

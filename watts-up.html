@@ -5056,12 +5056,19 @@ function doEditSave() {
   // below has had its say — otherwise that logic would just overwrite this back to whatever the
   // (now-hidden, but still populated) form fields contain.
   let clearExistingLoadOnSave=false, clearNetChangeOnSave=false;
+  // Revision 64 (items 1/2): generalized beyond just Removed<->Installed — Existing and Removed
+  // both track the same "already installed" concept via Existing Load, so *either* one
+  // transitioning into Installed must clear it the same way; symmetrically, Installed transitioning
+  // into *either* Existing or Removed must clear Net Change. Existing<->Removed itself clears
+  // nothing — Existing Load stays meaningful across that transition.
+  const oldTracksExisting=n.status==='existing'||n.status==='removed';
+  const newTracksExisting=data.status==='existing'||data.status==='removed';
   if (hasCap(type)&&!isLoad(type)&&!n.convRole&&n.status!==data.status) {
-    if (n.status==='removed'&&data.status==='new') {
+    if (oldTracksExisting&&data.status==='new') {
       if (!confirm(`Changing status to Installed will clear "${n.description||'this item'}"'s Existing Load values. Continue?`)) return;
       clearExistingLoadOnSave=true;
-    } else if (n.status==='new'&&data.status==='removed') {
-      if (!confirm(`Changing status to Removed will clear "${n.description||'this item'}"'s Net Change values. Continue?`)) return;
+    } else if (n.status==='new'&&newTracksExisting) {
+      if (!confirm(`Changing status to ${statusLabel(data.status)} will clear "${n.description||'this item'}"'s Net Change values. Continue?`)) return;
       clearNetChangeOnSave=true;
     }
   }
