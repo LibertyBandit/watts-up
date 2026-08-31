@@ -3661,6 +3661,43 @@ primary using the new mechanism — that rebuilds every input's twin correctly r
 patch the old partial state in place. Not yet attempted against the user's actual project as of
 this writing.
 
+## 66. Revision 64 (Phase B follow-up) — Duplicate Shared Ancestor Bus
+
+*Last updated: 2026-08-20*
+
+Found by the user immediately after Phase B, while testing a TRU whose three input phases were
+each parented under their own sub-bus, with all three sub-buses in turn nested under one common
+top-level bus. Sharing the TRU's primary correctly shared the whole group, but the *top-level*
+bus — the one ancestor all three inputs' chains had in common — ended up duplicated three times
+in the other analysis, once per input, instead of created once and shared by all three.
+
+**Root cause**: Phase B's `shareWithOther` computed every input's own ancestor chain *before*
+creating any twins (`shareTargets.map(buildChain)`), so all three chains independently discovered
+the same not-yet-shared top-level bus and each queued it for creation. By the time the actual
+twin-creation loop ran, nothing had marked that bus as shared yet for any of the three passes, so
+each one dutifully created its own copy.
+
+**Fix**: split into two passes. The first (`previewChains`) still runs against the
+pre-share state to build one combined, *deduped* (by node id) confirmation message. The second —
+actual creation — rebuilds each target's chain fresh, immediately before processing that specific
+target (`shareTargets.forEach(target=>{ ... buildChain(target) ... })`), so a common ancestor
+already twinned by an earlier target in the same batch is correctly detected as already-shared
+(via its now-set `sharedPeerId`) and reused, rather than recreated.
+
+Verified live: reproduced the user's exact structure (one top-level bus, three sub-buses, one TRU
+input under each) and confirmed the fix — exactly one twin created for the top-level bus and each
+sub-bus, all three sub-bus twins correctly parented under the same top-bus twin, group of 3
+correctly formed. Confirmed the user's own reported workaround (sharing the top-level bus first,
+then the TRU) still works identically. Full Phase B regression suite re-run and passing:
+three-separate-bus sharing (no common ancestor), whole-group unsharing, single-input TRU sharing,
+ordinary item sharing. Full tab sweep, no console errors. Test data removed after verification.
+Confirmed against the user's own saved test file
+("WattsUp_Bombardier_Inc._BD-700-1A10_TEST63B_2026-08-31.json") that it exhibits precisely this
+bug — the top-level bus description appears 4 times (1 original + 3 duplicates) — though the fix
+only prevents new duplication going forward; the 2 stray copies already sitting in that saved
+file's PCM analysis will need manual cleanup (or an unshare-everything-and-reshare pass) since
+nothing retroactively merges already-created duplicates.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

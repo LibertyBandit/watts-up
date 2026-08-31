@@ -1252,14 +1252,22 @@ function shareWithOther(nodeId) {
     while (cursor&&!cursor.sharedPeerId) { chain.unshift(cursor); cursor=cursor.parentId?cur.nodes[cursor.parentId]:null; }
     return {chain,root:cursor};
   };
-  const chains=shareTargets.map(buildChain);
-  if (chains.some(c=>!c.root)) { alert('Could not find a shared ancestor to attach to — this should not happen.'); return; }
-
-  // One combined confirmation covering every new ancestor across every target's own chain,
-  // rather than one prompt per input — the targets themselves are always being shared and aren't
-  // listed here, only whatever additional ancestors that requires.
+  // Preview pass only, against the current (nothing-shared-yet) state — used purely to build one
+  // combined confirmation message, deduped by node id. Multiple inputs can share a common
+  // ancestor further up the tree (not just their own immediate parent — e.g. three sibling buses
+  // all nested under the same top-level bus), so the same ancestor can legitimately appear in more
+  // than one target's own chain; it must only be *counted*, and later *created*, once.
+  const previewChains=shareTargets.map(buildChain);
+  if (previewChains.some(c=>!c.root)) { alert('Could not find a shared ancestor to attach to — this should not happen.'); return; }
+  const seenAncestorIds=new Set();
   const allNewAncestorNames=[];
-  chains.forEach(({chain})=>{ chain.slice(0,-1).forEach(a=>allNewAncestorNames.push(a.description||'unnamed')); });
+  previewChains.forEach(({chain})=>{
+    chain.slice(0,-1).forEach(a=>{
+      if (seenAncestorIds.has(a.id)) return;
+      seenAncestorIds.add(a.id);
+      allNewAncestorNames.push(a.description||'unnamed');
+    });
+  });
   if (allNewAncestorNames.length) {
     const otherLabel=state.analyses[otherId].label;
     const label=group?`this TRU's items`:`"${n.description||'unnamed'}"`;
@@ -1289,7 +1297,16 @@ function shareWithOther(nodeId) {
     node.sharedPeerId=twinId;
     return twinId;
   };
-  chains.forEach(({chain,root})=>{
+  // Rebuilds each target's chain fresh, immediately before processing it — NOT the previewChains
+  // computed above — so a common ancestor already twinned by an earlier target in this same
+  // batch is correctly detected as already-shared (via its now-set sharedPeerId) and reused,
+  // instead of getting a brand-new duplicate twin for every target that happens to pass through
+  // it. This is exactly the bug a fully-precomputed chain list would reintroduce: three sibling
+  // inputs sharing one common top-level ancestor would otherwise each create their own separate
+  // copy of it.
+  shareTargets.forEach(target=>{
+    if (target.sharedPeerId) return; // already covered as an ancestor within an earlier target's own chain
+    const {chain,root}=buildChain(target);
     let parentId=root.sharedPeerId;
     chain.forEach(node=>{ parentId=makeTwin(node,parentId); });
   });
