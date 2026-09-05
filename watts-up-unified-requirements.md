@@ -3755,8 +3755,34 @@ session.
 **Not yet done**: inline JSZip (still CDN-loaded as of this writing — the user's chosen approach,
 not yet applied); an "insert missing content control at the end" or duplicate-and-retag helper UI
 for filling gaps found during sync; the deferred manual-edit dirty-check and Track-Changes
-discussion; persisting the connected file handle across page reloads (currently in-memory only);
-live user verification of Connect/Sync/Load against a real file.
+discussion; persisting the connected file handle across page reloads (currently in-memory only).
+
+**Live user verification, round 1**: the user tried the real Connect/Sync/Load flow and found two
+things.
+
+**1 — Sync fails with a cryptic error while the document is open in Word.** The exact message:
+"An operation that depends on state cached in an interface object was made but the state had
+changed since it was read from disk." This is Windows file locking, not a bug in this app's logic
+— Word (like most desktop apps) takes an exclusive lock on a `.docx` while it's open, which blocks
+any external process, including a File System Access API write, from touching the file at all
+until Word releases it. There's no way to write past this from a sandboxed browser API — the fix
+is entirely about the *message*, not the underlying constraint. `syncToWordDoc`'s catch block now
+recognizes `NoModificationAllowedError`/`InvalidStateError` specifically and shows: `Sync failed —
+"<filename>" is probably open in Word right now, which locks the file against outside changes.
+Close it in Word ... and try again.` — instead of the raw browser error. This is a permanent,
+inherent constraint of the whole external-file model, not something a future phase can remove:
+**syncing only works while the connected document is closed in Word** (or at least not being
+actively held open for editing).
+
+**2 — "← Load" needed a confirmation.** It silently overwrote in-app state with no warning,
+unlike "New" (which already confirms) — the user asked for one explicitly. Added, matching "New"'s
+existing wording style: `Load from the connected Word document? Any changes made here since the
+last sync will be lost.` Declining leaves state completely untouched.
+
+Verified live (via a mocked `wordDocHandle`, since the real picker still can't be driven from this
+session's sandboxed browser): Load's decline path leaves state unchanged; Load's accept path
+correctly reloads from the connected file; a mocked `createWritable()` throwing
+`NoModificationAllowedError` produces the new friendly message. Full tab sweep, no console errors.
 
 ## Appendix A: Future Enhancements
 

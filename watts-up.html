@@ -6429,7 +6429,15 @@ async function syncToWordDoc(silent){
       else alert('Synced to '+wordDocFileName+'.');
     }
   } catch(err) {
-    alert('Sync failed: '+err.message);
+    // Word (like most desktop apps) holds an exclusive lock on a .docx while it's open, which
+    // blocks any external process — including this write — from touching the file at all. The
+    // browser surfaces that as a generic, unhelpful state-mismatch error; translate it into the
+    // actual actionable cause instead of showing the raw message.
+    if (err&&(err.name==='NoModificationAllowedError'||err.name==='InvalidStateError')) {
+      alert(`Sync failed — "${wordDocFileName}" is probably open in Word right now, which locks the file against outside changes. Close it in Word (or make sure nothing else has it open) and try again.`);
+    } else {
+      alert('Sync failed: '+(err&&err.message?err.message:err));
+    }
   }
 }
 
@@ -6438,6 +6446,7 @@ async function syncToWordDoc(silent){
 // file handle instead of a picked <input type=file>.
 async function loadFromWordDoc(){
   if (!wordDocHandle) return;
+  if (!confirm('Load from the connected Word document? Any changes made here since the last sync will be lost.')) return;
   const file=await wordDocHandle.getFile();
   await importDocx(file);
 }
