@@ -3784,6 +3784,41 @@ session's sandboxed browser): Load's decline path leaves state unchanged; Load's
 correctly reloads from the connected file; a mocked `createWritable()` throwing
 `NoModificationAllowedError` produces the new friendly message. Full tab sweep, no console errors.
 
+**Live user verification, round 2**: the user then hit a real data-loss scenario — connected to one
+Word document, then used the plain **"Open"** button to load a second, unrelated file into the
+browser, then hit **"Sync →"**, which overwrote the *first* (still-connected) document with the
+second file's content. Root cause: "Open" (`file-input`'s `change` handler, used for both `.json`
+and `.docx`) and **"New"** both replace `state` with unrelated data but never touched
+`wordDocHandle` — the live connection silently carried forward onto data it was never meant for,
+so the next Sync targeted the wrong file with no warning.
+
+Fixed by severing the connection whenever project data is loaded from anywhere other than the
+connected document itself: new `disconnectWordDoc()` clears `wordDocHandle`/`wordDocFileName`,
+refreshes the Connect/Sync/Load UI (Sync and Load disappear until reconnected), and alerts naming
+the file that was disconnected. Wired into **both** "New" (after its existing confirm, before
+`state=freshState()`) and the `file-input` `change` handler (before dispatching to `importDocx`/
+`doImport`), so both ways of loading unrelated data into the app now cut the connection instead of
+letting Sync silently retarget it. Deliberately **not** wired into `loadFromWordDoc()` — loading
+*from* the connected document is the one case where the data genuinely still belongs to that file,
+so the connection correctly survives a Load.
+
+Considered inhibiting Open/New entirely while connected instead, but severing the connection was
+judged less disruptive: the user can always reconnect (to the same or a different file) with one
+click, whereas blocking Open/New would get in the way of legitimate uses (e.g., abandoning a
+connected file's project and starting fresh, or comparing an unrelated saved project) for no benefit
+once the connection itself can no longer be silently misused.
+
+Also fixed in the same round: the "Connected: ‹filename›" indicator was barely legible (`--text-
+muted`, `#484f58`, against the near-black `--bg-primary` background) — switched to `--accent-green`
+(bold, slightly larger) so it reads clearly and doubles as a positive "connected" status color.
+
+Verified live: mocked a connection, confirmed the indicator renders in the new color; simulated
+declining and confirming "New" (decline leaves the connection untouched, confirm disconnects with
+the expected alert before resetting state); dispatched a real `change` event on `file-input` with a
+synthetic `.docx` `File` (via `DataTransfer`) against the actual registered listener — confirmed
+`disconnectWordDoc()` runs and clears the handle *before* `importDocx` is invoked. Full console
+sweep, no errors.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

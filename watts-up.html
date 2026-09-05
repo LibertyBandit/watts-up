@@ -412,7 +412,7 @@
       <button id="btn-export" class="btn-default">Export JSON</button>
       <button id="btn-print"  class="btn-default">Print Report</button>
       <button id="btn-word"   class="btn-default">Word Report</button>
-      <span id="word-doc-indicator" class="hidden" style="font-size:.72rem;color:var(--text-muted);margin-left:.3rem"></span>
+      <span id="word-doc-indicator" class="hidden" style="font-size:.78rem;font-weight:600;color:var(--accent-green);margin-left:.3rem"></span>
       <button id="btn-word-connect" class="btn-default hidden">Connect Word Doc…</button>
       <button id="btn-word-sync"    class="btn-default hidden">Sync →</button>
       <button id="btn-word-load"    class="btn-default hidden">← Load</button>
@@ -6351,6 +6351,19 @@ const WORD_DOCX_TYPE={description:'Word Document',
 
 function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.showSaveFilePicker); }
 
+// Loading a different project — via "New" or the plain "Open" file picker — leaves the in-app
+// state no longer related to whatever file is connected. Left connected, the next "Sync →" would
+// silently overwrite that file with this unrelated project's content, so any such load severs the
+// connection instead of carrying it forward onto data it was never meant for.
+function disconnectWordDoc(){
+  if (!wordDocHandle) return;
+  const prevName=wordDocFileName;
+  wordDocHandle=null;
+  wordDocFileName='';
+  updateWordDocUI();
+  alert(`Disconnected from "${prevName}" — loading different project data here means syncing could no longer safely target that file. Use "Connect Word Doc…" again if you want to link a document to this project.`);
+}
+
 function updateWordDocUI(){
   const connectBtn=document.getElementById('btn-word-connect');
   if (!connectBtn) return; // called before the toolbar exists yet
@@ -6501,6 +6514,7 @@ function initEvents() {
   document.getElementById('btn-duplicate').addEventListener('click',duplicateNode);
   document.getElementById('btn-new').addEventListener('click',()=>{
     if (!confirm('Start a new analysis? Any unsaved changes will be lost.')) return;
+    disconnectWordDoc();
     state=freshState();collapsed=new Set();recalc();renderAll();persist();
   });
   document.getElementById('analysis-btn-ap').addEventListener('click',()=>switchAnalysis('ap'));
@@ -6512,7 +6526,10 @@ function initEvents() {
   document.getElementById('btn-open').addEventListener('click',()=>document.getElementById('file-input').click());
   document.getElementById('file-input').addEventListener('change',e=>{
     const f=e.target.files[0];
-    if(f){f.name.toLowerCase().endsWith('.docx')?importDocx(f):doImport(f);}
+    if(f){
+      disconnectWordDoc();
+      f.name.toLowerCase().endsWith('.docx')?importDocx(f):doImport(f);
+    }
     e.target.value='';
   });
   document.getElementById('btn-export').addEventListener('click',doExport);
