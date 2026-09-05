@@ -3698,6 +3698,66 @@ only prevents new duplication going forward; the 2 stray copies already sitting 
 file's PCM analysis will need manual cleanup (or an unshare-everything-and-reshare pass) since
 nothing retroactively merges already-created duplicates.
 
+## 67. Word Document Integration — External-File Sync (Phase 1)
+
+*Last updated: 2026-09-05*
+
+The existing Word export/import (Revisions 15–19: `generateDocx`/`importDocx`, an internal
+template embedded as `DOCX_TEMPLATE_B64`, content controls filled by tag) always regenerates a
+fresh `.docx` from the bundled template and downloads it — one-way, discarding any structural
+customization (added sections, letterhead, reordering) a user made to a previously-exported copy.
+This phase adapts that machinery so the document can instead live *outside* the app as the user's
+own evolving file, updated in place via the **File System Access API**, touching only the content
+controls and embedded JSON the app owns and leaving everything else untouched.
+
+**Design, decided across a review-and-advise discussion before any code was written**:
+- Content controls (Structured Document Tags) remain the data-binding surface — same
+  find-by-tag/replace-just-the-content mechanism already built, just now pointed at an external
+  file instead of the internal template.
+- The full JSON state stays embedded in `customXml/item1.xml` (a Custom XML Part — invisible,
+  non-printing, survives normal Word editing) as the single source of truth, so the app always has
+  access to raw/unrounded numbers regardless of what's displayed in the printed content controls.
+- A missing content control (user deleted it, or their document predates it) is **non-fatal and
+  reported**, never a blocking error — the app fills what it finds and lists what it didn't.
+- Duplicate tags are intentional (e.g. aircraft make/model/serial on both the cover page and the
+  header) — every matching control gets the same value written, not just the first.
+- JSZip is inlined (not CDN-loaded) per explicit choice, to keep the app fully offline-capable —
+  **not yet done**, see below.
+- Reconciling with Word's native Track Changes, and detecting a manual edit made *inside* an
+  app-managed control since the last sync, were both explicitly discussed and deferred — noted for
+  a future round, not attempted here.
+
+**Implementation**: `fillWattsUpDocx(zip, state)` extracted from `generateDocx` into a shared,
+reusable function — now defensively guards parts that may not exist in a user-restructured
+document (`word/header2.xml`, `docProps/custom.xml`), and returns `{missing, missingProps,
+missingFiles}` instead of assuming every expected tag/property/file is present. `generateDocx()`
+now calls this shared function; its own behavior (internal template, one-way download) is
+otherwise unchanged and remains the fallback for browsers without File System Access API support.
+New: `connectWordDoc()` (choice of Create New — writes a fresh copy of the internal template to a
+user-picked location via `showSaveFilePicker` — or Open Existing — `showOpenFilePicker` +
+`requestPermission({mode:'readwrite'})`), `syncToWordDoc(silent)` (reads the connected file's
+current bytes, fills in place, writes back via `createWritable()`), `loadFromWordDoc()` (thin
+wrapper reusing the existing `importDocx` unchanged, sourced from the live handle instead of a
+picked file). `hasFileSystemAccess()` feature-detects, and the whole Connect/Sync/Load UI stays
+hidden with no behavior change in unsupported browsers (Firefox, Safari) — the original "Word
+Report" button is untouched.
+
+Verified live: `generateDocx()`'s regression path (real internal template, realistic state) —
+zero missing tags/files, correct values filled. Full round-trip through the real `importDocx`
+function confirmed the embedded JSON correctly restores state after being wiped. Robustness-tested
+by deliberately stripping `word/header2.xml` and the `wu-compliance` content control from a copy
+of the template — no throw, both gaps correctly reported, everything else still filled correctly.
+**The actual file-picker-driven Connect/Sync/Load flow could not be tested end-to-end this
+session** — File System Access API requires a genuine user gesture and isn't available at all in
+the sandboxed test browser used for verification — needs live confirmation in a real Chrome/Edge
+session.
+
+**Not yet done**: inline JSZip (still CDN-loaded as of this writing — the user's chosen approach,
+not yet applied); an "insert missing content control at the end" or duplicate-and-retag helper UI
+for filling gaps found during sync; the deferred manual-edit dirty-check and Track-Changes
+discussion; persisting the connected file handle across page reloads (currently in-memory only);
+live user verification of Connect/Sync/Load against a real file.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

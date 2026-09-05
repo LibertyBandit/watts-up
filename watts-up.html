@@ -412,6 +412,10 @@
       <button id="btn-export" class="btn-default">Export JSON</button>
       <button id="btn-print"  class="btn-default">Print Report</button>
       <button id="btn-word"   class="btn-default">Word Report</button>
+      <span id="word-doc-indicator" class="hidden" style="font-size:.72rem;color:var(--text-muted);margin-left:.3rem"></span>
+      <button id="btn-word-connect" class="btn-default hidden">Connect Word Doc…</button>
+      <button id="btn-word-sync"    class="btn-default hidden">Sync →</button>
+      <button id="btn-word-load"    class="btn-default hidden">← Load</button>
     </div>
   </header>
 
@@ -6210,91 +6214,232 @@ function buildTablesContent(){
   return out.join('');
 }
 
-async function generateDocx(){
-  if(typeof JSZip==='undefined'){alert('JSZip not loaded — Word export requires an internet connection.');return;}
-  if(!state)return;
-  const xe=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  function fillSdtText(xml,tag,value){
-    const sv=xe(value||'');
-    const tXml=(sv.startsWith(' ')||sv.endsWith(' '))?`<w:t xml:space="preserve">${sv}</w:t>`:`<w:t>${sv}</w:t>`;
-    const marker=`<w:tag w:val="${tag}"/>`;
-    let result=xml,searchFrom=0;
-    while(true){
-      const idx=result.indexOf(marker,searchFrom);
-      if(idx<0)break;
-      const s0=result.lastIndexOf('<w:sdt>',idx);
-      const c0=result.indexOf('<w:sdtContent>',s0);
-      const c1=result.indexOf('</w:sdtContent>',c0)+15;
-      const chunk=result.slice(c0,c1);
-      const newChunk=chunk.replace(/<w:t(?:\s[^>]*)?>(?:[^<]*)<\/w:t>/,tXml);
-      result=result.slice(0,c0)+newChunk+result.slice(c1);
-      searchFrom=c0+newChunk.length;
-    }
-    return result;
+// ── WORD DOCUMENT FILL (shared by the internal-template download and the
+// connected-external-file sync — Word integration Phase 1 adaptation) ─────────
+const xe=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// `found` (when passed, an object this function adds to) lets a caller distinguish "this tag
+// exists in the document and was updated" from "this tag isn't present at all" — needed once the
+// template is a user-customizable external file rather than our own fixed, known-good one: a tag
+// the user deleted (or a template that predates it) must be reported, not silently ignored.
+function fillSdtText(xml,tag,value,found){
+  const sv=xe(value||'');
+  const tXml=(sv.startsWith(' ')||sv.endsWith(' '))?`<w:t xml:space="preserve">${sv}</w:t>`:`<w:t>${sv}</w:t>`;
+  const marker=`<w:tag w:val="${tag}"/>`;
+  let result=xml,searchFrom=0,hits=0;
+  while(true){
+    const idx=result.indexOf(marker,searchFrom);
+    if(idx<0)break;
+    hits++;
+    const s0=result.lastIndexOf('<w:sdt>',idx);
+    const c0=result.indexOf('<w:sdtContent>',s0);
+    const c1=result.indexOf('</w:sdtContent>',c0)+15;
+    const chunk=result.slice(c0,c1);
+    const newChunk=chunk.replace(/<w:t(?:\s[^>]*)?>(?:[^<]*)<\/w:t>/,tXml);
+    result=result.slice(0,c0)+newChunk+result.slice(c1);
+    searchFrom=c0+newChunk.length;
   }
-  function fillSdtBlock(xml,tag,contentXml){
-    const marker=`<w:tag w:val="${tag}"/>`;
-    let result=xml,searchFrom=0;
-    while(true){
-      const idx=result.indexOf(marker,searchFrom);
-      if(idx<0)break;
-      const s0=result.lastIndexOf('<w:sdt>',idx);
-      const c0=result.indexOf('<w:sdtContent>',s0);
-      const c1=result.indexOf('</w:sdtContent>',c0)+15;
-      const newChunk='<w:sdtContent>'+contentXml+'</w:sdtContent>';
-      result=result.slice(0,c0)+newChunk+result.slice(c1);
-      searchFrom=c0+newChunk.length;
-    }
-    return result;
+  if (found&&!hits) found.missing.push(tag);
+  return result;
+}
+function fillSdtBlock(xml,tag,contentXml,found){
+  const marker=`<w:tag w:val="${tag}"/>`;
+  let result=xml,searchFrom=0,hits=0;
+  while(true){
+    const idx=result.indexOf(marker,searchFrom);
+    if(idx<0)break;
+    hits++;
+    const s0=result.lastIndexOf('<w:sdt>',idx);
+    const c0=result.indexOf('<w:sdtContent>',s0);
+    const c1=result.indexOf('</w:sdtContent>',c0)+15;
+    const newChunk='<w:sdtContent>'+contentXml+'</w:sdtContent>';
+    result=result.slice(0,c0)+newChunk+result.slice(c1);
+    searchFrom=c0+newChunk.length;
   }
-  function updateDocProp(xml,name,value){
-    const en=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    return xml.replace(new RegExp(`(name="${en}"(?:[^>]*)>[\\s\\S]*?<vt:lpwstr>)([^<]*)(</vt:lpwstr>)`),'$1'+xe(value)+'$3');
-  }
-  // Load template
-  const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
-  const zip=await JSZip.loadAsync(tmplBuf);
-  const m=state.meta;
-  // Fill document.xml
-  let docXml=await zip.file('word/document.xml').async('string');
-  [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
-   ['wu-make',m.make],['wu-model',m.model],
-   ['wu-designation',m.marketingDesignation||m.designation],
-   ['wu-serial',m.serialNumber],['wu-flightphase',m.flightPhase],
-   ['wu-preparedby',m.preparedBy]
-  ].forEach(([tag,val])=>{docXml=fillSdtText(docXml,tag,val);});
-  // wu-revdate has multiple runs — use block replacement
-  const revDatePara=`<w:p><w:pPr><w:widowControl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/></w:pBdr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${xe(fmtRevDate(m.revisionDate))}</w:t></w:r></w:p>`;
-  docXml=fillSdtBlock(docXml,'wu-revdate',revDatePara);
-  docXml=fillSdtBlock(docXml,'wu-intro',buildBodyTextParas(m.introText));
-  docXml=fillSdtBlock(docXml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes));
-  docXml=fillSdtBlock(docXml,'wu-references',buildRefsParas());
-  docXml=fillSdtBlock(docXml,'wu-compliance',buildBodyTextParas(m.complianceText));
-  docXml=fillSdtBlock(docXml,'wu-tables',buildTablesContent());
-  zip.file('word/document.xml',docXml);
-  // Fill header2.xml
-  let hdrXml=await zip.file('word/header2.xml').async('string');
-  [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
-   ['wu-make',m.make],['wu-model',m.model],['wu-serial',m.serialNumber]
-  ].forEach(([tag,val])=>{hdrXml=fillSdtText(hdrXml,tag,val);});
-  zip.file('word/header2.xml',hdrXml);
-  // Update JSON state in customXml
-  const jsonStr=JSON.stringify(state).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if (found&&!hits) found.missing.push(tag);
+  return result;
+}
+function updateDocProp(xml,name,value,found){
+  const en=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re=new RegExp(`(name="${en}"(?:[^>]*)>[\\s\\S]*?<vt:lpwstr>)([^<]*)(</vt:lpwstr>)`);
+  if (found&&!re.test(xml)) found.missingProps.push(name);
+  return xml.replace(re,'$1'+xe(value)+'$3');
+}
+// Fills every Watts-Up-managed content control/property in an already-loaded zip with the
+// current app state, in place. Returns a report of anything expected but not found — a tag the
+// document doesn't have (deleted by the user, or a template predating it) is never fatal, just
+// noted, matching the rest of this app's warning-banner convention rather than blocking the
+// whole sync over one missing section.
+async function fillWattsUpDocx(zip,st){
+  const found={missing:[],missingProps:[],missingFiles:[]};
+  const m=st.meta;
+  const docFile=zip.file('word/document.xml');
+  if (docFile) {
+    let docXml=await docFile.async('string');
+    [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
+     ['wu-make',m.make],['wu-model',m.model],
+     ['wu-designation',m.marketingDesignation||m.designation],
+     ['wu-serial',m.serialNumber],['wu-flightphase',m.flightPhase],
+     ['wu-preparedby',m.preparedBy]
+    ].forEach(([tag,val])=>{docXml=fillSdtText(docXml,tag,val,found);});
+    // wu-revdate has multiple runs — use block replacement
+    const revDatePara=`<w:p><w:pPr><w:widowControl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/></w:pBdr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${xe(fmtRevDate(m.revisionDate))}</w:t></w:r></w:p>`;
+    docXml=fillSdtBlock(docXml,'wu-revdate',revDatePara,found);
+    docXml=fillSdtBlock(docXml,'wu-intro',buildBodyTextParas(m.introText),found);
+    docXml=fillSdtBlock(docXml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes),found);
+    docXml=fillSdtBlock(docXml,'wu-references',buildRefsParas(),found);
+    docXml=fillSdtBlock(docXml,'wu-compliance',buildBodyTextParas(m.complianceText),found);
+    docXml=fillSdtBlock(docXml,'wu-tables',buildTablesContent(),found);
+    zip.file('word/document.xml',docXml);
+  } else found.missingFiles.push('word/document.xml');
+  // header2.xml is specific to the bundled template's own layout — an externally-restructured
+  // document may not have this exact header part (different header file, or none at all), so
+  // this is a soft skip (noted, not thrown) rather than the hard requirement it is for our own
+  // internal template.
+  const hdrFile=zip.file('word/header2.xml');
+  if (hdrFile) {
+    let hdrXml=await hdrFile.async('string');
+    [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
+     ['wu-make',m.make],['wu-model',m.model],['wu-serial',m.serialNumber]
+    ].forEach(([tag,val])=>{hdrXml=fillSdtText(hdrXml,tag,val,found);});
+    zip.file('word/header2.xml',hdrXml);
+  } else found.missingFiles.push('word/header2.xml');
+  // Update JSON state in customXml — always written regardless of whether the document had one
+  // already (first sync creates it, later syncs replace it); this is the one part of the file
+  // that's entirely Watts-Up-owned, never something a user edits directly.
+  const jsonStr=JSON.stringify(st).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   zip.file('customXml/item1.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
     `<wuData xmlns="urn:watts-up:v1"><json>${jsonStr}</json></wuData>`);
   // Update custom document properties
-  let propXml=await zip.file('docProps/custom.xml').async('string');
-  [['ReportNo',m.documentNumber],['ReportRev',m.revisionNumber||m.revisionLevel],
-   ['Make',m.make],['Model',m.model],['S/N',m.serialNumber],['Flight Phase',m.flightPhase]
-  ].forEach(([n,v])=>{propXml=updateDocProp(propXml,n,v);});
-  zip.file('docProps/custom.xml',propXml);
-  // Download
-  const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const propFile=zip.file('docProps/custom.xml');
+  if (propFile) {
+    let propXml=await propFile.async('string');
+    [['ReportNo',m.documentNumber],['ReportRev',m.revisionNumber||m.revisionLevel],
+     ['Make',m.make],['Model',m.model],['S/N',m.serialNumber],['Flight Phase',m.flightPhase]
+    ].forEach(([n,v])=>{propXml=updateDocProp(propXml,n,v,found);});
+    zip.file('docProps/custom.xml',propXml);
+  } else found.missingFiles.push('docProps/custom.xml');
+  return found;
+}
+function docxFileNameFor(st){
+  const m=st.meta;
   const slug=s=>(s||'').replace(/\s+/g,'_').replace(/[^A-Za-z0-9_-]/g,'');
-  const fname=['WattsUp',slug(m.make),slug(m.model),slug(m.serialNumber),new Date().toISOString().slice(0,10)].filter(Boolean).join('_')+'.docx';
+  return ['WattsUp',slug(m.make),slug(m.model),slug(m.serialNumber),new Date().toISOString().slice(0,10)].filter(Boolean).join('_')+'.docx';
+}
+async function generateDocx(){
+  if(typeof JSZip==='undefined'){alert('JSZip not loaded — Word export requires an internet connection.');return;}
+  if(!state)return;
+  const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
+  const zip=await JSZip.loadAsync(tmplBuf);
+  await fillWattsUpDocx(zip,state);
+  const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=fname;a.click();URL.revokeObjectURL(url);
+  const a=document.createElement('a');a.href=url;a.download=docxFileNameFor(state);a.click();URL.revokeObjectURL(url);
+}
+
+// ── WORD DOCUMENT: CONNECT / SYNC / LOAD (File System Access API) ──────────────
+// Word integration Phase 1 (external-file adaptation): lets the document live outside the app as
+// the user's own file, with the app reading/writing only the content controls and embedded JSON
+// it owns (fillWattsUpDocx, above) — everything else (headings, wording, formatting, extra
+// sections) stays exactly as the user left it. Falls back to the existing download-only
+// generateDocx()/importDocx() in browsers without File System Access API support (Firefox,
+// Safari) — feature-detected, never assumed, so nothing regresses there.
+let wordDocHandle=null;
+let wordDocFileName='';
+const WORD_DOCX_TYPE={description:'Word Document',
+  accept:{'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx']}};
+
+function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.showSaveFilePicker); }
+
+function updateWordDocUI(){
+  const connectBtn=document.getElementById('btn-word-connect');
+  if (!connectBtn) return; // called before the toolbar exists yet
+  const supported=hasFileSystemAccess();
+  const connected=!!wordDocHandle;
+  const syncBtn=document.getElementById('btn-word-sync');
+  const loadBtn=document.getElementById('btn-word-load');
+  const indicator=document.getElementById('word-doc-indicator');
+  connectBtn.classList.toggle('hidden',!supported);
+  connectBtn.textContent=connected?'Reconnect Word Doc…':'Connect Word Doc…';
+  syncBtn.classList.toggle('hidden',!supported||!connected);
+  loadBtn.classList.toggle('hidden',!supported||!connected);
+  indicator.classList.toggle('hidden',!supported||!connected);
+  indicator.textContent=connected?`Connected: ${wordDocFileName}`:'';
+}
+
+async function connectWordDoc(){
+  if (!hasFileSystemAccess()) {
+    alert('Connecting to a live Word document needs Chrome or Edge (File System Access API). The "Word Report" button still works everywhere — it just downloads a fresh copy each time instead of updating one in place.');
+    return;
+  }
+  if (typeof JSZip==='undefined'){alert('JSZip not loaded — this needs an internet connection.');return;}
+  const choice=await showChoiceDialog({
+    title:'Connect Word Document',
+    message:'Connect to a Word document you already have, or create a new one from the current template?',
+    options:[
+      {label:'Open Existing…',value:'open',primary:true},
+      {label:'Create New…',value:'create'},
+    ]
+  });
+  if (!choice) return;
+  try {
+    if (choice==='create') {
+      const handle=await window.showSaveFilePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE]});
+      const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
+      const zip=await JSZip.loadAsync(tmplBuf);
+      if (state) await fillWattsUpDocx(zip,state);
+      const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+      const writable=await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      wordDocHandle=handle;
+      wordDocFileName=handle.name;
+    } else {
+      const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false});
+      const perm=await handle.requestPermission({mode:'readwrite'});
+      if (perm!=='granted') { alert('Read-write permission was not granted — try again and allow access.'); return; }
+      wordDocHandle=handle;
+      wordDocFileName=handle.name;
+    }
+  } catch(err) {
+    if (err&&err.name!=='AbortError') alert('Could not connect to the Word document: '+err.message);
+    return;
+  }
+  updateWordDocUI();
+}
+
+// Writes the current app state into the connected document's content controls/embedded JSON,
+// in place — leaving everything else in the file untouched. `silent` skips the success/report
+// alert (used right after "Create New", where an empty report would just be noise).
+async function syncToWordDoc(silent){
+  if (!wordDocHandle||!state) return;
+  if (typeof JSZip==='undefined'){alert('JSZip not loaded — Word sync requires an internet connection.');return;}
+  try {
+    const file=await wordDocHandle.getFile();
+    const buf=await file.arrayBuffer();
+    const zip=await JSZip.loadAsync(buf);
+    const report=await fillWattsUpDocx(zip,state);
+    const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const writable=await wordDocHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    if (!silent) {
+      const missing=[...report.missing,...report.missingProps,...report.missingFiles];
+      if (missing.length) alert(`Synced, but this document is missing: ${missing.join(', ')}. That content wasn't updated — add matching content controls/properties if you want it included.`);
+      else alert('Synced to '+wordDocFileName+'.');
+    }
+  } catch(err) {
+    alert('Sync failed: '+err.message);
+  }
+}
+
+// Reads the connected document's embedded JSON state (and any hand-edited free-text sections)
+// back into the app — reuses importDocx's existing logic wholesale, just sourced from the live
+// file handle instead of a picked <input type=file>.
+async function loadFromWordDoc(){
+  if (!wordDocHandle) return;
+  const file=await wordDocHandle.getFile();
+  await importDocx(file);
 }
 
 // ── PRINT SETTINGS ───────────────────────────────────────────────────────────
@@ -6364,6 +6509,10 @@ function initEvents() {
   document.getElementById('btn-export').addEventListener('click',doExport);
   document.getElementById('btn-print' ).addEventListener('click',()=>openPrintOpts('print'));
   document.getElementById('btn-word'  ).addEventListener('click',()=>openPrintOpts('word'));
+  document.getElementById('btn-word-connect').addEventListener('click',connectWordDoc);
+  document.getElementById('btn-word-sync'   ).addEventListener('click',()=>syncToWordDoc(false));
+  document.getElementById('btn-word-load'   ).addEventListener('click',loadFromWordDoc);
+  updateWordDocUI();
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-reset' ).addEventListener('click',()=>{if(printOptsMode==='word')wordCfg=defaultPrintCfg();else printCfg=defaultPrintCfg();openPrintOpts(printOptsMode);});
