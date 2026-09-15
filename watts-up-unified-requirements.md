@@ -3930,9 +3930,49 @@ Chrome's own explanation that it won't show the *actual* native panel for a synt
 without a real user gesture — confirms the handler ran, not an app defect. Full sweep otherwise
 clean.
 
-**Not yet done** (later phases): connection-aware New/Open toolbar wording when a Word doc is
-connected; the unified Word Report button; the blank-document "Create New Report" generator;
-Open(.docx) establishing a live connection.
+**Not yet done** (later phases): the unified Word Report button; the blank-document "Create New
+Report" generator; Open(.docx) establishing a live connection.
+
+### Phase 3: Connected-project toolbar wording (items 3.3.1, 3.4/3.4.1, 3.7.1)
+
+*Shipped 2026-09-15.*
+
+**New (item 3.3.1).** When `wordDocHandle` is set, `doNewProject()`'s confirm switches to the
+spec's own example wording: `Disconnect from "<filename>" and start new analysis? Any unsaved
+changes will be lost.` On OK, `disconnectWordDoc(true)` — the new `silent` param added this phase —
+severs the connection *without* its usual explanatory alert, since the confirm the user just read
+already said exactly what was about to happen; showing that alert again right afterward would just
+repeat it. Declining leaves the connection untouched, exactly as before.
+
+**Open (items 3.4/3.4.1).** `doOpenProjectFromToolbar()` now branches the same way: connected shows
+`Opening a different file will disconnect from "<filename>" and changes to the current analysis
+will be lost. Continue?`. Per the spec's own literal ordering (3.4.1.1: disconnect, *then* allow
+file selection — not "disconnect once a file is actually chosen"), disconnecting now happens
+immediately on OK, before the native file picker even opens — silently, for the same reason as
+New. This replaces the previous round's after-the-fact behavior, where `disconnectWordDoc()` fired
+(non-silently) from inside the `file-input` `change` handler only once a file was actually picked;
+that call is now removed entirely, since by the time it could fire the connection is already gone.
+One consequence worth naming: cancelling the native picker after agreeing to this confirm still
+leaves you disconnected — the confirm already told the user plainly that continuing would
+disconnect, so that follows through regardless of whether a file ends up chosen, matching the
+literal spec order rather than making the disconnect conditional on a completed file selection.
+
+**Exit (item 3.7.1).** `doExitFromToolbar()` branches its wording too, but — unlike New/Open — the
+spec doesn't ask this one to name the connected file: the whole app is closing either way, so
+there's nothing left to reconnect to. Connected: `Exit Watts Up? Changes to the current project
+will be lost.` Disconnected (unchanged from Phase 2): `Exit Watts Up? Any unsaved changes will be
+lost.`
+
+Verified live (same localhost server setup): New's decline (wording correct, connection untouched)
+and accept (wording correct, `disconnectWordDoc(true)` fires with no alert, fresh state created);
+Open's decline (wording correct, connection untouched, native picker never triggered) and accept
+(wording correct, connection severed *immediately*, no alert, *then* the picker triggers); Open's
+disconnected-case wording confirmed unchanged (regression check); Exit's disconnected vs. connected
+wording. Full console sweep — only the same benign Chrome "no native beforeunload panel without a
+user gesture" line as Phase 2, not a new issue.
+
+**Not yet done** (later phases): the unified Word Report button; the blank-document "Create New
+Report" generator; Open(.docx) establishing a live connection.
 
 ## Appendix A: Future Enhancements
 

@@ -6378,13 +6378,16 @@ function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.show
 // state no longer related to whatever file is connected. Left connected, the next "Sync →" would
 // silently overwrite that file with this unrelated project's content, so any such load severs the
 // connection instead of carrying it forward onto data it was never meant for.
-function disconnectWordDoc(){
+// `silent` skips the explanatory alert — used by New/Open's own upfront confirms (Revision 68,
+// Phase 3), which already tell the user about the disconnect before they agree to it, so a second
+// alert right afterward would just be a redundant repeat of what they already read and accepted.
+function disconnectWordDoc(silent){
   if (!wordDocHandle) return;
   const prevName=wordDocFileName;
   wordDocHandle=null;
   wordDocFileName='';
   updateWordDocUI();
-  alert(`Disconnected from "${prevName}" — loading different project data here means syncing could no longer safely target that file. Use "Connect Word Doc…" again if you want to link a document to this project.`);
+  if (!silent) alert(`Disconnected from "${prevName}" — loading different project data here means syncing could no longer safely target that file. Use "Connect Word Doc…" again if you want to link a document to this project.`);
 }
 
 function updateWordDocUI(){
@@ -6544,9 +6547,11 @@ function initEvents() {
   });
   document.getElementById('btn-open').addEventListener('click',doOpenProjectFromToolbar);
   document.getElementById('file-input').addEventListener('change',e=>{
+    // Revision 68 (Phase 3): disconnecting (when applicable) now happens upfront in
+    // doOpenProjectFromToolbar's own confirm, before the picker even opens — not here, once a
+    // file is actually chosen — so wordDocHandle is already null by the time this fires.
     const f=e.target.files[0];
     if(f){
-      disconnectWordDoc();
       f.name.toLowerCase().endsWith('.docx')?importDocx(f):doImport(f);
     }
     e.target.value='';
@@ -6772,9 +6777,15 @@ function initEvents() {
 // ── BOOT / LAUNCH DIALOG ─────────────────────────────────────────────────────
 // Shared with the toolbar's own "New" button (Revision 68, item 1.1.1.1: "no change from existing
 // New button") so the launch dialog's "New" choice behaves identically, confirm included.
+// Revision 68 (Phase 3), item 3.3.1: when a Word doc is connected, the confirm names it and says
+// plainly that continuing disconnects it — the disconnect itself then happens silently right after
+// (no second, redundant alert repeating what this confirm already said).
 function doNewProject(){
-  if (!confirm('Start a new analysis? Any unsaved changes will be lost.')) return;
-  disconnectWordDoc();
+  const msg=wordDocHandle
+    ? `Disconnect from "${wordDocFileName}" and start new analysis? Any unsaved changes will be lost.`
+    : 'Start a new analysis? Any unsaved changes will be lost.';
+  if (!confirm(msg)) return;
+  disconnectWordDoc(true);
   state=freshState();collapsed=new Set();recalc();renderAll();persist();
 }
 // Shared with the launch dialog's "Open" choice, and with the toolbar's gated version below. Bare
@@ -6783,11 +6794,20 @@ function doNewProject(){
 function doOpenProject(){
   document.getElementById('file-input').click();
 }
-// Revision 68 (Phase 2), item 2.2.1: the toolbar's "Open" button, unlike the launch dialog's, can
-// discard a real in-progress analysis, so it warns first — matching the wording/pattern of the
-// existing New confirm. (Phase 3 will branch this on whether a Word doc is connected.)
+// Revision 68 (Phase 2, item 2.2.1 / Phase 3, item 3.4.1): the toolbar's "Open" button, unlike the
+// launch dialog's, can discard a real in-progress analysis, so it warns first. When a Word doc is
+// connected, the warning names it and says continuing disconnects it — and, per the spec's own
+// ordering (3.4.1.1: disconnect, *then* allow file selection), the disconnect happens immediately
+// on OK, before the native picker even opens, rather than waiting to see whether a file gets
+// chosen — the user already agreed to that consequence by clicking OK.
 function doOpenProjectFromToolbar(){
-  if (!confirm('Open a different file? Changes to the current analysis will be lost.')) return;
+  if (wordDocHandle) {
+    const msg=`Opening a different file will disconnect from "${wordDocFileName}" and changes to the current analysis will be lost. Continue?`;
+    if (!confirm(msg)) return;
+    disconnectWordDoc(true);
+  } else {
+    if (!confirm('Open a different file? Changes to the current analysis will be lost.')) return;
+  }
   doOpenProject();
 }
 // Best-effort tab close (Revision 68, item 1.1.4/2.5/3.7): window.close() only succeeds on a tab
@@ -6799,11 +6819,16 @@ function attemptExitApp(){
   window.close();
   setTimeout(()=>{ alert('You can close this browser tab now.'); },300);
 }
-// Revision 68 (Phase 2), item 2.5: the toolbar's own Exit button gets our exact custom wording,
-// unlike the native tab-close case (see the beforeunload listener in initEvents, below) which
-// browsers restrict to a generic message. (Phase 3 will branch this on connection state too.)
+// Revision 68 (Phase 2, item 2.5 / Phase 3, item 3.7.1): the toolbar's own Exit button gets our
+// exact custom wording, unlike the native tab-close case (see the beforeunload listener in
+// initEvents, below) which browsers restrict to a generic message. The spec doesn't ask this one to
+// name the connected file (unlike New/Open) — the whole app is closing either way, so there's
+// nothing left to reconnect to or disconnect from; only the loss-of-changes phrasing differs.
 function doExitFromToolbar(){
-  if (!confirm('Exit Watts Up? Any unsaved changes will be lost.')) return;
+  const msg=wordDocHandle
+    ? 'Exit Watts Up? Changes to the current project will be lost.'
+    : 'Exit Watts Up? Any unsaved changes will be lost.';
+  if (!confirm(msg)) return;
   attemptExitApp();
 }
 async function runLaunchDialog(){
