@@ -416,6 +416,7 @@
       <button id="btn-word-connect" class="btn-default hidden">Connect Word Doc…</button>
       <button id="btn-word-sync"    class="btn-default hidden">Sync →</button>
       <button id="btn-word-load"    class="btn-default hidden">← Load</button>
+      <button id="btn-exit"   class="btn-default">Exit</button>
     </div>
   </header>
 
@@ -1871,12 +1872,29 @@ function validateImport(p) {
   });
 }
 
-function doExport() {
+// Revision 68 (Phase 2), item 2.3: a real "Save As" — user-chosen location, native overwrite
+// confirmation — via the File System Access API where available. Browsers without it (Firefox,
+// Safari) can't expose a genuine save-location picker or detect an existing file at all, so they
+// keep the original always-downloads-to-Downloads behavior unchanged rather than faking a
+// "replace existing file?" prompt that couldn't actually reflect the real file system.
+async function doExport() {
   if (!state) return;
-  const blob=new Blob([JSON.stringify(snapshotState(),null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
+  const jsonStr=JSON.stringify(snapshotState(),null,2);
   const m=state.meta;
   const name=['WattsUp',m.make,m.model,m.serialNumber,new Date().toISOString().slice(0,10)].filter(Boolean).join('_').replace(/\s+/g,'_')+'.json';
+  if (hasFileSystemAccess()) {
+    try {
+      const handle=await window.showSaveFilePicker({suggestedName:name,types:[WATTSUP_JSON_TYPE]});
+      const writable=await handle.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+    } catch(err) {
+      if (err&&err.name!=='AbortError') alert('Export failed: '+err.message);
+    }
+    return;
+  }
+  const blob=new Blob([jsonStr],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=name;
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 }
@@ -6352,6 +6370,7 @@ let wordDocHandle=null;
 let wordDocFileName='';
 const WORD_DOCX_TYPE={description:'Word Document',
   accept:{'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx']}};
+const WATTSUP_JSON_TYPE={description:'Watts Up JSON',accept:{'application/json':['.json']}};
 
 function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.showSaveFilePicker); }
 
@@ -6523,7 +6542,7 @@ function initEvents() {
     if (!state.analyses.pcm) { createPcmAnalysis(); return; }
     switchAnalysis('pcm');
   });
-  document.getElementById('btn-open').addEventListener('click',doOpenProject);
+  document.getElementById('btn-open').addEventListener('click',doOpenProjectFromToolbar);
   document.getElementById('file-input').addEventListener('change',e=>{
     const f=e.target.files[0];
     if(f){
@@ -6538,7 +6557,17 @@ function initEvents() {
   document.getElementById('btn-word-connect').addEventListener('click',connectWordDoc);
   document.getElementById('btn-word-sync'   ).addEventListener('click',()=>syncToWordDoc(false));
   document.getElementById('btn-word-load'   ).addEventListener('click',loadFromWordDoc);
+  document.getElementById('btn-exit'        ).addEventListener('click',doExitFromToolbar);
   updateWordDocUI();
+  // Revision 68 (Phase 2), items 2.6/3.8: the native tab-close/Ctrl+W/navigate-away case can't
+  // carry our custom OK/Cancel wording (browsers block custom beforeunload text for security) —
+  // only this generic browser-controlled prompt is possible, so it's the same for every phase and
+  // every connection state; there's nothing left for a later phase to add here.
+  window.addEventListener('beforeunload',e=>{
+    if (!state) return;
+    e.preventDefault();
+    e.returnValue='';
+  });
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-reset' ).addEventListener('click',()=>{if(printOptsMode==='word')wordCfg=defaultPrintCfg();else printCfg=defaultPrintCfg();openPrintOpts(printOptsMode);});
@@ -6748,11 +6777,18 @@ function doNewProject(){
   disconnectWordDoc();
   state=freshState();collapsed=new Set();recalc();renderAll();persist();
 }
-// Shared with the toolbar's own "Open" button. Only used directly there — the launch dialog's
-// "Open" choice (below) needs an extra fresh-baseline step first, since unlike the toolbar, there
-// is no existing `state` yet for a cancelled picker to safely leave untouched.
+// Shared with the launch dialog's "Open" choice, and with the toolbar's gated version below. Bare
+// trigger only — no confirm here, since the launch dialog calls this directly and has nothing yet
+// to warn about losing (it already set its own fresh baseline first).
 function doOpenProject(){
   document.getElementById('file-input').click();
+}
+// Revision 68 (Phase 2), item 2.2.1: the toolbar's "Open" button, unlike the launch dialog's, can
+// discard a real in-progress analysis, so it warns first — matching the wording/pattern of the
+// existing New confirm. (Phase 3 will branch this on whether a Word doc is connected.)
+function doOpenProjectFromToolbar(){
+  if (!confirm('Open a different file? Changes to the current analysis will be lost.')) return;
+  doOpenProject();
 }
 // Best-effort tab close (Revision 68, item 1.1.4/2.5/3.7): window.close() only succeeds on a tab
 // opened by a script (e.g. window.open()), which this app normally isn't — a tab opened by typing
@@ -6762,6 +6798,13 @@ function doOpenProject(){
 function attemptExitApp(){
   window.close();
   setTimeout(()=>{ alert('You can close this browser tab now.'); },300);
+}
+// Revision 68 (Phase 2), item 2.5: the toolbar's own Exit button gets our exact custom wording,
+// unlike the native tab-close case (see the beforeunload listener in initEvents, below) which
+// browsers restrict to a generic message. (Phase 3 will branch this on connection state too.)
+function doExitFromToolbar(){
+  if (!confirm('Exit Watts Up? Any unsaved changes will be lost.')) return;
+  attemptExitApp();
 }
 async function runLaunchDialog(){
   for(;;){

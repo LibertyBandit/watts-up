@@ -3884,9 +3884,55 @@ dialogs (Duplicate, Connect Word Doc) are unaffected by the new `allowClose` par
 closable by default. Full console sweep, no errors.
 
 **Not yet done** (later phases in this same revision): connection-aware New/Open toolbar wording
-when a Word doc is connected; Export JSON via a real Save-As picker; the unified Word Report
-button; the blank-document "Create New Report" generator; Open(.docx) establishing a live
-connection.
+when a Word doc is connected; the unified Word Report button; the blank-document "Create New
+Report" generator; Open(.docx) establishing a live connection.
+
+### Phase 2: Disconnected-project toolbar — Open warning, Export-JSON Save-As, Exit, native-close warning
+
+*Shipped 2026-09-15.*
+
+**Open warning (item 2.2.1).** The toolbar's "Open" button had no confirm at all before this phase
+— only "New" did. New `doOpenProjectFromToolbar()` wraps the existing bare `doOpenProject()`
+trigger with "Open a different file? Changes to the current analysis will be lost." (OK/Cancel);
+declining never opens the picker. The launch dialog's own "Open" choice is unaffected — it still
+calls the bare `doOpenProject()` directly, since at launch there's nothing yet to lose.
+
+**Export JSON via Save-As (items 2.3/2.3.1/2.3.2).** `doExport()` now uses `showSaveFilePicker`
+(new `WATTSUP_JSON_TYPE` file-type descriptor, alongside the existing `WORD_DOCX_TYPE`) when
+`hasFileSystemAccess()` — a genuine user-chosen save location, with the OS's own native "replace
+existing file?" prompt satisfying item 2.3.2 for free. Firefox/Safari (no File System Access API)
+keep the exact original `<a download>` behavior unchanged. **A real constraint, not a design
+choice**: item 2.3.2.1's "if not native to the file system, provide a 'Replace existing file' OK/
+Cancel message box" isn't implementable for the fallback path — browsers give JS no way to detect
+whether a same-named file already exists in the Downloads folder (they just silently auto-rename,
+e.g. "file (1).json"), so a custom confirm there couldn't reflect anything real and would just be
+misleading theater. Left as the one sub-item genuinely out of reach without the File System Access
+API.
+
+**Toolbar Exit button + native-close warning (items 2.5/2.5.1/2.6).** New "Exit" button
+(`doExitFromToolbar()`): confirms "Exit Watts Up? Any unsaved changes will be lost.", then calls
+Phase 1's `attemptExitApp()` on OK. Separately, a new `beforeunload` listener (gated on `state`
+existing) covers the native tab-close/Ctrl+W/navigate-away case per the earlier clarified
+constraint — browsers only allow a generic, non-custom-worded prompt there, which is identical
+regardless of connection state, so this single listener fully satisfies item 3.8 as well; there's
+nothing left for a later phase to add for the native-close case specifically.
+
+Verified live (same real `http://localhost` static-server setup as Phase 1, needed for
+`localStorage`): Open's decline (picker never opens) and accept (picker opens) paths; Export JSON's
+three code paths — a mocked successful `showSaveFilePicker`/`createWritable` round-trip (correct
+suggested filename, correct file-type filter, valid re-parseable JSON written, handle closed), a
+mocked `AbortError` (silently ignored, matching a user-cancelled native picker), a mocked genuine
+failure (alerted), and the fallback `<a download>` path with the API removed entirely; Exit's
+decline (no `window.close()` call) and accept (calls `window.close()`, shows the fallback alert)
+paths; a dispatched `beforeunload` event confirming `preventDefault()`/`returnValue` are set when
+`state` exists and are not when it's `null`. One benign console line during that last test —
+Chrome's own explanation that it won't show the *actual* native panel for a synthetic event fired
+without a real user gesture — confirms the handler ran, not an app defect. Full sweep otherwise
+clean.
+
+**Not yet done** (later phases): connection-aware New/Open toolbar wording when a Word doc is
+connected; the unified Word Report button; the blank-document "Create New Report" generator;
+Open(.docx) establishing a live connection.
 
 ## Appendix A: Future Enhancements
 
