@@ -4011,8 +4011,80 @@ after connecting; a denied-permission path correctly leaving `wordDocHandle` uns
 Full console sweep — same benign Chrome beforeunload-without-gesture line as prior phases from the
 reloads between test groups, nothing new.
 
-**Not yet done** (later phases): the blank-document "Create New Report" generator; Open(.docx)
-establishing a live connection.
+**Not yet done** (later phases): Open(.docx) establishing a live connection.
+
+### Phase 5: Blank-document "Create New Report" generator (items 2.4.2.2-2.4.2.4)
+
+*Shipped 2026-09-15.*
+
+**Explicitly the exploratory piece of this revision** — the source spec itself flags it as
+"try this as a blank document for now — may revert to a pre-loaded template later." Replaces
+"Create New Report"'s previous template-fill (Phases 1/4) with a genuinely blank body: 14
+content controls (every tag `fillWattsUpDocx` already knows — the 8 simple text fields, revdate,
+intro, general notes, references, compliance, and the load-analysis tables), each measured by how
+much real content it currently holds, sorted ascending (item 2.4.2.2.1 — least first), each its own
+paragraph followed by an explicit blank-paragraph break (item 2.4.2.2.2), with a "‹tag› — no data"
+placeholder standing in for anything currently empty (item 2.4.2.3).
+
+**Design decision — "blank" reuses the template's *shell*, not a hand-built ZIP from scratch.**
+Inspected the bundled template's actual `word/document.xml` (4 sections: cover-page portrait,
+TOC/intro portrait, body portrait, and a final landscape section matching the load-tables' assumed
+page width — confirmed by finding the exact `pgSz`/`pgMar` `buildTablesContent()`'s column-width
+math already targets) rather than guessing. Hand-authoring a complete minimal `.docx` from raw
+`[Content_Types].xml`/`_rels`/`docProps` string literals was considered and rejected — a single
+malformed cross-reference in that raw XML could produce a file Word refuses to open at all, and
+this environment has no way to open a real Word instance to catch such a mistake before it reached
+the user. Instead: strip the template's body down to *only* its final section's `<w:sectPr>`
+(confirmed by inspection to declare no header/footer reference of its own — with no earlier section
+left for it to inherit one from once the rest of the body is gone, the result renders with no
+header or footer at all) and inject the 14 generated controls in place of everything that used to
+be there. Landscape was kept (rather than switching to portrait) specifically so the tables
+control — already sized for that width — doesn't overflow a narrower page. `word/header2.xml` is
+deliberately left unfilled in this path: with no section left that references it, filling it would
+just write inert data nobody would ever see.
+
+**Implementation**: `wuContentControlList(st)` builds the 14-entry list (reusing the *exact* same
+building blocks `fillWattsUpDocx` itself uses — `buildBodyTextParas`, `buildGeneralNotesParas`,
+`buildRefsParas`, `buildTablesContent`, and a revdate-paragraph builder now shared as
+`wuRevDateParaXml` — so a generated control is byte-for-byte what a real sync would have written
+anyway, empty ones aside). `fillBlankWattsUpDocx(zip,st)` assembles the new body from that list plus
+the preserved final `sectPr`, then calls a new shared `writeWattsUpMetaParts(zip,st,found)` — the
+embedded-JSON/`docProps` tail extracted out of `fillWattsUpDocx` so both functions write it
+identically rather than duplicating it. `createNewWordReport()` now calls
+`fillBlankWattsUpDocx` in place of `fillWattsUpDocx`; nothing else about it (Save-As picker,
+establishing the connection) changed. `fillWattsUpDocx` itself, and everything that calls it
+(Sync, Connect Existing, the legacy download-only fallback), is untouched — this phase only changes
+what a *freshly created* report looks like.
+
+**A control's generated markup remains fully syncable afterward** — each is a minimal
+`<w:sdt><w:sdtPr><w:id/><w:alias/><w:tag w:val="...">…` matching exactly what `fillSdtText`/
+`fillSdtBlock` (and `extractSdtText`, used on Load) already know how to find and replace, so a
+"no data" placeholder is purely a first-generation cosmetic aid — the very next real Sync or Load
+overwrites it through the ordinary, already-existing fill/extract logic with no special-casing.
+
+Verified live (same localhost server setup): generated document is well-formed XML (parsed via
+`DOMParser`, zero parser errors), exactly one `<w:sectPr>` (landscape, matching the tables' width
+assumption), exactly 14 `<w:sdt>` controls each followed by a paragraph break. Seeded meta fields of
+deliberately varying lengths (some left blank) and confirmed the generated order is ascending by
+real content length with "no data" placeholders exactly on the fields left blank, ties preserving
+original declaration order, and the tables control reliably sorting last (244 chars vs. the next
+highest at 134 in the test data) without needing any special-casing to guarantee that. `customXml/
+item1.xml` and `docProps/custom.xml` both correctly present and populated. Round-tripped the
+generated document through a real `syncToWordDoc()` call after filling in some of the
+previously-empty fields — confirmed the placeholders are correctly overwritten with real values,
+and a field left genuinely still empty renders blank (not the placeholder text) exactly as a normal
+sync already behaves, proving the placeholder truly is generation-only cosmetic, not a persistent
+special case. Confirmed the legacy full-template path (`generateDocx()`, used by the download-only
+fallback and untouched by this phase) still fills correctly post-refactor. Full console sweep, same
+benign beforeunload line as prior phases.
+
+**Known limitation, accepted**: the generated document's header/footer are absent rather than
+matching the bundled template's cover-page branding — a direct consequence of choosing the
+lower-risk "trim the shell" approach over hand-authoring page structure from scratch. Given the
+user's own framing of this whole feature as something to try and possibly revisit, this is flagged
+rather than engineered around further this round.
+
+**Not yet done** (later phase): Open(.docx) establishing a live connection.
 
 ## Appendix A: Future Enhancements
 
