@@ -6905,8 +6905,36 @@ function doNewProject(){
 // Shared with the launch dialog's "Open" choice, and with the toolbar's gated version below. Bare
 // trigger only — no confirm here, since the launch dialog calls this directly and has nothing yet
 // to warn about losing (it already set its own fresh baseline first).
-function doOpenProject(){
-  document.getElementById('file-input').click();
+// Revision 68 (Phase 6), items 1.1.3.2/2.2.1.2/3.4.1.2: opening a Word document now also
+// establishes a live connection to it — previously Open only ever imported a one-off snapshot,
+// even for a .docx, and connecting required separately using "Word Report" afterward. That needs
+// a real FileSystemFileHandle, which the File System Access API's own picker provides but a plain
+// <input type=file> never can, so browsers without the API keep the original plain-file-input,
+// import-only behavior completely unchanged — nothing regresses there.
+async function doOpenProject(){
+  if (!hasFileSystemAccess()) { document.getElementById('file-input').click(); return; }
+  try {
+    const [handle]=await window.showOpenFilePicker({types:[WATTSUP_JSON_TYPE,WORD_DOCX_TYPE],multiple:false});
+    const file=await handle.getFile();
+    if (file.name.toLowerCase().endsWith('.docx')) {
+      const perm=await handle.requestPermission({mode:'readwrite'});
+      if (perm==='granted') {
+        wordDocHandle=handle;
+        wordDocFileName=handle.name;
+        updateWordDocUI();
+      } else {
+        // Reading doesn't need this permission (the picker already grants that), only writing
+        // back later does — so a denial here means "opened, just not connected," not a failure of
+        // the open itself.
+        alert(`Read-write permission for "${handle.name}" was not granted, so it won't stay connected — it will still open normally. Use "Word Report" to connect it later if you want to.`);
+      }
+      await importDocx(file);
+    } else {
+      await doImport(file);
+    }
+  } catch(err) {
+    if (err&&err.name!=='AbortError') alert('Could not open the file: '+err.message);
+  }
 }
 // Revision 68 (Phase 2, item 2.2.1 / Phase 3, item 3.4.1): the toolbar's "Open" button, unlike the
 // launch dialog's, can discard a real in-progress analysis, so it warns first. When a Word doc is

@@ -4084,7 +4084,54 @@ lower-risk "trim the shell" approach over hand-authoring page structure from scr
 user's own framing of this whole feature as something to try and possibly revisit, this is flagged
 rather than engineered around further this round.
 
-**Not yet done** (later phase): Open(.docx) establishing a live connection.
+### Phase 6: Open(.docx) establishes a live connection (items 1.1.3.2, 2.2.1.2, 3.4.1.2)
+
+*Shipped 2026-09-15. Final phase of Revision 68.*
+
+Previously, picking a `.docx` via "Open" only ever imported a one-off snapshot of its embedded
+data — connecting for future Sync/Load required separately using "Word Report" afterward, even
+though you'd just picked the exact file you'd presumably want connected. `doOpenProject()` now
+branches on `hasFileSystemAccess()`: supported browsers use `showOpenFilePicker` (with a combined
+type filter accepting either `.json` or `.docx`, `WATTSUP_JSON_TYPE`/`WORD_DOCX_TYPE` together) in
+place of the plain `<input type=file>`, since only a real `FileSystemFileHandle` from that API can
+be kept around for a later write — a plain file input's `File` object can't. Unsupported browsers
+(Firefox/Safari) fall straight through to the original plain-file-input, import-only behavior,
+completely unchanged.
+
+When the picked file is a `.docx`: requests `readwrite` permission and, if granted, establishes the
+connection (`wordDocHandle`/`wordDocFileName`, indicator updated) *in addition to* importing it —
+matching the spec's own framing of connecting as additive to opening, not a replacement for it. A
+denied permission doesn't abort the open — reading never needed that permission in the first place
+(the picker itself already grants read access on selection; `readwrite` only gates *writing* back
+later) — it just means the file won't stay connected, noted with a brief alert, while the import
+still proceeds normally. Cancelling the picker (`AbortError`) is silent, matching every other
+picker-driven flow in this app. A picked `.json` file is imported exactly as before with no
+connection concept at all — Watts-Up's "connection" is specifically a Word-document idea.
+
+No new prompt was added here (unlike "Connect Existing…"'s immediate Sync/Load follow-up) —
+opening a file already *is* the load action; the connection this phase adds is purely a
+convenience for whatever Sync/Load happens next, not a second decision point.
+
+This single function change automatically covers all three Open entry points from the spec (launch
+dialog, disconnected toolbar, connected toolbar) since they already share `doOpenProject()` (Phases
+1-3) — the launch dialog still sets its fresh, unpersisted baseline first and then triggers this;
+the toolbar's gated wrapper still disconnects any existing connection upfront (Phase 3) before this
+runs, so by the time a new `.docx` is picked here there's nothing stale left to conflict with a
+freshly established one.
+
+Verified live (same localhost server setup): the unsupported-browser fallback still triggers the
+plain file input unchanged; picking a mocked `.docx` (built from a real generated report via
+Phase 5's `createNewWordReport`, so `importDocx` had genuine content to parse) correctly
+establishes the connection, requests `readwrite` permission, and imports the real embedded data;
+a denied-permission mock still imports successfully while leaving the connection unset, with the
+expected alert; a mocked `.json` handle imports without touching the connection; a mocked
+`AbortError` (cancel) leaves state completely untouched; the full connected-toolbar path (existing
+connection silently severed per Phase 3, new file picked, new connection established, data
+imported) exercised end-to-end through the real button click; the launch dialog's "Open" choice
+still sets its baseline and triggers the picker correctly. Full console sweep — same benign Chrome
+beforeunload line as every prior phase, nothing new.
+
+**Revision 68 (Launch, Connect, Save) is now complete — all 6 phases shipped and verified.**
 
 ## Appendix A: Future Enhancements
 
