@@ -3971,8 +3971,48 @@ disconnected-case wording confirmed unchanged (regression check); Exit's disconn
 wording. Full console sweep — only the same benign Chrome "no native beforeunload panel without a
 user gesture" line as Phase 2, not a new issue.
 
-**Not yet done** (later phases): the unified Word Report button; the blank-document "Create New
-Report" generator; Open(.docx) establishing a live connection.
+### Phase 4: Unified "Word Report" button (items 2.4/3.6)
+
+*Shipped 2026-09-15.*
+
+Collapsed the previous four separate buttons — Word Report (download-only), Connect Word Doc…,
+Sync →, ← Load — into the single existing "Word Report" button, now driven by a new
+`doWordReportAction()` that prompts contextually:
+- **No File System Access API support** (Firefox/Safari): falls straight through to the original
+  `openPrintOpts('word')` download-only flow, completely unchanged — none of connect/sync/load is
+  possible there at all, so nothing regresses, matching every other feature-gated piece of this app.
+- **Supported, not connected** (item 2.4.1): "Create New Report…" / "Connect Existing…".
+- **Supported, connected** (item 3.6.1): "Sync to Report" / "Load from Report" / "Create New
+  Report…".
+
+The old `connectWordDoc()` (which showed its own internal Create/Open choice) was split into two
+standalone functions so the *new* outer prompt drives the choice instead of a second, nested one:
+`createNewWordReport()` (item 2.4.2 — still template-based this phase; the blank-document generator
+is Phase 5) and `connectExistingWordReport()` (item 2.4.3). Per item 2.4.3.2, connecting to an
+existing file now immediately follows up with its own Sync/Load choice — right after the picker/
+permission step, before returning control to the user — rather than leaving them to separately find
+and click a next button. Both the "connected" top-level prompt's Sync branch and
+`connectExistingWordReport`'s own Sync branch add the new upfront "This will update '‹file›' from
+the current browser data. Continue?" confirm (items 2.4.3.2.1.1/3.6.1.1.1) — the old standalone
+"Sync →" button never had one. "Load from Report" in both places just delegates straight to the
+existing `loadFromWordDoc()`, which already carries its own confirm — no double-prompting.
+`updateWordDocUI()` shrank accordingly, now only ever touching the "Connected: ‹file›" indicator's
+visibility/text (item 3.1) since there's no longer a second/third/fourth button to show or hide.
+
+Verified live (same localhost server setup): toolbar now shows exactly one Word-related button
+(plus the indicator); the unsupported-browser fallback opens the untouched original print-opts
+dialog; the disconnected prompt's exact wording and both choices; "Create New Report…" (mocked
+`showSaveFilePicker`/`createWritable` — correct suggested name/type, connection established,
+indicator updates); the connected prompt's exact wording and three choices; Sync's decline (no
+write) and accept (write happens, success alert shown) against a mocked handle; "Load from Report"
+delegating to `loadFromWordDoc()`'s own single confirm with no duplicate; "Connect Existing…"
+(mocked `showOpenFilePicker`/`requestPermission`) immediately showing its Sync/Load follow-up right
+after connecting; a denied-permission path correctly leaving `wordDocHandle` unset with an alert.
+Full console sweep — same benign Chrome beforeunload-without-gesture line as prior phases from the
+reloads between test groups, nothing new.
+
+**Not yet done** (later phases): the blank-document "Create New Report" generator; Open(.docx)
+establishing a live connection.
 
 ## Appendix A: Future Enhancements
 

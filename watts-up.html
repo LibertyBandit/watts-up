@@ -413,9 +413,6 @@
       <button id="btn-print"  class="btn-default">Print Report</button>
       <button id="btn-word"   class="btn-default">Word Report</button>
       <span id="word-doc-indicator" class="hidden" style="font-size:.78rem;font-weight:600;color:var(--accent-green);margin-left:.3rem"></span>
-      <button id="btn-word-connect" class="btn-default hidden">Connect Word Doc…</button>
-      <button id="btn-word-sync"    class="btn-default hidden">Sync →</button>
-      <button id="btn-word-load"    class="btn-default hidden">← Load</button>
       <button id="btn-exit"   class="btn-default">Exit</button>
     </div>
   </header>
@@ -6391,60 +6388,101 @@ function disconnectWordDoc(silent){
 }
 
 function updateWordDocUI(){
-  const connectBtn=document.getElementById('btn-word-connect');
-  if (!connectBtn) return; // called before the toolbar exists yet
-  const supported=hasFileSystemAccess();
-  const connected=!!wordDocHandle;
-  const syncBtn=document.getElementById('btn-word-sync');
-  const loadBtn=document.getElementById('btn-word-load');
   const indicator=document.getElementById('word-doc-indicator');
-  connectBtn.classList.toggle('hidden',!supported);
-  connectBtn.textContent=connected?'Reconnect Word Doc…':'Connect Word Doc…';
-  syncBtn.classList.toggle('hidden',!supported||!connected);
-  loadBtn.classList.toggle('hidden',!supported||!connected);
-  indicator.classList.toggle('hidden',!supported||!connected);
+  if (!indicator) return; // called before the toolbar exists yet
+  const connected=!!wordDocHandle;
+  indicator.classList.toggle('hidden',!hasFileSystemAccess()||!connected);
   indicator.textContent=connected?`Connected: ${wordDocFileName}`:'';
 }
 
-async function connectWordDoc(){
-  if (!hasFileSystemAccess()) {
-    alert('Connecting to a live Word document needs Chrome or Edge (File System Access API). The "Word Report" button still works everywhere — it just downloads a fresh copy each time instead of updating one in place.');
+// Revision 68 (Phase 4): the single "Word Report" button's entry point, replacing the old
+// separate Word Report/Connect Word Doc…/Sync →/← Load buttons with one context-aware prompt.
+// Browsers without the File System Access API can't do any of connect/sync/load at all, so they
+// keep the exact original download-only flow (print-opts dialog → generateDocx) unchanged —
+// nothing regresses there, matching every other feature-gated piece of this app.
+async function doWordReportAction(){
+  if (!hasFileSystemAccess()) { openPrintOpts('word'); return; }
+  if (!wordDocHandle) {
+    const choice=await showChoiceDialog({
+      title:'Word Report',
+      message:'Create a new Word report, or connect to one you already have?',
+      options:[
+        {label:'Create New Report…',value:'create',primary:true},
+        {label:'Connect Existing…',value:'connect'},
+      ]
+    });
+    if (choice==='create') await createNewWordReport();
+    else if (choice==='connect') await connectExistingWordReport();
     return;
   }
-  if (typeof JSZip==='undefined'){alert('JSZip not loaded — this needs an internet connection.');return;}
   const choice=await showChoiceDialog({
-    title:'Connect Word Document',
-    message:'Connect to a Word document you already have, or create a new one from the current template?',
+    title:'Word Report',
+    message:`Connected to "${wordDocFileName}". Sync the current analysis to it, load from it, or create a new report?`,
     options:[
-      {label:'Open Existing…',value:'open',primary:true},
-      {label:'Create New…',value:'create'},
+      {label:'Sync to Report',value:'sync',primary:true},
+      {label:'Load from Report',value:'load'},
+      {label:'Create New Report…',value:'create'},
     ]
   });
-  if (!choice) return;
+  if (choice==='sync') {
+    if (!confirm(`This will update "${wordDocFileName}" from the current browser data. Continue?`)) return;
+    await syncToWordDoc(false);
+  } else if (choice==='load') {
+    await loadFromWordDoc(); // already confirms internally
+  } else if (choice==='create') {
+    await createNewWordReport();
+  }
+}
+// Revision 68, item 2.4.2 (still template-based this phase — item 2.4.2.2's blank-document
+// generator is Phase 5): Save-As a fresh copy of the bundled template, filled with the current
+// state, and establish a connection to it.
+async function createNewWordReport(){
+  if (typeof JSZip==='undefined'){alert('JSZip not loaded — this needs an internet connection.');return;}
   try {
-    if (choice==='create') {
-      const handle=await window.showSaveFilePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE]});
-      const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
-      const zip=await JSZip.loadAsync(tmplBuf);
-      if (state) await fillWattsUpDocx(zip,state);
-      const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-      const writable=await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      wordDocHandle=handle;
-      wordDocFileName=handle.name;
-    } else {
-      const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false});
-      const perm=await handle.requestPermission({mode:'readwrite'});
-      if (perm!=='granted') { alert('Read-write permission was not granted — try again and allow access.'); return; }
-      wordDocHandle=handle;
-      wordDocFileName=handle.name;
-    }
+    const handle=await window.showSaveFilePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE]});
+    const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
+    const zip=await JSZip.loadAsync(tmplBuf);
+    if (state) await fillWattsUpDocx(zip,state);
+    const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const writable=await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    wordDocHandle=handle;
+    wordDocFileName=handle.name;
+    updateWordDocUI();
+  } catch(err) {
+    if (err&&err.name!=='AbortError') alert('Could not create the Word document: '+err.message);
+  }
+}
+// Revision 68, item 2.4.3: connect to an existing file, then immediately prompt Sync/Load per
+// 2.4.3.2 — every connection made this way asks right away rather than leaving the user to guess
+// which of "Sync →"/"← Load" applies to a document they just picked.
+async function connectExistingWordReport(){
+  try {
+    const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false});
+    const perm=await handle.requestPermission({mode:'readwrite'});
+    if (perm!=='granted') { alert('Read-write permission was not granted — try again and allow access.'); return; }
+    wordDocHandle=handle;
+    wordDocFileName=handle.name;
+    updateWordDocUI();
   } catch(err) {
     if (err&&err.name!=='AbortError') alert('Could not connect to the Word document: '+err.message);
     return;
   }
-  updateWordDocUI();
+  const choice=await showChoiceDialog({
+    title:'Word Report',
+    message:`Connected to "${wordDocFileName}". Sync the current analysis to it, or load from it?`,
+    options:[
+      {label:'Sync to Report',value:'sync',primary:true},
+      {label:'Load from Report',value:'load'},
+    ]
+  });
+  if (choice==='sync') {
+    if (!confirm(`This will update "${wordDocFileName}" from the current browser data. Continue?`)) return;
+    await syncToWordDoc(false);
+  } else if (choice==='load') {
+    await loadFromWordDoc();
+  }
 }
 
 // Writes the current app state into the connected document's content controls/embedded JSON,
@@ -6558,11 +6596,8 @@ function initEvents() {
   });
   document.getElementById('btn-export').addEventListener('click',doExport);
   document.getElementById('btn-print' ).addEventListener('click',()=>openPrintOpts('print'));
-  document.getElementById('btn-word'  ).addEventListener('click',()=>openPrintOpts('word'));
-  document.getElementById('btn-word-connect').addEventListener('click',connectWordDoc);
-  document.getElementById('btn-word-sync'   ).addEventListener('click',()=>syncToWordDoc(false));
-  document.getElementById('btn-word-load'   ).addEventListener('click',loadFromWordDoc);
-  document.getElementById('btn-exit'        ).addEventListener('click',doExitFromToolbar);
+  document.getElementById('btn-word'  ).addEventListener('click',doWordReportAction);
+  document.getElementById('btn-exit'  ).addEventListener('click',doExitFromToolbar);
   updateWordDocUI();
   // Revision 68 (Phase 2), items 2.6/3.8: the native tab-close/Ctrl+W/navigate-away case can't
   // carry our custom OK/Cancel wording (browsers block custom beforeunload text for security) —
