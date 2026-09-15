@@ -4020,7 +4020,9 @@ function closeModal() {
 
 // Small generic N-choice dialog (separate overlay from #modal-overlay, so it can't collide with
 // Edit/Add form state). Resolves to the clicked option's `value`, or null if closed/cancelled.
-function showChoiceDialog({title,message,options}) {
+// allowClose=false hides the header's ✕ (used for the launch dialog, where the user must pick one
+// of the offered actions rather than dismiss the app into an undecided state).
+function showChoiceDialog({title,message,options,allowClose=true}) {
   return new Promise(resolve=>{
     const overlay=document.getElementById('choice-overlay');
     document.getElementById('choice-title').textContent=title;
@@ -4036,7 +4038,9 @@ function showChoiceDialog({title,message,options}) {
       b.addEventListener('click',()=>finish(opt.value));
       btnWrap.appendChild(b);
     });
-    document.getElementById('choice-close').onclick=()=>finish(null);
+    const closeBtn=document.getElementById('choice-close');
+    closeBtn.classList.toggle('hidden',!allowClose);
+    closeBtn.onclick=allowClose?()=>finish(null):null;
     overlay.classList.remove('hidden');
   });
 }
@@ -6512,18 +6516,14 @@ function applyPrintOpts(){
 function initEvents() {
   document.getElementById('btn-add-root').addEventListener('click',()=>openAdd(null));
   document.getElementById('btn-duplicate').addEventListener('click',duplicateNode);
-  document.getElementById('btn-new').addEventListener('click',()=>{
-    if (!confirm('Start a new analysis? Any unsaved changes will be lost.')) return;
-    disconnectWordDoc();
-    state=freshState();collapsed=new Set();recalc();renderAll();persist();
-  });
+  document.getElementById('btn-new').addEventListener('click',doNewProject);
   document.getElementById('analysis-btn-ap').addEventListener('click',()=>switchAnalysis('ap'));
   document.getElementById('analysis-btn-pcm').addEventListener('click',()=>{
     if (!state) return;
     if (!state.analyses.pcm) { createPcmAnalysis(); return; }
     switchAnalysis('pcm');
   });
-  document.getElementById('btn-open').addEventListener('click',()=>document.getElementById('file-input').click());
+  document.getElementById('btn-open').addEventListener('click',doOpenProject);
   document.getElementById('file-input').addEventListener('change',e=>{
     const f=e.target.files[0];
     if(f){
@@ -6740,17 +6740,68 @@ function initEvents() {
   });
 }
 
-// ── BOOT ─────────────────────────────────────────────────────────────────────
-function init() {
-  const saved=loadLS();
-  if (saved) {
-    migrateLegacy(saved);
-    try{validateImport(saved);state=saved;}
-    catch(e){state=freshState();}
-  } else {
-    state=freshState();
+// ── BOOT / LAUNCH DIALOG ─────────────────────────────────────────────────────
+// Shared with the toolbar's own "New" button (Revision 68, item 1.1.1.1: "no change from existing
+// New button") so the launch dialog's "New" choice behaves identically, confirm included.
+function doNewProject(){
+  if (!confirm('Start a new analysis? Any unsaved changes will be lost.')) return;
+  disconnectWordDoc();
+  state=freshState();collapsed=new Set();recalc();renderAll();persist();
+}
+// Shared with the toolbar's own "Open" button. Only used directly there — the launch dialog's
+// "Open" choice (below) needs an extra fresh-baseline step first, since unlike the toolbar, there
+// is no existing `state` yet for a cancelled picker to safely leave untouched.
+function doOpenProject(){
+  document.getElementById('file-input').click();
+}
+// Best-effort tab close (Revision 68, item 1.1.4/2.5/3.7): window.close() only succeeds on a tab
+// opened by a script (e.g. window.open()), which this app normally isn't — a tab opened by typing
+// a URL or double-clicking the file can't be closed programmatically, and there's no reliable way
+// to detect that failure. So this always tries, then falls back to a message a beat later in case
+// the tab is still open to read it (if close succeeded, the page — and this timer — is just gone).
+function attemptExitApp(){
+  window.close();
+  setTimeout(()=>{ alert('You can close this browser tab now.'); },300);
+}
+async function runLaunchDialog(){
+  for(;;){
+    const saved=loadLS();
+    const options=[{label:'New',value:'new',primary:!saved}];
+    if (saved) options.push({label:'Resume Previous',value:'resume',primary:true});
+    options.push({label:'Open…',value:'open'});
+    options.push({label:'Exit',value:'exit'});
+    const choice=await showChoiceDialog({
+      title:'Welcome to Watts Up',
+      message: saved
+        ? 'Start a new analysis, resume your previous session, open a saved file, or exit.'
+        : 'Start a new analysis, open a saved file, or exit.',
+      options,
+      allowClose:false
+    });
+    if (choice==='new') { doNewProject(); return; }
+    if (choice==='open') {
+      // A fresh baseline so the app is still usable if the native file picker gets cancelled —
+      // unlike the toolbar's mid-session Open, there is no prior `state` here to fall back to.
+      // Deliberately not persisted: if the picker is cancelled, whatever was already saved in
+      // localStorage (this same `saved` snapshot) must be left untouched, not overwritten blank.
+      state=freshState();collapsed=new Set();recalc();renderAll();
+      doOpenProject();
+      return;
+    }
+    if (choice==='exit') { attemptExitApp(); return; }
+    if (choice==='resume') {
+      if (!confirm('This will resume your previous session, which is not connected to a Word document. Use "Open" instead if you want to connect one.\n\nContinue and resume without a connection?')) continue;
+      migrateLegacy(saved);
+      try{validateImport(saved);state=saved;}
+      catch(e){state=freshState();}
+      collapsed=new Set();recalc();renderAll();
+      return;
+    }
   }
-  recalc();renderAll();initEvents();
+}
+function init() {
+  initEvents();
+  runLaunchDialog();
 }
 init();
 </script>

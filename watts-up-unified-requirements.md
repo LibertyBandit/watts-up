@@ -3819,6 +3819,75 @@ synthetic `.docx` `File` (via `DataTransfer`) against the actual registered list
 `disconnectWordDoc()` runs and clears the handle *before* `importDocx` is invoked. Full console
 sweep, no errors.
 
+## 68. Launch, Connect, Save (Phase 1: Launch Dialog)
+
+*Last updated: 2026-09-14*
+
+Source: "Watts Up Revision 68 (+) – Launch, Connect, Save.txt", a 6-phase plan covering (1) a
+launch-time dialog, (2)/(3) connection-aware toolbar wording for New/Open/Exit, (4) a unified
+"Word Report" button collapsing today's 4 separate Word buttons into one context-aware prompt, (5)
+a from-scratch "Create New Report" blank-document generator, and (6) making Open(.docx) establish a
+live connection instead of just importing a snapshot. This section covers Phase 1 only.
+
+**Before this phase**: `init()` silently auto-resumed from the last `localStorage` snapshot on
+every page load with no prompt at all — there was no user-facing distinction between "starting
+fresh" and "picking back up," and no way to instead open a different file at launch without first
+letting the silent auto-resume run.
+
+**One clarified constraint before implementation**: items 2.6/3.8 ask that closing the browser tab
+via its native "X" (or Ctrl+W, navigating away) show the same custom-worded warning as the in-app
+Exit button. Browsers block custom text in that native prompt for security — only a generic
+browser-controlled "Leave site?" message is possible there, and it can't carry connection-aware
+wording. Confirmed with the user: the native-close case gets the browser's generic warning (via
+`beforeunload`, added in a later phase alongside the toolbar's own Exit button); the in-app "Exit"
+button itself has no such limitation and gets the spec's exact custom wording.
+
+**Shipped this phase**: `init()` now shows a launch-time modal (reusing the existing
+`showChoiceDialog` mechanism, extended with a new `allowClose` option — default `true`, unchanged
+for its two existing callers; `false` hides the header's ✕ so the user can't dismiss the launch
+choice without picking one) offering:
+- **New** — identical to the toolbar's own New button, literally sharing the same function
+  (`doNewProject()`, factored out of the toolbar's click handler) so the confirm wording and
+  behavior can never drift between the two entry points, per the spec's "no change from existing
+  New button."
+- **Resume Previous** — shown only when `loadLS()` finds a saved session. Warns first ("This will
+  resume your previous session, which is not connected to a Word document. Use 'Open' instead if
+  you want to connect one.") since a Word connection is a runtime-only handle that can never survive
+  a reload regardless of phase; declining re-shows the launch dialog rather than leaving the user
+  stuck, accepting proceeds with the same load/`migrateLegacy`/`validateImport`/fallback-to-fresh
+  logic `init()` used to run unconditionally.
+- **Open…** — shares `doOpenProject()` with the toolbar's Open button (just `file-input`'s
+  `.click()`). Unlike the toolbar, there's no existing `state` yet at launch for a cancelled picker
+  to safely fall back to, so this branch first sets a fresh baseline (`freshState()` +
+  recalc/renderAll) *without* calling `persist()` — deliberately, so cancelling the native picker
+  can never overwrite whatever the user actually had saved in `localStorage`. Verified explicitly:
+  stubbing the picker to a no-op ("cancelled") leaves the pre-existing saved snapshot byte-for-byte
+  unchanged.
+- **Exit** — new `attemptExitApp()`: best-effort `window.close()` (only succeeds for a
+  script-opened tab, which this app normally isn't) with a ~300ms-delayed fallback alert ("You can
+  close this browser tab now.") in case the tab is still open to read it. No confirm at launch —
+  there's nothing unsaved yet to warn about; a later phase's toolbar Exit button wraps this same
+  function with its own confirm.
+
+Primary-button choice: "Resume Previous" when a saved session exists, "New" otherwise — the more
+likely action in each case.
+
+Verified live (real `http://localhost` origin via the project's `.claude/launch.json` "watts-up"
+static-server config, needed because `localStorage` is unavailable when this file is opened as a
+bare `file://`/sandboxed-preview document): both the no-saved-session (New/Open/Exit, New primary)
+and has-saved-session (all 4, Resume Previous primary) dialog states; New's confirm text and
+resulting fresh state; Resume's decline (loops back, dialog still showing) and accept (loads the
+saved state) paths; Open's baseline-then-picker sequence and its no-persist safety property; Exit's
+best-effort close + fallback alert; and that the toolbar's own New/Open buttons still work
+identically post-launch through the now-shared functions. Also confirmed the existing 2-way choice
+dialogs (Duplicate, Connect Word Doc) are unaffected by the new `allowClose` parameter — still
+closable by default. Full console sweep, no errors.
+
+**Not yet done** (later phases in this same revision): connection-aware New/Open toolbar wording
+when a Word doc is connected; Export JSON via a real Save-As picker; the unified Word Report
+button; the blank-document "Create New Report" generator; Open(.docx) establishing a live
+connection.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
