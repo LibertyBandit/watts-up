@@ -6411,8 +6411,14 @@ async function fillBlankWattsUpDocx(zip,st){
     const sectPrEnd=docXml.lastIndexOf('</w:sectPr>')+11;
     const sectPrXml=docXml.slice(sectPrStart,sectPrEnd);
     const controls=wuContentControlList(st);
+    // Revision 69, item 2.2.1: OOXML's CT_SdtPr schema requires this exact child order (confirmed
+    // against a real, Word-authored <w:sdtPr> in this same template: alias, then tag, then id) —
+    // the id-first order used here previously was well-formed XML but schema-INVALID, and Word
+    // silently discarded the malformed <w:sdt> wrapper on open, keeping only the plain paragraph
+    // text inside it. That's exactly what was reported: text appeared, but no actual content
+    // control. Reordering to match the schema is the fix — nothing else about the markup changes.
     const body=controls.map((c,i)=>
-      `<w:sdt><w:sdtPr><w:id w:val="${2000+i}"/><w:alias w:val="${xe(c.tag)}"/><w:tag w:val="${xe(c.tag)}"/></w:sdtPr><w:sdtContent>${c.xml}</w:sdtContent></w:sdt><w:p/>`
+      `<w:sdt><w:sdtPr><w:alias w:val="${xe(c.tag)}"/><w:tag w:val="${xe(c.tag)}"/><w:id w:val="${2000+i}"/></w:sdtPr><w:sdtContent>${c.xml}</w:sdtContent></w:sdt><w:p/>`
     ).join('');
     zip.file('word/document.xml',docXml.slice(0,bodyStart)+body+sectPrXml+'</w:body></w:document>');
   } else found.missingFiles.push('word/document.xml');
@@ -6447,6 +6453,16 @@ let wordDocFileName='';
 const WORD_DOCX_TYPE={description:'Word Document',
   accept:{'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx']}};
 const WATTSUP_JSON_TYPE={description:'Watts Up JSON',accept:{'application/json':['.json']}};
+// Revision 69, item 1.2.1: a single type descriptor whose `accept` lists both extensions together
+// — passing WATTSUP_JSON_TYPE and WORD_DOCX_TYPE as two separate array entries (the Phase 6
+// original) made the native picker offer them as two separate filter options, defaulting to
+// whichever came first and hiding .docx files until the user switched it manually. One descriptor
+// with both extensions matches the old plain <input accept=".json,.docx"> picker's single
+// combined "show me either" filter.
+const WATTSUP_OPEN_TYPE={description:'Watts Up Files',accept:{
+  'application/json':['.json'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx']
+}};
 
 function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.showSaveFilePicker); }
 
@@ -6536,11 +6552,14 @@ async function createNewWordReport(){
 // Revision 68, item 2.4.3: connect to an existing file, then immediately prompt Sync/Load per
 // 2.4.3.2 — every connection made this way asks right away rather than leaving the user to guess
 // which of "Sync →"/"← Load" applies to a document they just picked.
+// Revision 69, item 1.2.2: no longer requests readwrite permission here — picking a file already
+// grants read access on its own, and Chrome's own native permission prompt for readwrite (a
+// "Save changes to <file>?" panel, not something this app renders) only needs to appear once we
+// actually try to write, which might never happen this session if the user only ever picks "Load
+// from Report". syncToWordDoc requests it lazily, right before it actually needs to write.
 async function connectExistingWordReport(){
   try {
     const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false});
-    const perm=await handle.requestPermission({mode:'readwrite'});
-    if (perm!=='granted') { alert('Read-write permission was not granted — try again and allow access.'); return; }
     wordDocHandle=handle;
     wordDocFileName=handle.name;
     updateWordDocUI();
@@ -6567,9 +6586,14 @@ async function connectExistingWordReport(){
 // Writes the current app state into the connected document's content controls/embedded JSON,
 // in place — leaving everything else in the file untouched. `silent` skips the success/report
 // alert (used right after "Create New", where an empty report would just be noise).
+// Revision 69, item 1.2.2: requests readwrite permission here, right before it's actually needed,
+// rather than upfront when merely connecting — Chrome's own native permission panel for this is
+// expected and fine to see at the moment we're genuinely about to write, just not before.
 async function syncToWordDoc(silent){
   if (!wordDocHandle||!state) return;
   if (typeof JSZip==='undefined'){alert('JSZip not loaded — Word sync requires an internet connection.');return;}
+  const perm=await wordDocHandle.requestPermission({mode:'readwrite'});
+  if (perm!=='granted') { alert('Read-write permission was not granted — try again and allow access.'); return; }
   try {
     const file=await wordDocHandle.getFile();
     const buf=await file.arrayBuffer();
@@ -6676,7 +6700,7 @@ function initEvents() {
   document.getElementById('btn-export').addEventListener('click',doExport);
   document.getElementById('btn-print' ).addEventListener('click',()=>openPrintOpts('print'));
   document.getElementById('btn-word'  ).addEventListener('click',doWordReportAction);
-  document.getElementById('btn-exit'  ).addEventListener('click',doExitFromToolbar);
+  document.getElementById('btn-exit'  ).addEventListener('click',attemptExitApp);
   updateWordDocUI();
   // Revision 68 (Phase 2), items 2.6/3.8: the native tab-close/Ctrl+W/navigate-away case can't
   // carry our custom OK/Cancel wording (browsers block custom beforeunload text for security) —
@@ -6894,13 +6918,17 @@ function initEvents() {
 // Revision 68 (Phase 3), item 3.3.1: when a Word doc is connected, the confirm names it and says
 // plainly that continuing disconnects it — the disconnect itself then happens silently right after
 // (no second, redundant alert repeating what this confirm already said).
+// Returns whether it actually went through (Revision 69, item 1.1.1) — the launch dialog needs to
+// know, so declining loops back to the dialog instead of leaving state unset; the toolbar's own
+// "New" button ignores the return value, since declining there just leaves things as they are.
 function doNewProject(){
   const msg=wordDocHandle
     ? `Disconnect from "${wordDocFileName}" and start new analysis? Any unsaved changes will be lost.`
     : 'Start a new analysis? Any unsaved changes will be lost.';
-  if (!confirm(msg)) return;
+  if (!confirm(msg)) return false;
   disconnectWordDoc(true);
   state=freshState();collapsed=new Set();recalc();renderAll();persist();
+  return true;
 }
 // Shared with the launch dialog's "Open" choice, and with the toolbar's gated version below. Bare
 // trigger only — no confirm here, since the launch dialog calls this directly and has nothing yet
@@ -6911,23 +6939,19 @@ function doNewProject(){
 // a real FileSystemFileHandle, which the File System Access API's own picker provides but a plain
 // <input type=file> never can, so browsers without the API keep the original plain-file-input,
 // import-only behavior completely unchanged — nothing regresses there.
+// Revision 69: uses the combined WATTSUP_OPEN_TYPE filter (item 1.2.1 — one descriptor covering
+// both extensions, so the native picker shows one filter instead of two, matching the old plain
+// file input) and no longer requests readwrite permission just to open (item 1.2.2 — reading
+// never needed it; syncToWordDoc requests it lazily, only once a write is actually attempted).
 async function doOpenProject(){
   if (!hasFileSystemAccess()) { document.getElementById('file-input').click(); return; }
   try {
-    const [handle]=await window.showOpenFilePicker({types:[WATTSUP_JSON_TYPE,WORD_DOCX_TYPE],multiple:false});
+    const [handle]=await window.showOpenFilePicker({types:[WATTSUP_OPEN_TYPE],multiple:false});
     const file=await handle.getFile();
     if (file.name.toLowerCase().endsWith('.docx')) {
-      const perm=await handle.requestPermission({mode:'readwrite'});
-      if (perm==='granted') {
-        wordDocHandle=handle;
-        wordDocFileName=handle.name;
-        updateWordDocUI();
-      } else {
-        // Reading doesn't need this permission (the picker already grants that), only writing
-        // back later does — so a denial here means "opened, just not connected," not a failure of
-        // the open itself.
-        alert(`Read-write permission for "${handle.name}" was not granted, so it won't stay connected — it will still open normally. Use "Word Report" to connect it later if you want to.`);
-      }
+      wordDocHandle=handle;
+      wordDocFileName=handle.name;
+      updateWordDocUI();
       await importDocx(file);
     } else {
       await doImport(file);
@@ -6955,23 +6979,17 @@ function doOpenProjectFromToolbar(){
 // Best-effort tab close (Revision 68, item 1.1.4/2.5/3.7): window.close() only succeeds on a tab
 // opened by a script (e.g. window.open()), which this app normally isn't — a tab opened by typing
 // a URL or double-clicking the file can't be closed programmatically, and there's no reliable way
-// to detect that failure. So this always tries, then falls back to a message a beat later in case
-// the tab is still open to read it (if close succeeded, the page — and this timer — is just gone).
+// to detect that failure.
+// Revision 69, items 2.3.1/2.4.1: this used to show its own "Exit Watts Up?" confirm before
+// calling this, and this used to follow up with a delayed "you can close this tab now" fallback
+// alert. Both are gone. window.close() triggers the browser's own native "Leave Site?" prompt (via
+// the beforeunload listener in initEvents below) — a second, custom confirm asking the same
+// question first was pure redundancy, and the fallback alert had no way to tell "Leave Site?" was
+// declined from "window.close() silently failed because this tab wasn't script-opened," so it
+// fired the same wrong message either way. Now: nothing shown at all if close doesn't go through —
+// the user can just see the tab is still there and close it themselves.
 function attemptExitApp(){
   window.close();
-  setTimeout(()=>{ alert('You can close this browser tab now.'); },300);
-}
-// Revision 68 (Phase 2, item 2.5 / Phase 3, item 3.7.1): the toolbar's own Exit button gets our
-// exact custom wording, unlike the native tab-close case (see the beforeunload listener in
-// initEvents, below) which browsers restrict to a generic message. The spec doesn't ask this one to
-// name the connected file (unlike New/Open) — the whole app is closing either way, so there's
-// nothing left to reconnect to or disconnect from; only the loss-of-changes phrasing differs.
-function doExitFromToolbar(){
-  const msg=wordDocHandle
-    ? 'Exit Watts Up? Changes to the current project will be lost.'
-    : 'Exit Watts Up? Any unsaved changes will be lost.';
-  if (!confirm(msg)) return;
-  attemptExitApp();
 }
 async function runLaunchDialog(){
   for(;;){
@@ -6988,7 +7006,10 @@ async function runLaunchDialog(){
       options,
       allowClose:false
     });
-    if (choice==='new') { doNewProject(); return; }
+    // Revision 69, item 1.1.1: doNewProject()'s own confirm can be declined — previously that
+    // left the launch dialog closed with `state` never set at all. Now: declining loops back to
+    // this same dialog instead of abandoning the whole launch flow.
+    if (choice==='new') { if (doNewProject()) return; continue; }
     if (choice==='open') {
       // A fresh baseline so the app is still usable if the native file picker gets cancelled —
       // unlike the toolbar's mid-session Open, there is no prior `state` here to fall back to.

@@ -4133,6 +4133,101 @@ beforeunload line as every prior phase, nothing new.
 
 **Revision 68 (Launch, Connect, Save) is now complete — all 6 phases shipped and verified.**
 
+## 69. Miscellaneous Clean-Up (Revision 68 real-world testing follow-up)
+
+*Shipped 2026-09-20.*
+
+Source: "Watts Up Revision 69 (+) – Miscellaneous clean up.txt" — a punch list from the user's own
+live testing of Revision 68 in a real Chrome session (several of these could only surface that way;
+this app's sandboxed test browser can't drive genuine File System Access gestures at all).
+
+**1.1.1 — launch dialog's "New" left the app unusable if declined.** `doNewProject()`'s own confirm
+("Start a new analysis? ...") could be declined, but `runLaunchDialog()` unconditionally returned
+right after calling it regardless of outcome — declining left `state` never set at all, with the
+launch dialog already closed. Fixed: `doNewProject()` now returns whether it actually went through;
+`runLaunchDialog` loops back to the same dialog on a decline instead of abandoning the launch flow.
+The toolbar's own "New" button ignores the return value (declining there is already fine — it just
+leaves the current analysis as-is).
+
+**1.2.1 / 2.1.1 — Open's native picker showed "Watts Up JSON" and "Word Document" as two separate
+filter options** (defaulting to JSON, hiding .docx files until manually switched), instead of one
+combined filter like the old plain `<input accept=".json,.docx">` picker. Root cause:
+`showOpenFilePicker`'s `types` array had two separate descriptor objects (`WATTSUP_JSON_TYPE`,
+`WORD_DOCX_TYPE`), each becoming its own dropdown entry. Fixed with a new `WATTSUP_OPEN_TYPE`
+descriptor whose single `accept` map lists both extensions together, producing one combined filter
+— confirmed the earlier-preferred behavior is achievable together with connect-on-open (the user's
+own stated fallback condition), so nothing had to be given up.
+
+**1.2.2 / 2.1.2 — opening or connecting to a Word document triggered an unexplained native
+"Save changes to `<file>`?" panel.** This is Chrome's own permission prompt for
+`handle.requestPermission({mode:'readwrite'})` — not anything this app renders — and both
+`doOpenProject()`'s `.docx` branch and `connectExistingWordReport()` were calling it immediately
+upon connecting, even though reading never needs that permission (a picker selection already
+grants read access on its own; `readwrite` only gates writing back later). If the user's very next
+action was "Load from Report" (a read), they'd still see a write-permission prompt for a write that
+was never going to happen. Fixed by removing both eager calls and adding the request to
+`syncToWordDoc()` itself, right before it actually attempts to write — the one place that
+genuinely needs it, at the moment it's actually needed. This also explains the reported
+"first time only, then not again for a different file" pattern: Chrome remembers a grant per file
+per session, so it only prompts once per distinct file regardless of which code path asks — moving
+the fix here doesn't need to reproduce that pattern to be correct.
+
+**2.1.3 — intermittent "Failed to execute 'showOpenFilePicker' ... Must be handling a user
+gesture."** This is a genuine Chrome transient-activation timing issue, not something reproducible
+in this app's own sandboxed test browser (every File System Access flow here has always needed a
+*mocked* picker function specifically because the real one refuses to run at all without a true
+user gesture in automation — there is no way to manufacture the exact timing this bug depends on
+from this environment). Reviewed every call site for unnecessary async hops between a click and the
+native picker call: the toolbar Open/New/Exit paths call the picker synchronously after a blocking
+native `confirm()` (the safest possible pattern); "Word Report"'s Create-New/Connect-Existing calls
+the picker one microtask after our own custom choice dialog resolves (the standard, normally-safe
+pattern for exactly this "confirm via custom dialog, then show a native picker" case). No further
+structural change was identified beyond what 1.2.2 already removes — one fewer native permission
+dialog in the Open flow is one fewer thing that can interact with activation timing, but this is a
+reduction, not a guaranteed fix. Flagged plainly rather than claimed fixed; needs the user's own
+live re-verification, and if it recurs, the exact button/sequence would help narrow it further.
+
+**2.2.1 — "Create New Report" produced plain text, not actual content controls.** Real bug, found
+by inspecting the OOXML schema for `<w:sdtPr>` against a genuine Word-authored one already in the
+bundled template: `CT_SdtPr`'s children must appear in a specific order (confirmed directly:
+`alias`, then `tag`, then `id`, for the template's own real controls). Phase 5's generator wrote
+`id` first — well-formed XML, but schema-invalid — and Word's loader silently discarded the
+malformed `<w:sdt>` wrapper on open while keeping the plain paragraph text inside it, exactly
+matching what was reported. Fixed by reordering to `alias, tag, id`; nothing else about the
+generated markup changed. This was a genuinely fixable, concrete bug — the fallback "build a
+prepared template with the controls already in it instead" wasn't needed.
+
+**2.3.1 — redundant "Exit Watts Up?" + native "Leave Site?".** Clicking the toolbar's Exit button
+showed our own confirm, and then — since `attemptExitApp()` calls `window.close()`, which fires the
+`beforeunload` listener even for a script-initiated close — the browser's own native "Leave Site?"
+prompt right after, asking essentially the same question twice. Removed the custom confirm
+entirely; the toolbar's Exit button now calls `attemptExitApp()` directly, exactly like the launch
+dialog's Exit choice already did (which never had a redundant confirm in the first place).
+
+**2.4.1 — the delayed "you can close this browser tab now" fallback fired even after Cancelling
+"Leave Site?".** `attemptExitApp()`'s old fallback alert (added when the toolbar Exit button was
+introduced, before "Leave Site?" was in the picture at all) couldn't tell "the user just declined
+to leave" apart from "`window.close()` silently failed because this tab wasn't script-opened" — it
+fired the same message either way, 300ms later, regardless of which had actually happened. Removed
+entirely per the user's explicit ask: `attemptExitApp()` is now just `window.close()`, nothing
+else. If it doesn't close (most tabs aren't script-opened), the user simply stays on the page with
+no further message — they can see for themselves that the tab is still there.
+
+Verified live (same `.claude/launch.json` "watts-up" localhost server as every prior File System
+Access phase): New's decline now loops back to the launch dialog (state stays unset, dialog
+re-shown) and accept still proceeds normally; the combined `WATTSUP_OPEN_TYPE` filter passed to
+`showOpenFilePicker` as a single descriptor covering both extensions; `doOpenProject`'s `.docx`
+branch connecting without ever calling `requestPermission`; `syncToWordDoc` calling
+`requestPermission` and correctly aborting (denied, no write attempted) or proceeding (granted,
+write happens) at exactly that point; `connectExistingWordReport` connecting without a permission
+call, its Sync/Load follow-up still appearing; the regenerated blank document's first `<w:sdtPr>`
+now reading `alias, tag, id` in that exact order; Exit showing no confirm at all and calling
+`window.close()` directly, with no fallback alert even after waiting past the old 300ms timer.
+Full console sweep, no errors.
+
+**One item accepted as a known limitation of the sandboxed environment (2.1.3)**: cannot be
+verified fixed from here — needs the user's own live retest.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
