@@ -4318,6 +4318,28 @@ predates this tag, non-fatally noted via the existing missing-tag mechanism, not
 console (aside from an unrelated `fetch('about:blank')` error from my own scratch test code, not
 the app).
 
+### Phase C: Print Report skips the settings dialog; General Notes removed from print (items 4.1, 4.2)
+
+*Shipped 2026-09-20.*
+
+**Print Report goes straight to print** (item 4.1): the toolbar button now calls
+`buildPrintR10();window.print();` directly instead of `openPrintOpts('print')` — no dialog shown,
+uses whatever's already saved in `printCfg` (lazily defaulted the same way it always was if never
+touched). The settings dialog remains fully reachable — Phase D adds a standalone "Settings" button
+for it, since this was its only trigger before.
+
+**General Notes removed from the printed report** (item 4.2): `buildPrintR10()` no longer builds or
+inserts a General Notes section (`gnSec`) — the now-unused CSS (`.rpt-gen-notes-sec` and its `ol`
+rule) was removed too. References, Row Notes, and Warnings sections are unaffected. This only
+touches the *print* report — the Word `wu-general-notes` content control (already inhibited from
+new blank documents in Phase B, but still filled by `fillWattsUpDocx` for any existing document
+that has one) is untouched by this change.
+
+Verified live: clicking Print Report calls `window.print()` directly without ever opening
+`openPrintOpts`/showing the dialog; the rendered `#print-region` HTML contains neither the General
+Notes heading nor its text even with notes present in state; References still renders correctly
+alongside it. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
