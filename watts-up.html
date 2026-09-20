@@ -186,6 +186,7 @@
     #print-region{display:none}
     .po-chk{display:inline-flex;align-items:center;gap:.3rem;margin-right:.9rem;cursor:pointer}
     .po-chk input{cursor:pointer}
+    .po-colselect-row td{border-bottom:1px solid var(--border)}
     @media print{
       body>*:not(#print-region){display:none !important}
       #print-region{display:block;font-family:Arial,sans-serif;font-size:9pt;color:#000;background:#fff}
@@ -411,6 +412,7 @@
       <button id="btn-print"  class="btn-default">Print Report</button>
       <button id="btn-word"   class="btn-default">Word Report</button>
       <span id="word-doc-indicator" class="hidden" style="font-size:.78rem;font-weight:600;color:var(--accent-green);margin-left:.3rem"></span>
+      <button id="btn-settings" class="btn-default">Settings</button>
       <button id="btn-exit"   class="btn-default">Exit</button>
     </div>
   </header>
@@ -916,12 +918,15 @@
   <div id="print-opts" class="modal-overlay hidden">
     <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;width:620px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
       <div class="modal-header">
-        <h2 id="print-opts-title">Print / Export Settings</h2>
+        <h2 id="print-opts-title">Report Settings</h2>
         <button id="print-opts-close" style="background:none;border:none;color:var(--text-secondary);font-size:1.15rem;padding:.1rem .38rem;border-radius:4px;cursor:pointer">✕</button>
       </div>
       <div class="modal-body" style="overflow-y:auto">
         <div class="section-label">AC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
+          <!-- Revision 70, item 5.4: checking/unchecking one of these toggles every checkbox in
+               that column below (5.4.1: individual ones stay independently clickable too). -->
+          <tr class="po-colselect-row"><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle;font-style:italic">Select All</td><td><label class="po-chk"><input type="checkbox" id="po-ac-col-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-col-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-col-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-col-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-col-pf"> pf</label></td></tr>
           <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-ac-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-cap-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-ac-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-exload-pf"> pf</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Installed (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-ac-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-ac-added-va"> VA</label><label class="po-chk"><input type="checkbox" id="po-ac-added-w"> W</label><label class="po-chk"><input type="checkbox" id="po-ac-added-var"> VAR</label><label class="po-chk"><input type="checkbox" id="po-ac-added-pf"> pf</label></td></tr>
@@ -931,6 +936,7 @@
         </table>
         <div class="section-label" style="margin-top:.75rem">DC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
+          <tr class="po-colselect-row"><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle;font-style:italic">Select All</td><td><label class="po-chk"><input type="checkbox" id="po-dc-col-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-col-w"> W</label></td></tr>
           <tr><td style="width:145px;color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Capacity</td><td><label class="po-chk"><input type="checkbox" id="po-dc-cap-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-cap-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Existing Load</td><td><label class="po-chk"><input type="checkbox" id="po-dc-exload-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-exload-w"> W</label></td></tr>
           <tr><td style="color:var(--text-secondary);padding:.22rem 0;vertical-align:middle">Installed (Removed)</td><td><label class="po-chk"><input type="checkbox" id="po-dc-added-a"> A</label><label class="po-chk"><input type="checkbox" id="po-dc-added-w"> W</label></td></tr>
@@ -947,7 +953,7 @@
         <button id="print-opts-reset" class="btn-default">Reset to Defaults</button>
         <div class="spacer"></div>
         <button id="print-opts-cancel" class="btn-default">Cancel</button>
-        <button id="print-opts-go" class="btn-primary">Print</button>
+        <button id="print-opts-go" class="btn-primary">Done</button>
       </div>
     </div>
   </div>
@@ -2323,8 +2329,8 @@ function pdsRows(ids,cols,dm,annotator,hasAnyAnnot) {
 function renderPowerDistSummary() {
   const el=document.getElementById('pds-container');
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
-  if (!printCfg) printCfg=defaultPrintCfg();
-  const cfg=printCfg;
+  if (!reportCfg) reportCfg=defaultPrintCfg();
+  const cfg=reportCfg;
   const acCols=activeCols(AC_GROUPS,cfg.ac).filter(c=>PDS_GROUP_IDS.includes(c.group));
   const dcCols=activeCols(DC_GROUPS,cfg.dc).filter(c=>PDS_GROUP_IDS.includes(c.group));
   const allIds=preOrder(state.rootIds,state.nodes).filter(id=>{
@@ -2411,8 +2417,8 @@ function acDcVoltageLabel(acDc){
 function renderLoadAnalysisDetail() {
   const el=document.getElementById('lad-container');
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
-  if (!printCfg) printCfg=defaultPrintCfg();
-  const cfg=printCfg;
+  if (!reportCfg) reportCfg=defaultPrintCfg();
+  const cfg=reportCfg;
   const nodes=state.nodes;
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
@@ -2523,8 +2529,8 @@ function renderLoadAnalysisDetailAlt() {
   const el=document.getElementById('ladalt-container');
   if (!el) return;
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
-  if (!printCfg) printCfg=defaultPrintCfg();
-  const cfg=printCfg;
+  if (!reportCfg) reportCfg=defaultPrintCfg();
+  const cfg=reportCfg;
   const nodes=state.nodes;
 
   // Local note/reference numbering, restarted per this report — same convention as the existing
@@ -5659,9 +5665,11 @@ function buildPrint() {
 }
 
 // ── PRINT ENGINE (Revision 10) ───────────────────────────────────────────────
-let printCfg=null;
-let wordCfg=null;
-let printOptsMode='print';
+// Revision 70 (Phase D): printCfg/wordCfg merged into one shared reportCfg — Print Report and
+// Word Report's legacy download fallback now use the same column selection instead of two
+// independently configurable ones (the user's own preference over a Print/Word picker in front
+// of the settings dialog).
+let reportCfg=null;
 function defaultPrintCfg(){
   return {
     ac:{
@@ -5913,8 +5921,8 @@ function buildSectionRows(acDc,cols,cfg,annotMap){
 
 function buildPrintR10(){
   if(!state)return;
-  if(!printCfg)printCfg=defaultPrintCfg();
-  const cfg=printCfg;const m=state.meta;
+  if(!reportCfg)reportCfg=defaultPrintCfg();
+  const cfg=reportCfg;const m=state.meta;
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
@@ -6201,7 +6209,7 @@ function computeColWidths(groups,cols,avail,pt){
   return cols.map(c=>Math.max(naive,groupMinPerCol[c.group]||0));
 }
 function buildTablesContent(){
-  const cfg=wordCfg||defaultPrintCfg();
+  const cfg=reportCfg||defaultPrintCfg();
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
   const{annotMap,notesList}=buildAnnotationMap();
@@ -6506,10 +6514,15 @@ function updateWordDocUI(){
 // Revision 68 (Phase 4): the single "Word Report" button's entry point, replacing the old
 // separate Word Report/Connect Word Doc…/Sync →/← Load buttons with one context-aware prompt.
 // Browsers without the File System Access API can't do any of connect/sync/load at all, so they
-// keep the exact original download-only flow (print-opts dialog → generateDocx) unchanged —
-// nothing regresses there, matching every other feature-gated piece of this app.
+// fall straight through to the legacy download-only generateDocx() — nothing regresses there,
+// matching every other feature-gated piece of this app.
+// Revision 70 (Phase D): this used to open the settings dialog first (mode 'word'), relying on
+// its own action button to trigger generateDocx() afterward — now that the dialog's action button
+// is gone (item 5.3; it's a pure settings editor, reachable separately via "Settings"), this calls
+// generateDocx() directly with whatever's already saved in reportCfg, mirroring how Print Report
+// itself now works (Phase C).
 async function doWordReportAction(){
-  if (!hasFileSystemAccess()) { openPrintOpts('word'); return; }
+  if (!hasFileSystemAccess()) { generateDocx(); return; }
   if (!wordDocHandle) {
     const choice=await showChoiceDialog({
       title:'Word Report',
@@ -6645,13 +6658,13 @@ async function loadFromWordDoc(){
 }
 
 // ── PRINT SETTINGS ───────────────────────────────────────────────────────────
-function openPrintOpts(mode){
-  printOptsMode=mode||'print';
-  if(!printCfg)printCfg=defaultPrintCfg();
-  if(!wordCfg)wordCfg=defaultPrintCfg();
-  const c=printOptsMode==='word'?wordCfg:printCfg;
-  document.getElementById('print-opts-title').textContent=printOptsMode==='word'?'Word Export Settings':'Print / Export Settings';
-  document.getElementById('print-opts-go').textContent=printOptsMode==='word'?'Export Word':'Print';
+// Revision 70 (Phase D): no more mode parameter — one shared reportCfg for both Print Report and
+// Word Report's legacy fallback, opened only from the standalone "Settings" button now (items
+// 5.1/5.2). Also resets the 7 column-select-all checkboxes to unchecked every time — they're pure
+// action triggers (item 5.4), not a reflection of the individual checkboxes' own state.
+function openPrintOpts(){
+  if(!reportCfg)reportCfg=defaultPrintCfg();
+  const c=reportCfg;
   const chk=(id,v)=>{const el=document.getElementById(id);if(el)el.checked=!!v;};
   chk('po-ac-cap-a',c.ac.cap.a);chk('po-ac-cap-va',c.ac.cap.va);chk('po-ac-cap-w',c.ac.cap.w);chk('po-ac-cap-var',c.ac.cap.var);chk('po-ac-cap-pf',c.ac.cap.pf);
   chk('po-ac-exload-a',c.ac.exload.a);chk('po-ac-exload-va',c.ac.exload.va);chk('po-ac-exload-w',c.ac.exload.w);chk('po-ac-exload-var',c.ac.exload.var);chk('po-ac-exload-pf',c.ac.exload.pf);
@@ -6666,12 +6679,13 @@ function openPrintOpts(mode){
   chk('po-dc-newload-a',c.dc.newload.a);chk('po-dc-newload-w',c.dc.newload.w);
   chk('po-dc-rem-a',c.dc.rem.a);chk('po-dc-rem-w',c.dc.rem.w);
   chk('po-conv-nc-only',c.convInNcOnly);
+  ['a','va','w','var','pf'].forEach(col=>chk(`po-ac-col-${col}`,false));
+  ['a','w'].forEach(col=>chk(`po-dc-col-${col}`,false));
   document.getElementById('print-opts').classList.remove('hidden');
 }
 function applyPrintOpts(){
-  if(!printCfg)printCfg=defaultPrintCfg();
-  if(!wordCfg)wordCfg=defaultPrintCfg();
-  const c=printOptsMode==='word'?wordCfg:printCfg;
+  if(!reportCfg)reportCfg=defaultPrintCfg();
+  const c=reportCfg;
   const get=(id)=>{const el=document.getElementById(id);return el?el.checked:false;};
   c.ac.cap.a=get('po-ac-cap-a');c.ac.cap.va=get('po-ac-cap-va');c.ac.cap.w=get('po-ac-cap-w');c.ac.cap.var=get('po-ac-cap-var');c.ac.cap.pf=get('po-ac-cap-pf');
   c.ac.exload.a=get('po-ac-exload-a');c.ac.exload.va=get('po-ac-exload-va');c.ac.exload.w=get('po-ac-exload-w');c.ac.exload.var=get('po-ac-exload-var');c.ac.exload.pf=get('po-ac-exload-pf');
@@ -6712,10 +6726,13 @@ function initEvents() {
   });
   document.getElementById('btn-export').addEventListener('click',doExport);
   // Revision 70, item 4.1: goes straight to the print screen now, using whatever's already saved
-  // in printCfg — the settings dialog is reachable on demand via its own standalone button
+  // in reportCfg — the settings dialog is reachable on demand via its own standalone button
   // (Phase D) instead of being forced open on every print.
   document.getElementById('btn-print' ).addEventListener('click',()=>{buildPrintR10();window.print();});
   document.getElementById('btn-word'  ).addEventListener('click',doWordReportAction);
+  // Revision 70, item 5.2: the only way left to reach the settings dialog, now that Print
+  // Report/Word Report both act directly (items 4.1/5.3).
+  document.getElementById('btn-settings').addEventListener('click',()=>openPrintOpts());
   document.getElementById('btn-exit'  ).addEventListener('click',attemptExitApp);
   updateWordDocUI();
   // Revision 68 (Phase 2), items 2.6/3.8: the native tab-close/Ctrl+W/navigate-away case can't
@@ -6729,11 +6746,31 @@ function initEvents() {
   });
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
-  document.getElementById('print-opts-reset' ).addEventListener('click',()=>{if(printOptsMode==='word')wordCfg=defaultPrintCfg();else printCfg=defaultPrintCfg();openPrintOpts(printOptsMode);});
+  document.getElementById('print-opts-reset' ).addEventListener('click',()=>{reportCfg=defaultPrintCfg();openPrintOpts();});
+  // Revision 70, item 5.3: no more Print/Export action here — "Done" just applies the checkbox
+  // changes and closes. Print Report and Word Report each trigger their own action directly now
+  // (Phase C / this phase), using whatever's currently saved.
   document.getElementById('print-opts-go'    ).addEventListener('click',()=>{
     applyPrintOpts();document.getElementById('print-opts').classList.add('hidden');
-    if(printOptsMode==='word'){generateDocx();}else{buildPrintR10();window.print();}
   });
+  // Revision 70, item 5.4: a "select all" checkbox above each power-unit column toggles every
+  // individual checkbox in that column at once (5.4.1: individual ones stay independently
+  // clickable afterward — this is a one-way trigger, not a state that reflects back).
+  function wireColumnSelectAll(prefix,groups,cols){
+    cols.forEach(col=>{
+      const master=document.getElementById(`po-${prefix}-col-${col}`);
+      if (!master) return;
+      master.addEventListener('change',()=>{
+        groups.forEach(g=>{
+          const cb=document.getElementById(`po-${prefix}-${g}-${col}`);
+          if (cb) cb.checked=master.checked;
+        });
+      });
+    });
+  }
+  const PO_ROW_GROUPS=['cap','exload','added','nc','newload','rem'];
+  wireColumnSelectAll('ac',PO_ROW_GROUPS,['a','va','w','var','pf']);
+  wireColumnSelectAll('dc',PO_ROW_GROUPS,['a','w']);
   document.getElementById('btn-expand-all').addEventListener('click',()=>{
     collapsed.clear();
     document.querySelectorAll('.tree-children').forEach(u=>u.classList.remove('collapsed'));

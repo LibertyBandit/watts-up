@@ -4340,6 +4340,52 @@ Verified live: clicking Print Report calls `window.print()` directly without eve
 Notes heading nor its text even with notes present in state; References still renders correctly
 alongside it. Clean console.
 
+### Phase D: Report Settings dialog rework (item 5)
+
+*Shipped 2026-09-20.*
+
+**`printCfg`/`wordCfg` merged into one `reportCfg`** — per the judgment call resolved before this
+phase started, Print Report and Word Report's legacy download fallback now share a single column
+selection instead of two independently configurable ones. Every reader (`renderPowerDistSummary`,
+`renderLoadAnalysisDetail`, `renderLoadAnalysisDetailAlt`, `buildPrintR10`, `buildTablesContent`)
+updated to the merged variable; `printOptsMode` is gone entirely — nothing left needs to know
+which "mode" a settings session is for.
+
+**Renamed and restructured** (items 5.1/5.2/5.3): dialog title is now the static "Report Settings"
+(was mode-dependent "Print / Export Settings"/"Word Export Settings"). `openPrintOpts()` no longer
+takes a mode argument. New standalone "Settings" toolbar button, positioned right before Exit —
+the only way left to reach the dialog, since Print Report (Phase C) and Word Report's fallback
+(this phase) both now act directly instead of opening it first. The dialog's own action button
+("Print"/"Export Word") is gone, replaced with a plain "Done" that just calls `applyPrintOpts()`
+and closes — no side effect. `doWordReportAction()`'s `!hasFileSystemAccess()` branch was updated
+to match: it used to open the dialog (relying on that now-removed action button to eventually
+trigger `generateDocx()`); it now calls `generateDocx()` directly, mirroring Print Report's own
+direct-action pattern exactly. This wasn't explicit in the source spec's item 4 (which only named
+Print Report) but follows necessarily from 5.3 — leaving the fallback opening a dialog whose action
+button no longer exists would have made Word Report's fallback silently do nothing.
+
+**Column select-all checkboxes** (items 5.4/5.4.1): a "Select All" row was added above each
+existing row-group in both the AC (5 columns: A/VA/W/VAR/pf) and DC (2 columns: A/W) tables, using
+the same `.po-chk` inline-checkbox pattern as every other row so they visually line up with the
+columns below. New `wireColumnSelectAll(prefix, groups, cols)` wires each one: checking or
+unchecking it sets every row-group's checkbox in that column to match. These are pure one-way
+triggers, not a reflection of the individual boxes' own state — `openPrintOpts()` explicitly resets
+all 7 to unchecked every time the dialog opens, and individual checkboxes remain fully independent
+afterward (5.4.1), confirmed by manually toggling one against the grain of a subsequent select-all
+action.
+
+Verified live: dialog title "Report Settings", action button reads "Done"; both select-all table
+rows present; checking a column's select-all correctly checks every row-group's checkbox in that
+column and leaves the neighboring column untouched; unchecking it (even after one box was manually
+set against it) correctly clears the whole column; "Done" applies the checked state into
+`reportCfg` and closes with no print/export side effect; Print Report calls `window.print()`
+directly with no dialog; Word Report's fallback (this sandboxed browser has no File System Access
+API, so it always takes this branch) calls `generateDocx()` directly with no dialog either; the PDS/
+LAD render functions still work correctly against the merged `reportCfg`; the new "Settings" button
+sits immediately before "Exit" in the toolbar, exactly as asked. Screenshot confirms the select-all
+row's checkboxes align well with the columns beneath it, set apart by a bottom border. Clean
+console throughout.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
