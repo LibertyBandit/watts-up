@@ -4410,6 +4410,34 @@ internal mechanism this sandboxed environment can't observe directly): all 4 cal
 `id:'watts-up-files', startIn:'downloads'` through to their respective `showSaveFilePicker`/
 `showOpenFilePicker` calls. Clean console.
 
+### Phase F: General Notes import numbering bug (item 7)
+
+*Shipped 2026-09-20.*
+
+Root cause confirmed exactly as suspected: `buildGeneralNotesParas` numbers each note ("N. text")
+when writing to Word, but `importDocx`'s general-notes extraction only ever stripped a leading
+bullet character (`^[••]\s*`) — a real numeric "N. " prefix passed straight through into the
+stored note text. The *next* export then numbered that already-numbered text again
+("1. " + "1. The..." = "1. 1. The..."), compounding a little further every sync/reload cycle,
+exactly matching the reported symptom.
+
+Fixed with a `stripListPrefix` helper that repeats the strip (numeric prefix, then bullet
+character) until nothing more comes off, rather than a single pass — this also repairs any
+already-accumulated multi-layer corruption from before this fix existed, not just prevents new
+corruption going forward.
+
+**Confirmed JSON import/export is genuinely unaffected** (the user's own stated uncertainty):
+`snapshotState()`/`doImport()` copy `generalNotes` objects verbatim — the numbering only ever
+gets added at Word-export time by `buildGeneralNotesParas`, never written back into the stored
+`text` field itself via the JSON path. Only the Word-import path needed a fix.
+
+Verified live: seeded two notes, ran two full `generateDocx()` → `importDocx()` round-trips in
+sequence — text came back exactly clean both times, no accumulation at all. Separately simulated
+pre-existing corruption (a note already reading "1. 1. The quick brown fox.", three layers deep
+after one more export cycle) and confirmed it fully repairs back to "The quick brown fox." on
+import — proving the repeat-until-stable strip handles arbitrary pre-existing accumulation, not
+just newly-introduced single-layer cases. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
