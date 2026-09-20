@@ -6333,7 +6333,7 @@ async function fillWattsUpDocx(zip,st){
      ['wu-make',m.make],['wu-model',m.model],
      ['wu-designation',m.marketingDesignation||m.designation],
      ['wu-serial',m.serialNumber],['wu-flightphase',m.flightPhase],
-     ['wu-preparedby',m.preparedBy]
+     ['wu-preparedby',m.preparedBy],['wu-interval',m.interval]
     ].forEach(([tag,val])=>{docXml=fillSdtText(docXml,tag,val,found);});
     // wu-revdate has multiple runs — use block replacement
     docXml=fillSdtBlock(docXml,'wu-revdate',wuRevDateParaXml(m),found);
@@ -6362,12 +6362,22 @@ async function fillWattsUpDocx(zip,st){
 function wuRevDateParaXml(m){
   return `<w:p><w:pPr><w:widowControl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/></w:pBdr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${xe(fmtRevDate(m.revisionDate))}</w:t></w:r></w:p>`;
 }
-// Revision 68, Phase 5 (items 2.4.2.2-2.4.2.4): the 14 Watts-Up content controls, each measured by
-// how much real content it currently has (used to sort ascending — item 2.4.2.2.1 — and to decide
-// whether it gets a "<tag> — no data" placeholder instead — item 2.4.2.3). Every entry's `xml` is
-// built with the exact same helpers fillWattsUpDocx itself uses to fill a real template, so a
-// control this generates is byte-for-byte what a later real sync would have written anyway (empty
-// ones aside) — nothing here is a special case just because the document started blank.
+// Revision 68, Phase 5 (items 2.4.2.2-2.4.2.4): the Watts-Up content controls for a freshly
+// generated blank document, each measured by how much real content it currently has (used to sort
+// ascending — item 2.4.2.2.1 — and to decide whether it gets a "<tag> — no data" placeholder
+// instead — item 2.4.2.3). Every entry's `xml` is built with the exact same helpers
+// fillWattsUpDocx itself uses to fill a real template, so a control this generates is
+// byte-for-byte what a later real sync would have written anyway (empty ones aside) — nothing
+// here is a special case just because the document started blank.
+// Revision 70, item 3.1: wu-preparedby/wu-intro/wu-general-notes/wu-compliance are no longer
+// generated here — these fields are hidden in the app's own UI now (§70 Phase A) and de-scoped
+// from a *newly created* report specifically. They're untouched everywhere else: fillWattsUpDocx
+// (used by Sync/Connect Existing/the legacy download) still fills them in any existing document
+// that happens to already have one of these controls — the underlying state.meta fields, and the
+// ability to sync into a document that still carries these tags, are both fully intact. Only
+// wu-approvedby was in the spec's inhibit list but never appeared in this generator at all (it's
+// a legacy tag from the original template vocabulary, §17.3, never wired into the active fill
+// list) — nothing to remove for it.
 function wuContentControlList(st){
   const m=st.meta;
   const textEntry=(tag,val)=>{
@@ -6380,7 +6390,6 @@ function wuContentControlList(st){
     return {tag,length:t.length,
       xml:t?realXml:`<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`};
   };
-  const generalNotesText=(m.generalNotes||[]).map(n=>n.text).join(' ');
   const refsText=(state.meta.references||[]).map(r=>[r.organization,r.docNumber,r.title].filter(Boolean).join(' ')).join(' ');
   const tablesXml=buildTablesContent();
   // A rough but consistent stand-in for the tables block's "amount of content": its own rendered
@@ -6395,12 +6404,9 @@ function wuContentControlList(st){
     textEntry('wu-designation',m.marketingDesignation||m.designation),
     textEntry('wu-serial',m.serialNumber),
     textEntry('wu-flightphase',m.flightPhase),
-    textEntry('wu-preparedby',m.preparedBy),
+    textEntry('wu-interval',m.interval),
     blockEntry('wu-revdate',fmtRevDate(m.revisionDate),wuRevDateParaXml(m)),
-    blockEntry('wu-intro',m.introText,buildBodyTextParas(m.introText)),
-    blockEntry('wu-general-notes',generalNotesText,buildGeneralNotesParas(m.generalNotes)),
     blockEntry('wu-references',refsText,buildRefsParas()),
-    blockEntry('wu-compliance',m.complianceText,buildBodyTextParas(m.complianceText)),
     {tag:'wu-tables',length:tablesLength,
       xml:tablesLength?tablesXml:`<w:p><w:r><w:t xml:space="preserve">${xe('wu-tables — no data')}</w:t></w:r></w:p>`},
   ].sort((a,b)=>a.length-b.length);
