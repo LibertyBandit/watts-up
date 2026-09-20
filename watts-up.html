@@ -314,7 +314,7 @@
     .tab-btn:hover{color:var(--text-primary)}
     .tab-btn.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue);font-weight:600}
     #analysis-switch{flex-shrink:0;background:var(--bg-secondary);border-bottom:1px solid var(--border);
-      padding:.35rem 1rem;display:flex;align-items:center;gap:.6rem}
+      padding:.35rem 1rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
     #analysis-switch-label{font-size:.68rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted)}
     #analysis-toggle{display:flex;gap:2px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:2px}
     .analysis-btn{background:none;border:none;border-radius:4px;padding:.25rem .75rem;font-size:.72rem;font-weight:700;
@@ -423,13 +423,23 @@
       <button id="analysis-btn-ap" class="analysis-btn active">Active Project</button>
       <button id="analysis-btn-pcm" class="analysis-btn analysis-btn-create">+ Create Previous &amp; Concurrent Modifications</button>
     </div>
+    <!-- Revision 70, item 2.2: moved here (out of the Document tab) so it's always visible
+         regardless of which tab is open, not just when the Document tab happens to be open. -->
+    <form id="header-aircraft-form" class="doc-identity-form" autocomplete="off" style="margin-left:auto">
+      <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
+      <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
+      <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
+      <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
+      <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
+      <label>Interval     <input name="interval"             type="text" placeholder="e.g. Continuous"></label>
+    </form>
   </div>
 
   <div id="tab-bar">
-    <button id="tab-document" class="tab-btn">Document</button>
+    <button id="tab-analysis" class="tab-btn active">Analysis</button>
     <button id="tab-exrem" class="tab-btn rh-subtab-existing">Existing / Removed</button>
     <button id="tab-new" class="tab-btn rh-subtab-new">Installed</button>
-    <button id="tab-analysis" class="tab-btn active">Analysis</button>
+    <button id="tab-document" class="tab-btn">Document</button>
   </div>
 
   <div id="warning-banner" class="hidden">
@@ -447,23 +457,16 @@
         <div class="doc-identity-form">
           <label>Doc #        <input name="documentNumber"       type="text" placeholder="e.g. RPT1234"></label>
           <label>Rev          <input name="revisionLevel"        type="text" placeholder="e.g. A" style="width:52px"></label>
-          <label>Prepared by  <input name="preparedBy"           type="text" placeholder="Name"></label>
+          <!-- Revision 70, item 2.3.1: hidden, not removed — state.meta.preparedBy and its
+               content control still work fine for any project that already has a value, there's
+               just no in-app UI to (re-)edit it right now. -->
+          <label class="hidden">Prepared by  <input name="preparedBy"           type="text" placeholder="Name"></label>
           <label>Rev Date     <input name="revisionDate"         type="date"></label>
         </div>
-        <div class="doc-ta-group" style="margin-top:.5rem">
+        <!-- Revision 70, item 2.3.2: hidden, not removed — same rationale as Prepared by above. -->
+        <div class="doc-ta-group hidden" style="margin-top:.5rem">
           <label>Revision Description</label>
           <textarea id="doc-revdesc" rows="3" placeholder="Describe what changed in this revision…"></textarea>
-        </div>
-      </div>
-      <div style="margin-top:.9rem">
-        <div class="doc-section-title">Aircraft Information</div>
-        <div class="doc-identity-form">
-          <label>Make         <input name="make"                 type="text" placeholder="e.g. Cessna"></label>
-          <label>Model        <input name="model"                type="text" placeholder="e.g. 172S"></label>
-          <label>Designation  <input name="marketingDesignation" type="text" placeholder="e.g. Skyhawk SP"></label>
-          <label>Serial #     <input name="serialNumber"         type="text" placeholder="e.g. 17280001"></label>
-          <label>Flight Phase <input name="flightPhase"          type="text" placeholder="e.g. Cruise"></label>
-          <label>Interval     <input name="interval"             type="text" placeholder="e.g. Continuous"></label>
         </div>
       </div>
     </form>
@@ -472,7 +475,10 @@
       <div id="doc-ref-list" class="doc-list"></div>
       <button id="doc-add-ref" class="btn-default doc-add-btn">+ Add Reference</button>
     </div>
-    <div>
+    <!-- Revision 70, item 2.3.3: hidden, not removed — same rationale as Prepared by above; also
+         see requirements §69/item 7's noted general-notes import numbering issue, unaffected by
+         this visibility change. -->
+    <div class="hidden">
       <div class="doc-section-title">General Notes</div>
       <div id="doc-note-list" class="doc-list"></div>
       <button id="doc-add-note" class="btn-default doc-add-btn">+ Add Note</button>
@@ -487,7 +493,8 @@
       <button id="doc-share-all-rownotes" class="btn-default doc-add-btn">Share All with Other Analysis</button>
       <button id="doc-copy-all-rownotes" class="btn-default doc-add-btn">Copy All to Other Analysis</button>
     </div>
-    <div>
+    <!-- Revision 70, item 2.3.4: hidden, not removed — same rationale as Prepared by above. -->
+    <div class="hidden">
       <div class="doc-section-title">Section Text</div>
       <div class="doc-text-pair">
         <div class="doc-ta-group">
@@ -3619,14 +3626,20 @@ function renderWarnings() {
   document.getElementById('banner-title').textContent=`⚠ ${ws.length} Warning${ws.length>1?'s':''}`;
   document.getElementById('banner-items').innerHTML=ws.map(w=>`<span>• ${w.message}</span>`).join('');
 }
-const DOC_IDENTITY_KEYS=['make','model','marketingDesignation','serialNumber','flightPhase','interval',
-  'documentNumber','revisionLevel','preparedBy','revisionDate'];
+// Revision 70, item 2.2: Aircraft Information moved out of doc-identity-form (Document tab) into
+// its own always-visible header-aircraft-form, so this is now two lists/forms instead of one.
+const DOC_IDENTITY_KEYS=['documentNumber','revisionLevel','preparedBy','revisionDate'];
+const HEADER_AIRCRAFT_KEYS=['make','model','marketingDesignation','serialNumber','flightPhase','interval'];
 
+function renderIdentityFields(formId,keys) {
+  const f=document.getElementById(formId);
+  if (!f) return;
+  keys.forEach(k=>{const el=f.elements[k];if(el&&el.value!==(state.meta[k]||''))el.value=state.meta[k]||'';});
+}
 function renderMeta() {
   if (!state) return;
-  const f=document.getElementById('doc-identity-form');
-  if (!f) return;
-  DOC_IDENTITY_KEYS.forEach(k=>{const el=f.elements[k];if(el&&el.value!==(state.meta[k]||''))el.value=state.meta[k]||'';});
+  renderIdentityFields('doc-identity-form',DOC_IDENTITY_KEYS);
+  renderIdentityFields('header-aircraft-form',HEADER_AIRCRAFT_KEYS);
 }
 
 function renderRefList() {
@@ -6790,15 +6803,20 @@ function initEvents() {
   document.getElementById('lad-layout-vertical').addEventListener('click',()=>{ if(ladLayout!=='vertical'){ladLayout='vertical';showLadPanel();} });
   document.getElementById('lad-layout-horizontal').addEventListener('click',()=>{ if(ladLayout!=='horizontal'){ladLayout='horizontal';showLadPanel();} });
 
-  // Document identity form
-  let docIdT;
-  document.getElementById('doc-identity-form').addEventListener('input',e=>{
-    clearTimeout(docIdT);docIdT=setTimeout(()=>{
-      if (!state) return;
-      const k=e.target.name;
-      if (k&&k in state.meta){state.meta[k]=e.target.value;persist();}
-    },350);
-  });
+  // Document identity form(s) — Revision 70: now two (doc-identity-form, and the always-visible
+  // header-aircraft-form), sharing the same debounced name->state.meta.<name> binding.
+  function wireIdentityForm(formId){
+    let t;
+    document.getElementById(formId).addEventListener('input',e=>{
+      clearTimeout(t);t=setTimeout(()=>{
+        if (!state) return;
+        const k=e.target.name;
+        if (k&&k in state.meta){state.meta[k]=e.target.value;persist();}
+      },350);
+    });
+  }
+  wireIdentityForm('doc-identity-form');
+  wireIdentityForm('header-aircraft-form');
 
   // Section text textareas
   let introT,compT,revdescT;

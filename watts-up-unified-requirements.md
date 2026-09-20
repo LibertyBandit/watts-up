@@ -4228,6 +4228,68 @@ Full console sweep, no errors.
 **One item accepted as a known limitation of the sandboxed environment (2.1.3)**: cannot be
 verified fixed from here — needs the user's own live retest.
 
+## 70. Re-arrange Content and Update Content Controls
+
+Source: "Watts Up Revision 70 (+) – Re-arrange tabs and update content controls.txt" — 7 top-level
+items, phased as A (tabs/Document layout) through H (PCM-parallel Word content controls). One
+judgment call resolved up front: item 5's new standalone "Settings" button (replacing the
+dialog-opens-from-Print/Word-Report pattern) uses a single shared column-selection config for both
+Print and Word export, rather than keeping `printCfg`/`wordCfg` independently switchable — the
+user's own preference, simpler than a Print/Word picker in front of the dialog.
+
+### Phase A: Tab reorder + Document tab restructuring (items 1, 2)
+
+*Shipped 2026-09-20.*
+
+**Tab order** (item 1.1/2.1): reordered from Document/Existing-Removed/Installed/Analysis to
+**Analysis/Existing-Removed/Installed/Document** — a pure DOM-order change; `TAB_PANELS` and every
+click handler reference elements by id, not position, so nothing else needed to change.
+
+**Aircraft Information moved into the header** (item 2.2): the 6 fields (Make/Model/Designation/
+Serial #/Flight Phase/Interval) move out of the Document tab entirely into a new
+`header-aircraft-form`, placed in `#analysis-switch` (the bar holding the Active Project/PCM
+buttons) via `margin-left:auto` so it sits at the bar's right edge — now visible on every tab, not
+just Document. `#analysis-switch` gained `flex-wrap:wrap` so the row degrades gracefully on narrow
+viewports (confirmed: wraps onto multiple lines at 412px, sits on one line at normal desktop
+widths).
+
+These fields live in `state.meta` directly (not per-analysis data, confirmed by reading
+`installAnalysisView`/`freshState`), so they're correctly identical whether Active Project or PCM
+is selected — verified live by switching analyses and confirming the header's Model field doesn't
+change.
+
+`DOC_IDENTITY_KEYS` (10 keys, one shared form) split into `DOC_IDENTITY_KEYS` (the 4 that stay in
+`doc-identity-form`: documentNumber/revisionLevel/preparedBy/revisionDate) and
+`HEADER_AIRCRAFT_KEYS` (the 6 that moved). `renderMeta()` now calls a shared
+`renderIdentityFields(formId, keys)` for each form; the input-binding listener was factored into a
+reusable `wireIdentityForm(formId)`, wired to both forms — same debounced name→`state.meta.<name>`
+logic as before, just no longer duplicated.
+
+**Hidden, not deleted** (item 2.3): Prepared by (just that one label+input inside
+`doc-identity-form`), Revision Description, the whole General Notes section, and the whole Section
+Text section (Introduction + Compliance Statement) — each wrapped in the existing `.hidden`
+utility class. Underlying `state.meta` fields, ids, and all CRUD/render logic are completely
+untouched — purely a visibility change, so re-showing any of these later (the user's own stated
+possibility) is a one-line revert. References and Row Notes are unaffected, still visible.
+
+Verified live: tab order; the header form's 6 fields present with correct names; typing into a
+header field updates `state.meta` (debounced, persists); a direct `state.meta` mutation +
+`renderAll()` correctly reflects back into the header field; the header stays visible and in sync
+across Analysis/Existing-Removed tab switches; Aircraft Information section fully gone from the
+Document tab's own markup; General Notes and Section Text confirmed actually hidden
+(`display:none` on their wrapper, not just the title) while References/Row Notes/Document
+Properties remain visible; Prepared by's label and the Revision Description block both hidden
+within `doc-identity-form`; screenshot at a normal desktop width confirms the header row fits on
+one line; a 412px-wide viewport confirms graceful wrapping instead of overflow. Clean console.
+
+**Unrelated environment note, worth remembering**: mid-session, the project's `.claude/launch.json`
+"watts-up" static-file-server setup became unresponsive (repeated connection timeouts, even to a
+bare directory listing) in a way unrelated to any app code — traced to a stuck `python -m
+http.server` process that `preview_stop`/`preview_start` alone didn't clear (each restart spun up
+a new process without releasing the port cleanly). Fixed by `taskkill //F //IM python.exe` before
+restarting. Phase A's live verification proceeded via the sandboxed `file://` preview instead,
+which was sufficient here since none of this phase's checks needed real `localStorage`.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
