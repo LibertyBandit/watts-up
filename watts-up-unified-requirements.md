@@ -4386,6 +4386,30 @@ sits immediately before "Exit" in the toolbar, exactly as asked. Screenshot conf
 row's checkboxes align well with the columns beneath it, set apart by a bottom border. Clean
 console throughout.
 
+### Phase E: File-picker default directory (item 6)
+
+*Shipped 2026-09-20.*
+
+Before Revision 68, file operations always opened the browser's plain download/upload dialog to
+the Downloads folder by default. Switching to the File System Access API's own native pickers
+(Revision 68) changed this as an unintended side effect — those pickers default to Documents
+instead, with no memory of the last-used folder across separate calls.
+
+New shared `WU_PICKER_OPTS = {id:'watts-up-files', startIn:'downloads'}`, spread into all 4 picker
+calls (`doExport`'s Export JSON, `createNewWordReport`'s Create New Report, 
+`connectExistingWordReport`'s Connect Existing, `doOpenProject`'s Open) via one `...WU_PICKER_OPTS`.
+The shared `id` is a browser-native mechanism — Chrome remembers the last directory used under a
+given id across picker calls (even across separate page loads, for the same origin), satisfying
+"open to the last directory used." Deliberately the *same* id for all 4 operations (not a separate
+id per operation type) since the ask was for one shared "wherever I was last working" memory, not
+independent per-operation-type folders. `startIn:'downloads'` sets the correct default for the very
+first use, before Chrome has anything remembered yet, restoring the pre-Revision-68 default.
+
+Verified live (mocked pickers, since the real `startIn`/remembered-directory behavior is a Chrome-
+internal mechanism this sandboxed environment can't observe directly): all 4 call sites pass
+`id:'watts-up-files', startIn:'downloads'` through to their respective `showSaveFilePicker`/
+`showOpenFilePicker` calls. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

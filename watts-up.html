@@ -1892,7 +1892,7 @@ async function doExport() {
   const name=['WattsUp',m.make,m.model,m.serialNumber,new Date().toISOString().slice(0,10)].filter(Boolean).join('_').replace(/\s+/g,'_')+'.json';
   if (hasFileSystemAccess()) {
     try {
-      const handle=await window.showSaveFilePicker({suggestedName:name,types:[WATTSUP_JSON_TYPE]});
+      const handle=await window.showSaveFilePicker({suggestedName:name,types:[WATTSUP_JSON_TYPE],...WU_PICKER_OPTS});
       const writable=await handle.createWritable();
       await writable.write(jsonStr);
       await writable.close();
@@ -6484,6 +6484,12 @@ const WATTSUP_OPEN_TYPE={description:'Watts Up Files',accept:{
   'application/json':['.json'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx']
 }};
+// Revision 70, item 6: every Watts-Up file picker shares this `id` so Chrome remembers the last
+// directory used across all of them (Export/Open/Create/Connect), and `startIn:'downloads'` sets
+// the correct first-ever-use default — Revision 68's switch from a plain <input type=file> to
+// these native pickers had, as a side effect, changed the browser's own default starting folder
+// from Downloads to Documents.
+const WU_PICKER_OPTS={id:'watts-up-files',startIn:'downloads'};
 
 function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.showSaveFilePicker); }
 
@@ -6560,7 +6566,7 @@ async function doWordReportAction(){
 async function createNewWordReport(){
   if (typeof JSZip==='undefined'){alert('JSZip not loaded — this needs an internet connection.');return;}
   try {
-    const handle=await window.showSaveFilePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE]});
+    const handle=await window.showSaveFilePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE],...WU_PICKER_OPTS});
     const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
     const zip=await JSZip.loadAsync(tmplBuf);
     if (state) await fillBlankWattsUpDocx(zip,state);
@@ -6585,7 +6591,7 @@ async function createNewWordReport(){
 // from Report". syncToWordDoc requests it lazily, right before it actually needs to write.
 async function connectExistingWordReport(){
   try {
-    const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false});
+    const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false,...WU_PICKER_OPTS});
     wordDocHandle=handle;
     wordDocFileName=handle.name;
     updateWordDocUI();
@@ -7004,7 +7010,7 @@ function doNewProject(){
 async function doOpenProject(){
   if (!hasFileSystemAccess()) { document.getElementById('file-input').click(); return; }
   try {
-    const [handle]=await window.showOpenFilePicker({types:[WATTSUP_OPEN_TYPE],multiple:false});
+    const [handle]=await window.showOpenFilePicker({types:[WATTSUP_OPEN_TYPE],multiple:false,...WU_PICKER_OPTS});
     const file=await handle.getFile();
     if (file.name.toLowerCase().endsWith('.docx')) {
       wordDocHandle=handle;
