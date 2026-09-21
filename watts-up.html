@@ -6698,6 +6698,36 @@ async function writeWattsUpMetaParts(zip,st,found){
     zip.file('docProps/custom.xml',propXml);
   } else if (found) found.missingFiles.push('docProps/custom.xml');
 }
+// Revision 70 (Phase H): forces `builderFn` (any of buildRefsParas/buildTablesContent/
+// buildPdsWordContent/buildLadHorizontalWordContent/buildLadVerticalWordContent) to read a
+// specific analysis, regardless of which one the user currently has open in the app. Works with
+// zero changes to any of those builders: state.nodes/state.rootIds and
+// state.meta.{references,rowNoteDefs,...} are all live-view accessors (installAnalysisView) that
+// already resolve through state.currentAnalysis, so temporarily pointing that elsewhere redirects
+// every read inside `builderFn` automatically — the exact same technique this codebase already
+// used for cross-analysis work before recalc() started always computing both analyses
+// unconditionally (see recalc's own history). Safe because this always runs fully synchronously
+// (no awaits inside the swap), so nothing else can observe the temporarily-redirected
+// state.currentAnalysis in between.
+function buildForAnalysis(id,builderFn){
+  const prev=state.currentAnalysis;
+  if (prev===id) return builderFn();
+  state.currentAnalysis=id;
+  try { return builderFn(); } finally { state.currentAnalysis=prev; }
+}
+// item 3.2's own wording ("from the active project analysis") means wu-tables/wu-pds/wu-lad-*/
+// wu-references must always reflect Active Project specifically — not whichever analysis happens
+// to be on-screen when Sync runs, which is what calling those builders directly has always done
+// (a latent gap since long before this revision, for wu-tables/wu-references at least). Every
+// call site for those 5 tags below now goes through this instead of calling its builder bare.
+function buildForActiveProject(builderFn){ return buildForAnalysis('ap',builderFn); }
+// Revision 70 (Phase H), item 3.3: the "-pcm" parallel controls. Falls back to the same
+// "<tag> — no data" placeholder every other empty content control uses when PCM doesn't exist yet
+// at all, rather than rendering a synthetic empty tree.
+function buildForPcm(tag,builderFn){
+  if (!state.analyses.pcm) return `<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`;
+  return buildForAnalysis('pcm',builderFn);
+}
 // Fills every Watts-Up-managed content control/property in an already-loaded zip with the
 // current app state, in place. Returns a report of anything expected but not found — a tag the
 // document doesn't have (deleted by the user, or a template predating it) is never fatal, just
@@ -6719,14 +6749,21 @@ async function fillWattsUpDocx(zip,st){
     docXml=fillSdtBlock(docXml,'wu-revdate',wuRevDateParaXml(m),found);
     docXml=fillSdtBlock(docXml,'wu-intro',buildBodyTextParas(m.introText),found);
     docXml=fillSdtBlock(docXml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes),found);
-    docXml=fillSdtBlock(docXml,'wu-references',buildRefsParas(),found);
+    docXml=fillSdtBlock(docXml,'wu-references',buildForActiveProject(()=>buildRefsParas()),found);
     docXml=fillSdtBlock(docXml,'wu-compliance',buildBodyTextParas(m.complianceText),found);
-    docXml=fillSdtBlock(docXml,'wu-tables',buildTablesContent(),found);
+    docXml=fillSdtBlock(docXml,'wu-tables',buildForActiveProject(()=>buildTablesContent()),found);
     // Revision 70 (Phase G), items 3.2.2-3.2.4: Active Project's Power Distribution Summary and
     // both Load Analysis Detail layouts, alongside the existing Load Analysis Summary (wu-tables).
-    docXml=fillSdtBlock(docXml,'wu-pds',buildPdsWordContent(),found);
-    docXml=fillSdtBlock(docXml,'wu-lad-horizontal',buildLadHorizontalWordContent(),found);
-    docXml=fillSdtBlock(docXml,'wu-lad-vertical',buildLadVerticalWordContent(),found);
+    docXml=fillSdtBlock(docXml,'wu-pds',buildForActiveProject(()=>buildPdsWordContent()),found);
+    docXml=fillSdtBlock(docXml,'wu-lad-horizontal',buildForActiveProject(()=>buildLadHorizontalWordContent()),found);
+    docXml=fillSdtBlock(docXml,'wu-lad-vertical',buildForActiveProject(()=>buildLadVerticalWordContent()),found);
+    // Revision 70 (Phase H), item 3.3: parallel controls scoped to Previous & Concurrent
+    // Modifications specifically, regardless of which analysis is currently on-screen.
+    docXml=fillSdtBlock(docXml,'wu-references-pcm',buildForPcm('wu-references-pcm',()=>buildRefsParas()),found);
+    docXml=fillSdtBlock(docXml,'wu-tables-pcm',buildForPcm('wu-tables-pcm',()=>buildTablesContent()),found);
+    docXml=fillSdtBlock(docXml,'wu-pds-pcm',buildForPcm('wu-pds-pcm',()=>buildPdsWordContent()),found);
+    docXml=fillSdtBlock(docXml,'wu-lad-horizontal-pcm',buildForPcm('wu-lad-horizontal-pcm',()=>buildLadHorizontalWordContent()),found);
+    docXml=fillSdtBlock(docXml,'wu-lad-vertical-pcm',buildForPcm('wu-lad-vertical-pcm',()=>buildLadVerticalWordContent()),found);
     zip.file('word/document.xml',docXml);
   } else found.missingFiles.push('word/document.xml');
   // header2.xml is specific to the bundled template's own layout — an externally-restructured
@@ -6775,11 +6812,15 @@ function wuContentControlList(st){
     return {tag,length:t.length,
       xml:t?realXml:`<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`};
   };
-  const refsText=(state.meta.references||[]).map(r=>[r.organization,r.docNumber,r.title].filter(Boolean).join(' ')).join(' ');
-  // Revision 70 (Phase G): shared with the 3 new report-table controls below — "amount of
+  // Revision 70 (Phase H): forced to Active Project specifically (item 3.2's own wording), same
+  // reasoning as fillWattsUpDocx's identical fix above.
+  const refsText=buildForActiveProject(()=>(state.meta.references||[]).map(r=>[r.organization,r.docNumber,r.title].filter(Boolean).join(' ')).join(' '));
+  // Revision 70 (Phase G): shared with the report-table controls below — "amount of
   // content" for an already-built XML block is measured by stripping its own tags, which easily
   // dwarfs every text field's plain length regardless of exact measurement choice, so these
-  // reliably sort last without needing to parse the tables back into prose.
+  // reliably sort last without needing to parse the tables back into prose. Also used as-is for
+  // the Phase H "-pcm" entries: buildForPcm already returns a non-empty "no data" placeholder XML
+  // when PCM doesn't exist, so this needs no separate no-PCM case of its own.
   const xmlContentEntry=(tag,builtXml)=>{
     const length=builtXml.replace(/<[^>]+>/g,'').length;
     return {tag,length,xml:length?builtXml:`<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`};
@@ -6794,11 +6835,17 @@ function wuContentControlList(st){
     textEntry('wu-flightphase',m.flightPhase),
     textEntry('wu-interval',m.interval),
     blockEntry('wu-revdate',fmtRevDate(m.revisionDate),wuRevDateParaXml(m)),
-    blockEntry('wu-references',refsText,buildRefsParas()),
-    xmlContentEntry('wu-tables',buildTablesContent()),
-    xmlContentEntry('wu-pds',buildPdsWordContent()),
-    xmlContentEntry('wu-lad-horizontal',buildLadHorizontalWordContent()),
-    xmlContentEntry('wu-lad-vertical',buildLadVerticalWordContent()),
+    blockEntry('wu-references',refsText,buildForActiveProject(()=>buildRefsParas())),
+    xmlContentEntry('wu-tables',buildForActiveProject(()=>buildTablesContent())),
+    xmlContentEntry('wu-pds',buildForActiveProject(()=>buildPdsWordContent())),
+    xmlContentEntry('wu-lad-horizontal',buildForActiveProject(()=>buildLadHorizontalWordContent())),
+    xmlContentEntry('wu-lad-vertical',buildForActiveProject(()=>buildLadVerticalWordContent())),
+    // Revision 70 (Phase H), item 3.3: parallel controls for Previous & Concurrent Modifications.
+    xmlContentEntry('wu-references-pcm',buildForPcm('wu-references-pcm',()=>buildRefsParas())),
+    xmlContentEntry('wu-tables-pcm',buildForPcm('wu-tables-pcm',()=>buildTablesContent())),
+    xmlContentEntry('wu-pds-pcm',buildForPcm('wu-pds-pcm',()=>buildPdsWordContent())),
+    xmlContentEntry('wu-lad-horizontal-pcm',buildForPcm('wu-lad-horizontal-pcm',()=>buildLadHorizontalWordContent())),
+    xmlContentEntry('wu-lad-vertical-pcm',buildForPcm('wu-lad-vertical-pcm',()=>buildLadVerticalWordContent())),
   ].sort((a,b)=>a.length-b.length);
 }
 // Revision 68, Phase 5: "Create New Report"'s document generator, replacing the previous rounds'

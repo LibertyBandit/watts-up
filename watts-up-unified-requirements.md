@@ -4522,6 +4522,66 @@ nodes were added *on top of* the first's instead of replacing it) rather than a 
 resolved by resetting state directly (`state=freshState();...`) instead of re-clicking a
 possibly-stale dialog button.
 
+### Phase H: PCM-parallel content controls (item 3.3) — Revision 70 complete
+
+*Shipped 2026-09-20. Final phase of Revision 70.*
+
+**Mechanism**: new `buildForAnalysis(id, builderFn)` temporarily points `state.currentAnalysis` at
+a specific analysis, calls `builderFn()`, then restores whatever it was before — always inside a
+`try/finally`. This works with **zero changes** to any of the five report builders
+(`buildRefsParas`/`buildTablesContent`/`buildPdsWordContent`/`buildLadHorizontalWordContent`/
+`buildLadVerticalWordContent`), because `state.nodes`/`state.rootIds` and
+`state.meta.{references,rowNoteDefs,...}` are all live-view accessors (`installAnalysisView`) that
+already resolve through `state.currentAnalysis` — redirecting that one property redirects every
+read inside the builder automatically. This is the exact same technique this codebase already used
+for cross-analysis work before `recalc()` started unconditionally computing both analyses every
+time (so PCM's derived fields are always fresh regardless of which analysis is "current" — no
+extra recalc needed inside the swap). Safe because the whole thing runs synchronously (no `await`
+inside the swap), so nothing else can ever observe the temporarily-redirected value in between —
+confirmed live: the on-screen UI (tree, active tab) was completely undisturbed by a full document
+generation while Previous & Concurrent Modifications was the analysis on-screen.
+
+`buildForPcm(tag, builderFn)` wraps this for the 5 new "-pcm" tags specifically, falling back to
+the same `"<tag> — no data"` placeholder every other empty content control already uses when PCM
+doesn't exist yet at all, rather than rendering a synthetic empty tree.
+
+**A real correctness gap found while implementing this, fixed as part of this phase**: item 3.2's
+own wording — "Create content controls for the following **from the active project analysis**" —
+means `wu-tables`/`wu-pds`/`wu-lad-horizontal`/`wu-lad-vertical`/`wu-references` must always reflect
+Active Project specifically, never whichever analysis the user happens to have open in the app.
+Calling each builder bare (as Phase G's code, and `wu-tables`/`wu-references` since long before this
+revision, both did) instead reflects *whatever's currently on-screen* — meaning syncing while
+viewing Previous & Concurrent Modifications would have silently written PCM's numbers under
+Active-Project-labeled Word sections. New `buildForActiveProject(builderFn)` (`buildForAnalysis`
+pinned to `'ap'`) now wraps all 5 of these call sites in both `fillWattsUpDocx` and
+`wuContentControlList`, so they're unconditionally forced to Active Project regardless of the
+current UI state. `wu-general-notes`/`wu-intro`/`wu-compliance` were deliberately left as-is (still
+implicitly "whichever analysis is active") — they're not part of the item 3.2/3.3 PCM-parallel set,
+and General Notes specifically is already being phased out of active use (Phase B/Phase A), so
+fixing their analysis-binding wasn't in scope for this phase.
+
+**New tags**: `wu-references-pcm`, `wu-tables-pcm`, `wu-pds-pcm`, `wu-lad-horizontal-pcm`,
+`wu-lad-vertical-pcm` — added to both `fillWattsUpDocx` (Sync/Connect Existing/legacy download) and
+`wuContentControlList` (blank "Create New Report" generation), bringing the total content-control
+count to 19.
+
+Verified live: seeded genuinely distinguishable data in both analyses (Active Project's own bus
+named "AP-BUS" with its own reference "AP-ORG"; a separate PCM bus "PCM-BUS" with its own reference
+"PCM-ORG"), then deliberately left `state.currentAnalysis` pointed at `'pcm'` (simulating the exact
+scenario the correctness fix targets — the user actively viewing PCM) before running the full
+pipeline. Confirmed, both via direct builder calls and through a complete real
+`createNewWordReport()` → `syncToWordDoc()` round-trip: `wu-tables`/`wu-references`/`wu-pds`/
+`wu-lad-horizontal`/`wu-lad-vertical` contain *only* AP-BUS/AP-ORG content, never PCM's, in every
+case; their "-pcm" counterparts contain *only* PCM-BUS/PCM-ORG content, never AP's; `state.
+currentAnalysis` is correctly restored to `'pcm'` after every call (both in isolation and after the
+full document round-trip); the on-screen UI (tree contents, active tab) was completely undisturbed
+throughout; a fresh state with no PCM analysis correctly produces `"wu-tables-pcm — no data"`-style
+placeholders for all 5 new controls instead of crashing. The generated/synced documents parsed with
+zero errors and carried the expected 19 tags. Clean console.
+
+**Revision 70 (Re-arrange Content and Update Content Controls) is now complete — all 8 phases (A
+through H) shipped and verified.**
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
