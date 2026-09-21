@@ -4438,6 +4438,90 @@ after one more export cycle) and confirmed it fully repairs back to "The quick b
 import — proving the repeat-until-stable strip handles arbitrary pre-existing accumulation, not
 just newly-introduced single-layer cases. Clean console.
 
+### Phase G: New Word content controls for the Active Project (items 3.2.2-3.2.4)
+
+*Shipped 2026-09-20.*
+
+The largest piece of this revision so far: three genuinely new Word/OOXML report builders, since
+Power Distribution Summary and both Load Analysis Detail layouts previously only existed as
+on-screen HTML (Load Analysis Detail Vertical's own code comment said so explicitly: "Screen-only
+for now, not wired into Print Report or Word export"). Each was built by reading the corresponding
+on-screen renderer's full logic first, then reusing as much of the *existing* Word-table
+infrastructure as legitimately fit, rather than inventing parallel logic wherever avoidable.
+
+**`wu-pds` (Power Distribution Summary, item 3.2.2)**: new `buildPdsWordContent()`/
+`buildPdsWordRows()`. Reuses `buildWordTblHeader`/`buildWordDataRow` — the exact per-cell logic the
+Load Analysis Summary table (`wu-tables`) already uses, since PDS's value groups (Capacity/Net
+Change/New Load/Reserve) are computed identically — only the row *selection* differs: a flat,
+type-filtered list at real-tree depth (matching `renderPowerDistSummary`'s own on-screen logic
+exactly, via `PDS_TYPES`/`PDS_GROUP_IDS`), not a full hierarchical traversal, and no Removed/
+Installed banner rows (the on-screen report doesn't have them either). One deliberate, low-risk
+simplification: reusing `buildWordDataRow` as-is means an always-blank Rating (CB/fuse) column
+appears, since `PDS_TYPES` excludes Protection nodes entirely — harmless whitespace rather than
+building a near-duplicate pair of functions just to drop one column.
+
+**`wu-lad-horizontal` (Load Analysis Detail Horizontal, item 3.2.4 — the original column-oriented
+layout, `lad-container`/`renderLoadAnalysisDetail`)**: new `buildLadHorizontalWordContent()`/
+`buildLadWordBlock()`. One table per eligible node (has children, not a Load, not a conversion
+input) showing that node + its immediate children — again reuses `buildWordDataRow`, with
+`buildWordTblHeader` gaining a new optional `leftCellContentXml` parameter (default `''`, so the
+two existing tables' calls are completely unaffected) to carry each block's breadcrumb path into
+the header's left cell, mirroring the on-screen report's own `buildRptHeader(cols,hasAnnot,
+leftCellContent)` convention exactly. New shared `pathForWord(n)` (a plain-text, de-HTML-escaped
+port of the two on-screen renderers' identical local `pathFor` closures, hoisted to module level so
+both new Word builders can share one implementation). Per-block Notes lists use one `annotator`
+shared across every block in the whole report — matching the on-screen convention that note numbers
+stay sequential across the report, not restarted per table — with each block showing only the
+entries its own rows actually reference, sorted ascending.
+
+**`wu-lad-vertical` (Load Analysis Detail Vertical, item 3.2.3 — the transposed "Analysis Detail –
+Alternate" layout, `ladalt-container`/`renderLoadAnalysisDetailAlt`)**: the most novel piece — value
+groups (Capacity/Existing Load/Net Change/New Load/Reserve) become *rows* instead of columns, with
+one shared column per power unit rather than per group. No existing Word primitive assumes this
+shape, so `buildLadVerticalWordContent()`/`buildLadAltWordBlock()` and its row-builders
+(`ladAltWordSubjectRow`/`ladAltWordGroupRow`/`ladAltWordChildRow`) were built fresh, following the
+on-screen renderer's logic line for line — reusing `rptTxt` (the shared value-formatting/negative-
+parenthesizing helper already used by every other report) for every numeric cell, so formatting
+stays identical everywhere.
+
+**Real bug found and fixed during verification**: `fmtPfRpt(null)` returned `"0.00"` instead of
+`null` — unlike its sibling `fmtRpt`, which explicitly guards `v===null||v===undefined` first,
+`fmtPfRpt` only checked `isNaN(+v)`, and JavaScript's unary-plus coerces `null` to `0` (not `NaN`),
+so a genuinely missing pf value silently rendered as "0.00". Every *existing* caller happened to
+already check `val==null` itself before ever calling `fmtPfRpt`/`rptTxt` (both the on-screen
+`valueCellsForGroup` and the existing `buildWordDataRow`), so the gap was latent until the new
+`ladAltWordGroupRow`/`ladAltWordChildRow` called `rptTxt` directly the same way `fmtRpt`'s own
+callers already safely can. Fixed at the root — `fmtPfRpt` now guards null/undefined first, matching
+`fmtRpt` exactly — rather than adding a redundant explicit check at just the two new call sites,
+since the gap could otherwise resurface for any future caller too. Caught by cross-checking the
+Word output against the live on-screen render for identical seeded data, not by inspection alone.
+
+Verified live (realistic seeded tree: Root → Generator → Bus → Circuit Breaker → 3 Loads
+(existing/new/removed), a row note on the Bus, a commented reference on the Breaker, plus a
+separate DC-side Bus → Load branch): all three builders produce well-formed XML (`DOMParser`, zero
+errors) for both the AC-only and mixed AC+DC cases. Row-by-row, table-by-table comparison against
+the *live on-screen renders* for the identical data — not just internal self-consistency — for all
+three reports: PDS's 3 eligible rows (Root/Generator/Bus; Breaker and Loads correctly excluded);
+LAD-Horizontal's 4 tables with correct breadcrumb paths, correct CB rating text, correct Removed/
+Installed banners, and correct child-row routing (Load children use `loadValue`, non-Load children
+use `_netChange`); LAD-Vertical's 4 tables with the same node coverage transposed into
+Capacity/Existing Load/Net Change/New Load/Reserve rows, matching every value exactly (after the
+`fmtPfRpt` fix). Annotation markers cross-checked too: the Bus's note and the Breaker's commented
+reference both appear with stable, deduplicated numbers everywhere either node's row appears across
+multiple tables, matching the shared-annotator-per-report convention exactly.
+
+Full end-to-end wiring verified: a real `createNewWordReport()` call produces a 14-tag document
+(11 from Phases 5-6 + these 3 new ones) with zero parse errors on the whole `document.xml`, correct
+`<w:sdtPr>` element order (inherited automatically from the existing generator machinery); a
+subsequent real `syncToWordDoc()` call against that same generated document correctly re-fills all
+three new controls with fresh content. One real debugging pitfall from this session worth
+remembering: an early test run appeared to show only 3-4 tables' worth of *duplicated* content
+across "different" node subtrees — turned out to be stale application state (a second "New" click
+landed on an already-resolved/settled choice dialog and silently no-op'd, so the second test tree's
+nodes were added *on top of* the first's instead of replacing it) rather than a bug in the new code;
+resolved by resetting state directly (`state=freshState();...`) instead of re-clicking a
+possibly-stale dialog button.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

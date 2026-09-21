@@ -2427,6 +2427,23 @@ function acDcVoltageLabel(acDc){
   const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??Object.values(state.nodes).find(nn=>nn.acDc===acDc&&nn.voltage!=null);
   return n?.voltage!=null?`${n.voltage} V${acDc==='ac'?'AC':'DC'}`:null;
 }
+// Revision 70 (Phase G): plain-text equivalent of the two on-screen Load Analysis Detail
+// renderers' own (identical) local pathFor() closures — hoisted to module level, de-HTML-escaped,
+// so both the Word Horizontal and Vertical builders below can share one implementation instead of
+// each duplicating it a third and fourth time.
+function pathForWord(n){
+  if (!n.parentId) return null;
+  const parent=state.nodes[n.parentId];
+  if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
+  const chain=[]; let cur=parent;
+  while (cur) {
+    chain.unshift(cur.description||'unnamed');
+    const curParent=cur.parentId?state.nodes[cur.parentId]:null;
+    if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
+    cur=curParent;
+  }
+  return chain.length?chain.join(' > ')+' >':null;
+}
 function renderLoadAnalysisDetail() {
   const el=document.getElementById('lad-container');
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
@@ -5710,7 +5727,13 @@ function fmtRpt(v){
   if(abs<10000)return Math.round(n).toLocaleString('en-US');
   return (Math.round(n/10)*10).toLocaleString('en-US');
 }
-function fmtPfRpt(v){const n=+v;if(isNaN(n))return null;return n.toFixed(2);}
+// Revision 70 (Phase G): explicit null/undefined guard added, matching fmtRpt's own — without it,
+// JS's unary-plus coerces null to 0 (`+null===0`, not NaN), so a genuinely missing pf value was
+// silently rendered as "0.00" instead of "—". Every EXISTING caller happened to already check
+// `val==null` itself before ever calling this, so the gap was latent until the new Load Analysis
+// Detail (Vertical) Word builder called it directly the way fmtRpt's own callers already safely
+// can.
+function fmtPfRpt(v){if(v===null||v===undefined)return null;const n=+v;if(isNaN(n))return null;return n.toFixed(2);}
 function rptTxt(val,isPf,isNeg){const s=isPf?fmtPfRpt(val):fmtRpt(val);if(s===null)return'—';return isNeg?`(${s})`:s;}
 function rptTd(val,isPf,isNeg,ec,gf){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}">${rptTxt(val,isPf,isNeg)}</td>`;}
 
@@ -6038,7 +6061,14 @@ function wxTr(inner,{h,exact,hdr}={}){
   return `<w:tr>${trPr?`<w:trPr>${trPr}</w:trPr>`:''}${inner}</w:tr>`;
 }
 
-function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths}){
+// Revision 70 (Phase G): gained an optional trailing `leftCellContentXml` — injected into the
+// description column's row-1 cell (still vMerge:'start', so it visually spans both header rows,
+// same as any other vMerge'd cell's content) — used by the new Load Analysis Detail Word builders
+// below to show each block's breadcrumb path there, mirroring the on-screen report's own
+// buildRptHeader(cols,hasAnnot,leftCellContent) convention exactly. Defaults to '' so the existing
+// Load Analysis Summary/Power Distribution Summary tables (which never pass a 4th argument) are
+// completely unaffected.
+function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths},leftCellContentXml){
   const HSZ=7.5;
   const runs=[];
   cols.forEach((c,i)=>{
@@ -6047,7 +6077,7 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths}){
   });
   // Row 1: description (vMerge start) | rating (vMerge start) | notes (vMerge start) | group headers
   let r1='';
-  r1+=wxTc(wxPar('',{before:0,after:0}),{w:descW,vm:'start'});
+  r1+=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0}),{w:descW,vm:'start'});
   r1+=wxTc(wxPar('',{before:0,after:0}),{w:ratingW,vm:'start'});
   if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,vm:'start',leftBdr:true});
   runs.forEach(g=>{
@@ -6157,9 +6187,11 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,ratingW,notesW,colWidths,h
   return rows.join('');
 }
 
-function buildWordRptTable(acDc,cols,cfg,am,colOpts){
-  const{descW,ratingW,notesW,colWidths,hasAnnot}=colOpts;
-  const gridCols=[descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths].map(w=>`<w:gridCol w:w="${w}"/>`).join('');
+// Revision 70 (Phase G): table-shell XML (borders/grid) extracted out of buildWordRptTable so the
+// new Power Distribution Summary / Load Analysis Detail Word builders below can reuse the exact
+// same table styling instead of duplicating it.
+function wxTableOpen(colWidths){
+  const gridCols=colWidths.map(w=>`<w:gridCol w:w="${w}"/>`).join('');
   const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
     `<w:top w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
@@ -6170,7 +6202,11 @@ function buildWordRptTable(acDc,cols,cfg,am,colOpts){
     `</w:tblBorders><w:tblLayout w:type="fixed"/>` +
     `<w:tblCellMar><w:top w:w="30" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>` +
     `<w:bottom w:w="30" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
-  return `<w:tbl>${tblPr}<w:tblGrid>${gridCols}</w:tblGrid>`+
+  return `<w:tbl>${tblPr}<w:tblGrid>${gridCols}</w:tblGrid>`;
+}
+function buildWordRptTable(acDc,cols,cfg,am,colOpts){
+  const{descW,ratingW,notesW,colWidths,hasAnnot}=colOpts;
+  return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
     buildWordTblHeader(cols,hasAnnot,colOpts)+
     buildWordSectionRows(acDc,cols,cfg,am,colOpts)+`</w:tbl>`;
 }
@@ -6259,6 +6295,335 @@ function buildTablesContent(){
     notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
   }
   return out.join('');
+}
+
+// ── WORD CONTENT: POWER DISTRIBUTION SUMMARY (Revision 70, Phase G, item 3.2.2) ───────────────
+// Word/OOXML equivalent of the on-screen Power Distribution Summary report (renderPowerDistSummary,
+// PDS_TYPES/PDS_GROUP_IDS). Reuses buildWordTblHeader/buildWordDataRow — the exact same per-cell
+// logic the Load Analysis Summary table (buildTablesContent, above) already uses — since PDS's
+// value groups (Capacity/Net Change/New Load/Reserve) are computed identically; only the ROW
+// SELECTION differs: a flat, type-filtered list at real-tree depth (matching
+// renderPowerDistSummary's own on-screen logic exactly), not a full hierarchical children-of
+// traversal, and PDS never shows Removed/Installed banner rows (the on-screen report doesn't
+// either). One deliberate, low-risk simplification: this reuses buildWordTblHeader/buildWordDataRow
+// as-is, which include a Rating (CB/fuse) column — always blank here since PDS_TYPES excludes
+// Protection nodes entirely, matching the on-screen table's real absence of any such column in
+// effect, just with a harmless empty ~800-DXA column rather than no column at all. Keeping the
+// exact shared functions (rather than building yet another near-duplicate pair without it) was
+// judged the safer tradeoff.
+function buildPdsWordRows(ids,cols,dm,cfg,am,opts){
+  return ids.map(id=>{
+    const n=state.nodes[id]; if(!n) return '';
+    return buildWordDataRow(n,dm[id]||0,cols,cfg,am,false,opts);
+  }).join('');
+}
+function buildPdsWordContent(){
+  const cfg=reportCfg||defaultPrintCfg();
+  const acCols=activeCols(AC_GROUPS,cfg.ac).filter(c=>PDS_GROUP_IDS.includes(c.group));
+  const dcCols=activeCols(DC_GROUPS,cfg.dc).filter(c=>PDS_GROUP_IDS.includes(c.group));
+  const allIds=preOrder(state.rootIds,state.nodes).filter(id=>{
+    const n=state.nodes[id]; return n&&PDS_TYPES.has(n.type)&&n.convRole!=='in';
+  });
+  const dm={};
+  preOrder(state.rootIds,state.nodes).forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
+  const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
+  const acIds=allIds.filter(id=>state.nodes[id]?.acDc==='ac');
+
+  // Local note/reference numbering, restarted for this report — matches the on-screen
+  // renderPowerDistSummary's own fresh makeAnnotator() call exactly (not the shared
+  // buildAnnotationMap whole-document numbering the Load Analysis Summary table uses).
+  const annotator=makeAnnotator();
+  const am={};
+  allIds.forEach(id=>{
+    const n=state.nodes[id];
+    const a=annotator.annotate(n.rowNotes,n.rowRefs);
+    if (a) am[id]={marker:a.marker};
+  });
+  const hasAnnot=Object.keys(am).length>0;
+  const amArg=hasAnnot?am:null;
+
+  const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
+  const avail=TOTAL_W-DESC_W-RATING_W-(hasAnnot?NOTES_W:0);
+  const HSZ=7.5;
+  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
+  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
+  const acOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:acColWidths,hasAnnot};
+  const dcOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot};
+
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const al=acDcVoltageLabel('ac'),dl=acDcVoltageLabel('dc');
+  const mkTbl=(ids,cols,label,opts)=>{
+    if(!ids.length)return'';
+    return wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
+      wxTableOpen([opts.descW,opts.ratingW,...(opts.hasAnnot?[opts.notesW]:[]),...opts.colWidths])+
+      buildWordTblHeader(cols,opts.hasAnnot,opts)+
+      buildPdsWordRows(ids,cols,dm,cfg,amArg,opts)+`</w:tbl>`;
+  };
+  const acTbl=mkTbl(acIds,acCols,al?`${al} Summary`:'AC Summary',acOpts);
+  const dcTbl=mkTbl(dcIds,dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts);
+  const out=[];
+  const spacerP=wxPar('',{before:120,after:0});
+  if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
+  else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
+  if(annotator.notesList.length){
+    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40}));
+    annotator.notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
+  }
+  return out.filter(Boolean).join('');
+}
+
+// ── WORD CONTENT: LOAD ANALYSIS DETAIL — HORIZONTAL (Revision 70, Phase G, item 3.2.4) ─────────
+// Word/OOXML equivalent of the on-screen Load Analysis Detail report (lad-container,
+// renderLoadAnalysisDetail — the original column-oriented layout, called "Horizontal" per the
+// source spec). One table per eligible node (has children, not a Load, not a conversion input),
+// each showing just that node + its immediate children — reuses buildWordDataRow/
+// buildWordTblHeader exactly like the summary tables above, with the breadcrumb path injected into
+// the header's now-optional left cell and a per-block Notes list built the same way the on-screen
+// version does: ONE annotator shared across every block in the whole report (so note numbers stay
+// sequential across the report, matching the on-screen convention exactly, not restarted per
+// table), each block showing only the entries its own rows actually reference, sorted ascending.
+function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
+  const{descW,ratingW,notesW,colWidths,hasAnnot}=colOpts;
+  const kids=children(n.id,state.nodes);
+  const am={}; const blockNotes=[]; const seenNums=new Set();
+  const pushEntries=(entries)=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
+  const selfAnnot=annotator.annotate(n.rowNotes,n.rowRefs);
+  if(selfAnnot){am[n.id]={marker:selfAnnot.marker};pushEntries(selfAnnot.entries);}
+  kids.forEach(k=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs); if(a){am[k.id]={marker:a.marker};pushEntries(a.entries);} });
+  const amArg=hasAnnot?am:null;
+
+  const path=pathForWord(n);
+  const pathXml=path?wxRun(path,{i:true,sz:7}):'';
+
+  const totalCols=2+(hasAnnot?1:0)+cols.length;
+  const totalW=descW+ratingW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
+  const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:6.5}:{i:true,sz:6.5}),{ind:200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+
+  const rows=[];
+  if(n.status==='new') rows.push(bannerRow('Installed',true));
+  rows.push(buildWordDataRow(n,0,cols,cfg,amArg,false,colOpts));
+  let seenRemoved=false, seenAdded=(n.status==='new');
+  kids.forEach(k=>{
+    if(k.status==='removed'&&!seenRemoved){rows.push(bannerRow('Removed',false));seenRemoved=true;}
+    else if(k.status==='new'&&!seenAdded){rows.push(bannerRow('Installed',true));seenAdded=true;}
+    rows.push(buildWordDataRow(k,1,cols,cfg,amArg,false,colOpts));
+  });
+
+  blockNotes.sort((a,b)=>a.num-b.num);
+  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20})).join('');
+
+  return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
+    buildWordTblHeader(cols,hasAnnot,colOpts,pathXml)+
+    rows.join('')+
+    `</w:tbl>`+
+    notesParas+
+    wxPar('',{before:100,after:0});
+}
+function buildLadHorizontalWordContent(){
+  const cfg=reportCfg||defaultPrintCfg();
+  const acCols=activeCols(AC_GROUPS,cfg.ac);
+  const dcCols=activeCols(DC_GROUPS,cfg.dc);
+  const annotator=makeAnnotator();
+  const hasAnyAnnot=Object.values(state.nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
+
+  const allOrdered=preOrder(state.rootIds,state.nodes);
+  function eligibleIds(acDc){
+    return allOrdered.filter(id=>{
+      const n=state.nodes[id]; if(!n||n.acDc!==acDc||isLoad(n.type)||n.convRole==='in') return false;
+      return children(id,state.nodes).length>0;
+    });
+  }
+
+  const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
+  const avail=TOTAL_W-DESC_W-RATING_W-(hasAnyAnnot?NOTES_W:0);
+  const HSZ=7.5;
+  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
+  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
+  const acOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:acColWidths,hasAnnot:hasAnyAnnot};
+  const dcOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot:hasAnyAnnot};
+
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
+  const acLbl=acDcVoltageLabel('ac'), dcLbl=acDcVoltageLabel('dc');
+
+  const section=(ids,cols,label,opts)=>ids.length?
+    wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
+    ids.map(id=>buildLadWordBlock(state.nodes[id],cols,cfg,annotator,opts)).join(''):'';
+
+  const acSec=section(acIds,acCols,acLbl?`${acLbl} Detail`:'AC Detail',acOpts);
+  const dcSec=section(dcIds,dcCols,dcLbl?`${dcLbl} Detail`:'DC Detail',dcOpts);
+  return acFirst?acSec+dcSec:dcSec+acSec;
+}
+
+// ── WORD CONTENT: LOAD ANALYSIS DETAIL — VERTICAL (Revision 70, Phase G, item 3.2.3) ───────────
+// Word/OOXML equivalent of the on-screen "Analysis Detail – Alternate" report (ladalt-container,
+// renderLoadAnalysisDetailAlt — the transposed layout, called "Vertical" per the source spec):
+// value groups (Capacity/Existing Load/Net Change/New Load/Reserve) become ROWS instead of
+// columns, with one shared column per power unit (A/VA/W/VAR/pf) rather than per group. This has
+// no existing Word primitive to reuse (buildWordDataRow assumes groups-as-columns), so it's built
+// fresh, following the on-screen renderer's own logic line for line — reusing rptTxt (the shared
+// value-formatting/negative-parenthesizing helper already used by every other report in this app)
+// for every numeric cell, so number formatting stays identical everywhere.
+function ladAltUnionCols(groups,cfgSec){
+  const allKeys=groups[0].keys;
+  return allKeys.filter(kd=>groups.some(g=>cfgSec[g.id]&&cfgSec[g.id][kd.k]));
+}
+function ladAltActiveKeySet(groupId,cfgSec){
+  const gc=cfgSec[groupId]; if(!gc) return new Set();
+  return new Set(Object.keys(gc).filter(k=>gc[k]));
+}
+function ladAltWordColWidths(colsCount,hasAnnot){
+  const TOTAL_W=13392;
+  const labelW=Math.round(TOTAL_W*0.24);
+  const cbW=Math.round(TOTAL_W*0.08);
+  const notesW=hasAnnot?Math.round(TOTAL_W*0.04):0;
+  const numW=Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,colsCount));
+  return {labelW,cbW,notesW,numW,hasAnnot};
+}
+function buildLadAltWordHeader(cols,hasAnnot,{labelW,cbW,notesW,numW},leftCellContentXml){
+  const HSZ=7.5;
+  let r=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0}),{w:labelW});
+  r+=wxTc(wxPar('',{before:0,after:0}),{w:cbW});
+  if(hasAnnot) r+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true});
+  cols.forEach((c,i)=>{
+    r+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:numW,leftBdr:i===0});
+  });
+  return wxTr(r,{h:280,hdr:true});
+}
+function ladAltWordSubjectRow(n,cols,annot,{labelW,cbW,notesW,numW,hasAnnot}){
+  const mainDesc=(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'');
+  const descRun=n.status==='removed'?wxRun(mainDesc,{i:true,sz:8.5}):n.status==='new'?wxRun(mainDesc,{b:true,sz:8.5}):wxRun(mainDesc,{sz:8.5});
+  const labelCell=wxTc(wxPar(descRun,{before:20,after:20}),{w:labelW});
+  const ratingVal=(NT.PROTECTION.includes(n.type)&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:8.5}):'',{before:20,after:20,jc:'right'}),{w:cbW});
+  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true}):'';
+  const blanks=cols.map((c,i)=>wxTc(wxPar('',{before:20,after:20}),{w:numW,leftBdr:i===0})).join('');
+  return wxTr(labelCell+cbCell+notesCell+blanks);
+}
+function ladAltWordGroupRow(label,src,cols,activeSet,groupId,annot,{labelW,cbW,notesW,numW,hasAnnot}){
+  const labelCell=wxTc(wxPar(wxRun(label,{sz:8.5}),{ind:340,before:20,after:20}),{w:labelW});
+  const cbCell=wxTc(wxPar('',{before:20,after:20}),{w:cbW});
+  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true}):'';
+  const cells=cols.map((c,i)=>{
+    let cellXml='';
+    if(activeSet.has(c.k)){
+      let val=src?src[c.k]:null,isNeg=false;
+      if((groupId==='nc'||groupId==='newload'||groupId==='rem')&&val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+      cellXml=wxRun(rptTxt(val,c.isPf||false,isNeg),{sz:7.5});
+    }
+    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right'}),{w:numW,leftBdr:i===0});
+  }).join('');
+  return wxTr(labelCell+cbCell+notesCell+cells);
+}
+function ladAltWordChildRow(k,cols,ncSet,addedSet,annot,{labelW,cbW,notesW,numW,hasAnnot}){
+  const isLd=isLoad(k.type);
+  const modifierSuffix=(k.status==='existing'&&!isLd)?' (Net Change)':'';
+  const kDesc=(k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
+  const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
+  const labelCell=wxTc(wxPar(descRun,{ind:200,before:20,after:20}),{w:labelW});
+  const ratingVal=(NT.PROTECTION.includes(k.type)&&k.capacity?.a!=null)?fmtRpt(k.capacity.a):null;
+  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:7.5}):'',{before:20,after:20,jc:'right'}),{w:cbW});
+  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true}):'';
+  const activeSet=isLd?addedSet:ncSet;
+  const cells=cols.map((c,i)=>{
+    let cellXml='';
+    if(activeSet.has(c.k)){
+      let val,isNeg=false;
+      if(isLd){val=k.loadValue?.[c.k]; if(k.status==='removed'&&val!=null)isNeg=true;}
+      else{val=k._netChange?.[c.k]; if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}}
+      cellXml=wxRun(rptTxt(val,c.isPf||false,isNeg),{sz:7.5});
+    }
+    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right'}),{w:numW,leftBdr:i===0});
+  }).join('');
+  return wxTr(labelCell+cbCell+notesCell+cells);
+}
+function buildLadAltWordBlock(n,cols,cfg,cfgSide,annotator,colWidths){
+  const{labelW,cbW,notesW,numW,hasAnnot}=colWidths;
+  const kids=children(n.id,state.nodes);
+  const capSet=ladAltActiveKeySet('cap',cfgSide), exSet=ladAltActiveKeySet('exload',cfgSide),
+        ncSet=ladAltActiveKeySet('nc',cfgSide), nlSet=ladAltActiveKeySet('newload',cfgSide),
+        remSet=ladAltActiveKeySet('rem',cfgSide), addedSet=ladAltActiveKeySet('added',cfgSide);
+
+  const blockNotes=[]; const seenNums=new Set();
+  const pushEntries=(entries)=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
+  function annotateGroup(node,group){
+    const rn=(node.rowNotes||[]).filter(o=>(o.group||null)===group);
+    const rr=(node.rowRefs||[]).filter(r=>(r.group||null)===group);
+    return annotator.annotate(rn,rr);
+  }
+
+  const totalCols=2+(hasAnnot?1:0)+cols.length;
+  const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*cols.length;
+  const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:6.5}:{i:true,sz:6.5}),{ind:200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+
+  const rows=[];
+  if(n.status==='new') rows.push(bannerRow('Installed',true));
+  const itemAnnot=annotateGroup(n,null); if(itemAnnot)pushEntries(itemAnnot.entries);
+  rows.push(ladAltWordSubjectRow(n,cols,itemAnnot,colWidths));
+
+  { const a=annotateGroup(n,'cap'); if(a)pushEntries(a.entries);
+    rows.push(ladAltWordGroupRow('CAPACITY',n.capacity,cols,capSet,'cap',a,colWidths)); }
+  if(n.status!=='new'){
+    const a=annotateGroup(n,'exload'); if(a)pushEntries(a.entries);
+    rows.push(ladAltWordGroupRow('EXISTING LOAD',n.existingLoad,cols,exSet,'exload',a,colWidths));
+  }
+  let shownRemoved=false, shownAdded=(n.status==='new');
+  kids.forEach(k=>{
+    if(k.status==='removed'&&!shownRemoved){rows.push(bannerRow('Removed',false));shownRemoved=true;}
+    else if(k.status==='new'&&!shownAdded){rows.push(bannerRow('Installed',true));shownAdded=true;}
+    const kAnnot=annotator.annotate(k.rowNotes,k.rowRefs); if(kAnnot)pushEntries(kAnnot.entries);
+    rows.push(ladAltWordChildRow(k,cols,ncSet,addedSet,kAnnot,colWidths));
+  });
+  if(n.status!=='new'){
+    const a=annotateGroup(n,'nc'); if(a)pushEntries(a.entries);
+    rows.push(ladAltWordGroupRow('Net Change',n._netChange,cols,ncSet,'nc',a,colWidths));
+  }
+  { const a=annotateGroup(n,'newload'); if(a)pushEntries(a.entries);
+    rows.push(ladAltWordGroupRow('New Load',n._newLoad,cols,nlSet,'newload',a,colWidths)); }
+  { const a=annotateGroup(n,'rem'); if(a)pushEntries(a.entries);
+    rows.push(ladAltWordGroupRow('Reserve',n._remainingCapacity,cols,remSet,'rem',a,colWidths)); }
+
+  blockNotes.sort((a,b)=>a.num-b.num);
+  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20})).join('');
+
+  const path=pathForWord(n);
+  const pathXml=path?wxRun(path,{i:true,sz:7}):'';
+
+  return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...cols.map(()=>numW)])+
+    buildLadAltWordHeader(cols,hasAnnot,colWidths,pathXml)+
+    rows.join('')+
+    `</w:tbl>`+
+    notesParas+
+    wxPar('',{before:100,after:0});
+}
+function buildLadVerticalWordContent(){
+  const cfg=reportCfg||defaultPrintCfg();
+  const annotator=makeAnnotator();
+  const hasAnyAnnot=Object.values(state.nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
+
+  const allOrdered=preOrder(state.rootIds,state.nodes);
+  function eligibleIds(acDc){
+    return allOrdered.filter(id=>{
+      const n=state.nodes[id]; if(!n||n.acDc!==acDc||isLoad(n.type)||n.convRole==='in') return false;
+      return children(id,state.nodes).length>0;
+    });
+  }
+
+  const acCols=ladAltUnionCols(AC_GROUPS,cfg.ac), dcCols=ladAltUnionCols(DC_GROUPS,cfg.dc);
+  const acColWidths=ladAltWordColWidths(acCols.length,hasAnyAnnot);
+  const dcColWidths=ladAltWordColWidths(dcCols.length,hasAnyAnnot);
+
+  const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
+  const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
+  const acLbl=acDcVoltageLabel('ac'), dcLbl=acDcVoltageLabel('dc');
+
+  const section=(ids,cols,label,cfgSide,colWidths)=>ids.length?
+    wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
+    ids.map(id=>buildLadAltWordBlock(state.nodes[id],cols,cfg,cfgSide,annotator,colWidths)).join(''):'';
+
+  const acSec=section(acIds,acCols,acLbl?`${acLbl} Detail`:'AC Detail',cfg.ac,acColWidths);
+  const dcSec=section(dcIds,dcCols,dcLbl?`${dcLbl} Detail`:'DC Detail',cfg.dc,dcColWidths);
+  return acFirst?acSec+dcSec:dcSec+acSec;
 }
 
 // ── WORD DOCUMENT FILL (shared by the internal-template download and the
@@ -6357,6 +6722,11 @@ async function fillWattsUpDocx(zip,st){
     docXml=fillSdtBlock(docXml,'wu-references',buildRefsParas(),found);
     docXml=fillSdtBlock(docXml,'wu-compliance',buildBodyTextParas(m.complianceText),found);
     docXml=fillSdtBlock(docXml,'wu-tables',buildTablesContent(),found);
+    // Revision 70 (Phase G), items 3.2.2-3.2.4: Active Project's Power Distribution Summary and
+    // both Load Analysis Detail layouts, alongside the existing Load Analysis Summary (wu-tables).
+    docXml=fillSdtBlock(docXml,'wu-pds',buildPdsWordContent(),found);
+    docXml=fillSdtBlock(docXml,'wu-lad-horizontal',buildLadHorizontalWordContent(),found);
+    docXml=fillSdtBlock(docXml,'wu-lad-vertical',buildLadVerticalWordContent(),found);
     zip.file('word/document.xml',docXml);
   } else found.missingFiles.push('word/document.xml');
   // header2.xml is specific to the bundled template's own layout — an externally-restructured
@@ -6406,11 +6776,14 @@ function wuContentControlList(st){
       xml:t?realXml:`<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`};
   };
   const refsText=(state.meta.references||[]).map(r=>[r.organization,r.docNumber,r.title].filter(Boolean).join(' ')).join(' ');
-  const tablesXml=buildTablesContent();
-  // A rough but consistent stand-in for the tables block's "amount of content": its own rendered
-  // XML text easily dwarfs every text field's plain length regardless of exact measurement
-  // choice, so it reliably sorts last without needing to parse the tables back into prose.
-  const tablesLength=tablesXml.replace(/<[^>]+>/g,'').length;
+  // Revision 70 (Phase G): shared with the 3 new report-table controls below — "amount of
+  // content" for an already-built XML block is measured by stripping its own tags, which easily
+  // dwarfs every text field's plain length regardless of exact measurement choice, so these
+  // reliably sort last without needing to parse the tables back into prose.
+  const xmlContentEntry=(tag,builtXml)=>{
+    const length=builtXml.replace(/<[^>]+>/g,'').length;
+    return {tag,length,xml:length?builtXml:`<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`};
+  };
   return [
     textEntry('wu-docnumber',m.documentNumber),
     textEntry('wu-revision',m.revisionNumber||m.revisionLevel),
@@ -6422,8 +6795,10 @@ function wuContentControlList(st){
     textEntry('wu-interval',m.interval),
     blockEntry('wu-revdate',fmtRevDate(m.revisionDate),wuRevDateParaXml(m)),
     blockEntry('wu-references',refsText,buildRefsParas()),
-    {tag:'wu-tables',length:tablesLength,
-      xml:tablesLength?tablesXml:`<w:p><w:r><w:t xml:space="preserve">${xe('wu-tables — no data')}</w:t></w:r></w:p>`},
+    xmlContentEntry('wu-tables',buildTablesContent()),
+    xmlContentEntry('wu-pds',buildPdsWordContent()),
+    xmlContentEntry('wu-lad-horizontal',buildLadHorizontalWordContent()),
+    xmlContentEntry('wu-lad-vertical',buildLadVerticalWordContent()),
   ].sort((a,b)=>a.length-b.length);
 }
 // Revision 68, Phase 5: "Create New Report"'s document generator, replacing the previous rounds'
