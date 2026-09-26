@@ -4582,6 +4582,32 @@ zero errors and carried the expected 19 tags. Clean console.
 **Revision 70 (Re-arrange Content and Update Content Controls) is now complete — all 8 phases (A
 through H) shipped and verified.**
 
+## 71. Word Document Formatting
+
+Source: "Watts Up Revision 71 (+) – Word document formatting.txt" — 4 top-level items, all focused
+on the Word output specifically (the source file's own title/framing). Confirmed with the user
+upfront: only item 3.4.2 (Power Distribution Summary's Installed/Removed labels) has an explicit
+on-screen counterpart; everything else in this revision is Word-only, including the label-size-
+matching nuance in item 4.1 and the heading-style change in item 3.2 (a Word named-paragraph-style
+concept with no on-screen equivalent).
+
+### Phase A: Reference list indent (item 1)
+
+*Shipped 2026-09-26.*
+
+`buildRefsParas()`'s per-reference paragraph indent changed from `w:left="360" w:hanging="360"` to
+`w:left="1080" w:hanging="360"` — shifts the whole reference list a half inch (720 twips) from the
+page margin (the user's first offered option, over a tailorable "Reference List" Word style, which
+would need restructuring how references are styled at the template level for comparatively little
+benefit). The unchanged `hanging="360"` preserves the existing relationship between a reference's
+number and its own wrapped text — the whole block moves right by exactly half an inch; the
+numbered-hang formatting inside it is untouched.
+
+Verified live: `buildRefsParas()` produces well-formed XML with the new indent value and none of the
+old one, reference text/formatting (numbering, italic titles, revision/date) unaffected; a full
+`createNewWordReport()` round-trip confirms `wu-references` carries the new indent in the actual
+generated document. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
