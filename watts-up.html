@@ -6074,6 +6074,12 @@ function wxSdtBlock(tag,contentXml){
 // Revision 71, item 2.2: gained `bottomBdr` — used only on the header's own last row, to draw a
 // solid rule under it (the table-level bottom border in wxTableOpen only ever reaches the very
 // last row of the whole table, not the header specifically).
+// Revision 72, item 2.1: `w` is now a percentage-of-table value (fiftieths of a percent, out of
+// 5000 = 100%, matching wxTableOpen's own w:tblW type="pct") rather than an absolute dxa/twip
+// measurement — every caller threads pctW-converted values (see buildTablesContent etc.) so a
+// table's columns keep their proportions while the table itself (via w:tblW type="pct") stretches
+// to fill whatever page/section width it actually lands on, portrait or landscape, with no
+// per-orientation column math needed.
 function wxTc(inner,{w,span,vm,topBdr,leftBdr,bottomBdr,shd}={}){
   const bdrParts=[
     topBdr?'<w:top w:val="single" w:sz="6" w:space="0" w:color="888888"/>':'',
@@ -6081,7 +6087,7 @@ function wxTc(inner,{w,span,vm,topBdr,leftBdr,bottomBdr,shd}={}){
     bottomBdr?'<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>':'',
   ].join('');
   const tcPr=[
-    w!=null?`<w:tcW w:w="${w}" w:type="dxa"/>`:'',
+    w!=null?`<w:tcW w:w="${w}" w:type="pct"/>`:'',
     span>1?`<w:gridSpan w:val="${span}"/>`:'',
     vm==='start'?'<w:vMerge w:val="restart"/>':vm==='cont'?'<w:vMerge/>':'',
     bdrParts?`<w:tcBorders>${bdrParts}</w:tcBorders>`:'',
@@ -6194,7 +6200,36 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   return wxTr(descCell+ratingCell+notesCell+numCells);
 }
 
-function buildWordSectionRows(acDc,cols,cfg,am,{descW,ratingW,notesW,colWidths,hasAnnot}){
+// Revision 72, item 3: splits a section's ids into groups by "highest-order sibling," so each
+// becomes its own <w:tbl> instead of one continuous table that can run long enough to create Word
+// pagination problems. If there are multiple section-root ids (either a genuine multi-root tree, or
+// — for a DC section — its own topmost items past a conversion boundary, since those aren't real
+// tree roots but are still each other's "highest-order siblings"), each root's own subtree becomes
+// its own group. If there's exactly one section-root, ITS OWN children become the split points
+// instead — the lone root folds into the first child's group (matching the source spec's own
+// worked example: a single "Aircraft Total" root with 4 bus children becomes 4 tables, the first
+// carrying the root + first bus + its descendants, the rest one bus each) — so the root never sits
+// alone in a table of its own.
+function splitSectionGroups(secRoots,childrenOf){
+  if(secRoots.length>1) return secRoots.map(r=>({startId:r,startDepth:0}));
+  if(secRoots.length===1){
+    const root=secRoots[0];
+    const kids=childrenOf[root]||[];
+    if(!kids.length) return [{startId:root,startDepth:0}];
+    return [{startId:root,startDepth:0,childOverride:[kids[0]]},
+      ...kids.slice(1).map(k=>({startId:k,startDepth:1}))];
+  }
+  return [];
+}
+// Revision 72, item 3: replaces the old buildWordSectionRows/buildWordRptTable pair — instead of
+// one continuous table (rows only) wrapped once by its caller, this builds every split group's own
+// complete <w:tbl>...</w:tbl>, each with a fresh depth/banner-dedup/spacer state (matching how
+// separate tables would naturally reset these visually anyway) and its own local row-notes list
+// right after it (see buildTablesContent). `annotator` (not a precomputed marker map) is passed in
+// directly, shared across every group, so footnote numbers stay sequential across the whole
+// section — the same pattern buildLadWordBlock/buildLadAltWordBlock already use for their own
+// per-block notes.
+function buildWordSectionTables(acDc,cols,cfg,annotator,{descW,ratingW,notesW,colWidths,hasAnnot}){
   const nodes=state.nodes;
   const secSet=new Set(Object.keys(nodes).filter(id=>nodes[id]?.acDc===acDc));
   const childrenOf={};
@@ -6207,47 +6242,67 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,ratingW,notesW,colWidths,h
   const hasNC=n=>!!(n?._netChange&&(n.acDc==='ac'?Math.abs(n._netChange.va||0)>0.0005:Math.abs(n._netChange.a||0)>0.0005));
   const totalCols=2+(hasAnnot?1:0)+cols.length;
   const totalW=descW+ratingW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
-  const emRem=new Set(),emAdd=new Set();
-  const rows=[];let prevDepth=-1;
-  function visit(id,depth,inRem,inAdd,topBdr){
-    const n=nodes[id];if(!n)return;
-    const pid=n.parentId??'__root__';
-    let nowInRem=inRem,nowInAdd=inAdd;
-    if(prevDepth>depth)
-      rows.push(wxTr(wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}),{h:56,exact:true}));
-    prevDepth=depth;
-    if(!inRem&&!inAdd){
-      // Revision 71, item 3.4.1 (extended here for consistency to the Load Analysis Summary
-      // table, which has the identical fixed-size issue though not explicitly named in either
-      // item 3 or 4): the label's size now matches the row it precedes — the same depth-based
-      // formula buildWordDataRow itself uses — instead of a fixed 6.5pt regardless of context.
-      const labelSz=Math.max(6.5,8.5-depth*0.5);
-      if(n.status==='removed'&&!emRem.has(pid)){
-        emRem.add(pid);
-        rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
-        nowInRem=true;
-      }else if(n.status==='new'&&!emAdd.has(pid)){
-        emAdd.add(pid);
-        rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
-        nowInAdd=true;
+  const colOpts={descW,ratingW,notesW,colWidths,hasAnnot};
+
+  return splitSectionGroups(secRoots,childrenOf).map(({startId,startDepth,childOverride})=>{
+    const emRem=new Set(),emAdd=new Set();
+    const rows=[];let prevDepth=-1;
+    const am={};const blockNotes=[];const seenNums=new Set();
+    const pushEntries=entries=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
+    function visit(id,depth,inRem,inAdd,topBdr,kidsOverride){
+      const n=nodes[id];if(!n)return;
+      const a=annotator.annotate(n.rowNotes,n.rowRefs);
+      if(a){am[id]={marker:a.marker};pushEntries(a.entries);}
+      const pid=n.parentId??'__root__';
+      let nowInRem=inRem,nowInAdd=inAdd;
+      if(prevDepth>depth)
+        rows.push(wxTr(wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}),{h:56,exact:true}));
+      prevDepth=depth;
+      if(!inRem&&!inAdd){
+        // Revision 71, item 3.4.1 (extended here for consistency to the Load Analysis Summary
+        // table, which has the identical fixed-size issue though not explicitly named in either
+        // item 3 or 4): the label's size now matches the row it precedes — the same depth-based
+        // formula buildWordDataRow itself uses — instead of a fixed 6.5pt regardless of context.
+        const labelSz=Math.max(6.5,8.5-depth*0.5);
+        if(n.status==='removed'&&!emRem.has(pid)){
+          emRem.add(pid);
+          rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+          nowInRem=true;
+        }else if(n.status==='new'&&!emAdd.has(pid)){
+          emAdd.add(pid);
+          rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+          nowInAdd=true;
+        }
       }
+      rows.push(buildWordDataRow(n,depth,cols,cfg,am,topBdr,colOpts));
+      const kids=kidsOverride||childrenOf[id]||[];
+      kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
     }
-    rows.push(buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWidths,hasAnnot}));
-    const kids=childrenOf[id]||[];
-    kids.forEach((cid,i)=>{const tb=i===0&&hasNC(n)&&hasNC(nodes[cid]);visit(cid,depth+1,nowInRem,nowInAdd,tb);});
-  }
-  secRoots.forEach(id=>visit(id,0,false,false,false));
-  return rows.join('');
+    visit(startId,startDepth,false,false,false,childOverride);
+    blockNotes.sort((a,b)=>a.num-b.num);
+    const notesParas=blockNotes.length?
+      wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true})+
+      blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:20,keepNext:true})).join(''):'';
+    return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
+      buildWordTblHeader(cols,hasAnnot,colOpts)+
+      rows.join('')+
+      `</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
+  }).join('');
 }
 
 // Revision 70 (Phase G): table-shell XML (borders/grid) extracted out of buildWordRptTable so the
 // new Power Distribution Summary / Load Analysis Detail Word builders below can reuse the exact
 // same table styling instead of duplicating it.
+// Revision 72, item 2.1: `colWidths` here is still real dxa (kept only as a proportional fallback
+// hint for <w:tblGrid> — Word itself renders from each cell's own w:tcW type="pct", set below via
+// <w:tblW type="pct" w:w="5000"> = 100%), so the table always fills whatever page/section width
+// it's actually placed on, portrait or landscape, instead of the fixed landscape-sized width it
+// used to assume.
 function wxTableOpen(colWidths){
   const gridCols=colWidths.map(w=>`<w:gridCol w:w="${w}"/>`).join('');
   // Revision 71, item 2.1: left/right edges now solid (were "none"), matching the existing
   // top/bottom rule weight and color exactly.
-  const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
+  const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>`+
     `<w:top w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:left w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
@@ -6258,12 +6313,6 @@ function wxTableOpen(colWidths){
     `<w:tblCellMar><w:top w:w="30" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>` +
     `<w:bottom w:w="30" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
   return `<w:tbl>${tblPr}<w:tblGrid>${gridCols}</w:tblGrid>`;
-}
-function buildWordRptTable(acDc,cols,cfg,am,colOpts){
-  const{descW,ratingW,notesW,colWidths,hasAnnot}=colOpts;
-  return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
-    buildWordTblHeader(cols,hasAnnot,colOpts)+
-    buildWordSectionRows(acDc,cols,cfg,am,colOpts)+`</w:tbl>`;
 }
 
 function buildBodyTextParas(text){
@@ -6286,14 +6335,15 @@ function buildGeneralNotesParas(notes){
 function buildRefsParas(){
   const xe=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const refs=(state.meta.references)||[];
-  // Revision 71, item 1: the whole reference list indented a half inch (720 twips) from the page
-  // margin — left=1080 (0.75"), hanging=360 (0.25", unchanged) puts the numbered first line's
-  // start at exactly 720 twips and wrapped lines at 1080, preserving the same 360-twip hang
-  // relationship between a reference's number and its own wrapped text as before, just with the
-  // whole block shifted right by half an inch.
+  // Revision 72, item 1: corrects Revision 71 item 1's half-inch shift (which the user reported as
+  // its own error) to a quarter inch (360 twips) instead — left=720 (0.5"), hanging=360 (0.25",
+  // unchanged) puts the numbered first line's start at exactly 360 twips and wrapped lines at 720,
+  // preserving the same 360-twip hang relationship between a reference's number and its own
+  // wrapped text as before, just with the whole block shifted right by a quarter inch instead of a
+  // half inch.
   if(!refs.length)return`<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr></w:p>`;
   return refs.map((r,i)=>
-    `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:ind w:left="1080" w:hanging="360"/></w:pPr>`+
+    `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:ind w:left="720" w:hanging="360"/></w:pPr>`+
     `<w:r><w:t xml:space="preserve">${i+1}. ${r.organization?xe(r.organization)+'.  ':''}${r.docNumber?xe(r.docNumber)+'.  ':''}</w:t></w:r>`+
     (r.title?`<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${xe(r.title)}.  </w:t></w:r>`:'')+
     ((r.revision||r.date)?`<w:r><w:t xml:space="preserve">${r.revision?'Rev. '+xe(r.revision)+'.  ':''}${r.date?xe(r.date)+'.':''}</w:t></w:r>`:'')+
@@ -6317,21 +6367,33 @@ function computeColWidths(groups,cols,avail,pt){
   });
   return cols.map(c=>Math.max(naive,groupMinPerCol[c.group]||0));
 }
+// Revision 72, item 2.1: converts a real dxa width (computed against a nominal 13392-wide
+// landscape reference — kept purely so computeColWidths's legibility-minimum math above stays a
+// meaningful physical measurement) into Word's percentage-of-table unit (fiftieths of a percent,
+// out of 5000 = 100%) for wxTc/wxTableOpen. Every one of the 4 Word table builders below runs its
+// own dxa math through this at the end, so the RATIOS between columns are unchanged but the table
+// itself (via wxTableOpen's w:tblW type="pct") now stretches to fill whatever page/section width
+// it's actually placed on — portrait or landscape — instead of assuming landscape's width always.
+function pctW(dxa,totalDxa){ return Math.round(dxa/totalDxa*5000); }
+// Revision 72, item 3: row notes moved from one combined list at the very end of the whole report
+// to a local list right after each split table — the annotator instance is still shared across
+// every table in the section, so footnote numbers stay sequential even though they're now
+// displayed piecemeal (matching the on-screen convention name/idea, and exactly how the two Load
+// Analysis Detail builders already handle their own per-block notes).
 function buildTablesContent(){
   const cfg=reportCfg||defaultPrintCfg();
   const acCols=activeCols(AC_GROUPS,cfg.ac);
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
-  const{annotMap,notesList}=buildAnnotationMap();
-  const hasAnnot=Object.keys(annotMap).length>0;
-  const am=hasAnnot?annotMap:null;
+  const annotator=makeAnnotator();
+  const hasAnnot=Object.values(state.nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
   // Letter landscape (Rev 1 template): 15840 wide, margins L=1440 R=1008 -> 13392 usable
   const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
   const avail=TOTAL_W-DESC_W-RATING_W-(hasAnnot?NOTES_W:0);
   const HSZ=7.5;
-  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
-  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
-  const acOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:acColWidths,hasAnnot};
-  const dcOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot};
+  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
+  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
+  const acOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:acColWidths,hasAnnot};
+  const dcOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:dcColWidths,hasAnnot};
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const vLbl=acDc=>{
     const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??
@@ -6342,7 +6404,7 @@ function buildTablesContent(){
   const mkTbl=(acDc,cols,label,opts)=>{
     if(!Object.values(state.nodes).some(n=>n.acDc===acDc))return'';
     return wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
-           buildWordRptTable(acDc,cols,cfg,am,opts);
+           buildWordSectionTables(acDc,cols,cfg,annotator,opts);
   };
   const al=vLbl('ac'),dl=vLbl('dc');
   const acTbl=mkTbl('ac',acCols,al?`${al} Summary`:'AC Summary',acOpts);
@@ -6350,10 +6412,6 @@ function buildTablesContent(){
   const spacerP=wxPar('',{before:120,after:0});
   if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
   else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
-  if(notesList.length){
-    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40,keepNext:true}));
-    notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30,keepNext:true})));
-  }
   return out.join('');
 }
 
@@ -6368,28 +6426,63 @@ function buildTablesContent(){
 // Revision 71, item 3.1: PDS passes hasRating:false (see buildPdsWordContent), so
 // buildWordTblHeader/buildWordDataRow omit the Rating column entirely for this report.
 // Revision 71, item 3.4/3.4.1: Installed/Removed banners, shown once per parent (matching
-// buildWordSectionRows's own convention) with label size matching the row that follows.
-function buildPdsWordRows(ids,cols,dm,cfg,am,opts){
+// buildWordSectionTables's own convention) with label size matching the row that follows.
+// Revision 72, item 3: split into one <w:tbl> per "highest-order sibling" group, same as
+// buildWordSectionTables — since pdsLocalDepthMap already restarts depth at 0 for each section's
+// own local roots, a PDS "section root" is just any id whose own dm value is 0, and a childrenOf
+// map restricted to this flat, already-filtered `ids` list stands in for the recursive children-of
+// traversal buildWordSectionTables uses. Each group gets its own banner-dedup state and its own
+// local row-notes list, re-invoking the shared `annotator` (dedup-safe — see makeAnnotator) to
+// recover which entries its own rows reference without disturbing the marker assignments already
+// captured in `am`.
+function buildPdsWordTables(ids,cols,dm,cfg,annotator,am,opts){
+  const idSet=new Set(ids);
+  const childrenOf={};
+  ids.forEach(id=>{
+    const p=state.nodes[id]?.parentId;
+    if(p!=null&&idSet.has(p)) (childrenOf[p]=childrenOf[p]||[]).push(id);
+  });
+  const secRoots=ids.filter(id=>(dm[id]||0)===0);
+  function subtreeIds(id){
+    const out=[id];
+    (childrenOf[id]||[]).forEach(cid=>out.push(...subtreeIds(cid)));
+    return out;
+  }
   const{descW,ratingW,notesW,colWidths,hasAnnot,hasRating=true}=opts;
   const totalCols=1+(hasRating?1:0)+(hasAnnot?1:0)+cols.length;
   const totalW=descW+(hasRating?ratingW:0)+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
-  const emRem=new Set(),emAdd=new Set();
-  const rows=[];
-  ids.forEach(id=>{
-    const n=state.nodes[id]; if(!n) return;
-    const pid=n.parentId??'__root__';
-    const depth=dm[id]||0;
-    const labelSz=Math.max(6.5,8.5-depth*0.5);
-    if(n.status==='removed'&&!emRem.has(pid)){
-      emRem.add(pid);
-      rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
-    }else if(n.status==='new'&&!emAdd.has(pid)){
-      emAdd.add(pid);
-      rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
-    }
-    rows.push(buildWordDataRow(n,depth,cols,cfg,am,false,opts));
-  });
-  return rows.join('');
+
+  return splitSectionGroups(secRoots,childrenOf).map(({startId,childOverride})=>{
+    const groupIds=childOverride?[startId,...childOverride.flatMap(subtreeIds)]:subtreeIds(startId);
+    const emRem=new Set(),emAdd=new Set();
+    const rows=[];
+    const blockNotes=[];const seenNums=new Set();
+    const pushEntries=entries=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
+    groupIds.forEach(id=>{
+      const n=state.nodes[id]; if(!n) return;
+      const a=annotator.annotate(n.rowNotes,n.rowRefs);
+      if(a) pushEntries(a.entries);
+      const pid=n.parentId??'__root__';
+      const depth=dm[id]||0;
+      const labelSz=Math.max(6.5,8.5-depth*0.5);
+      if(n.status==='removed'&&!emRem.has(pid)){
+        emRem.add(pid);
+        rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+      }else if(n.status==='new'&&!emAdd.has(pid)){
+        emAdd.add(pid);
+        rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+      }
+      rows.push(buildWordDataRow(n,depth,cols,cfg,am,false,opts));
+    });
+    blockNotes.sort((a,b)=>a.num-b.num);
+    const notesParas=blockNotes.length?
+      wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true})+
+      blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:20,keepNext:true})).join(''):'';
+    return wxTableOpen([descW,...(hasRating?[ratingW]:[]),...(hasAnnot?[notesW]:[]),...colWidths])+
+      buildWordTblHeader(cols,hasAnnot,opts)+
+      rows.join('')+
+      `</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
+  }).join('');
 }
 function buildPdsWordContent(){
   const cfg=reportCfg||defaultPrintCfg();
@@ -6423,10 +6516,10 @@ function buildPdsWordContent(){
   const TOTAL_W=13392,DESC_W=2800,NOTES_W=600;
   const avail=TOTAL_W-DESC_W-(hasAnnot?NOTES_W:0);
   const HSZ=7.5;
-  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
-  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
-  const acOpts={descW:DESC_W,ratingW:0,notesW:NOTES_W,colWidths:acColWidths,hasAnnot,hasRating:false};
-  const dcOpts={descW:DESC_W,ratingW:0,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot,hasRating:false};
+  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
+  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
+  const acOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:0,notesW:pctW(NOTES_W,TOTAL_W),colWidths:acColWidths,hasAnnot,hasRating:false};
+  const dcOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:0,notesW:pctW(NOTES_W,TOTAL_W),colWidths:dcColWidths,hasAnnot,hasRating:false};
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const al=acDcVoltageLabel('ac'),dl=acDcVoltageLabel('dc');
@@ -6435,9 +6528,7 @@ function buildPdsWordContent(){
   const mkTbl=(ids,cols,label,opts,dm)=>{
     if(!ids.length)return'';
     return wxPar(wxRun(label,{b:true,sz:11}),{before:160,after:60,keepNext:true})+
-      wxTableOpen([opts.descW,...(opts.hasAnnot?[opts.notesW]:[]),...opts.colWidths])+
-      buildWordTblHeader(cols,opts.hasAnnot,opts)+
-      buildPdsWordRows(ids,cols,dm,cfg,amArg,opts)+`</w:tbl>`;
+      buildPdsWordTables(ids,cols,dm,cfg,annotator,amArg,opts);
   };
   const acTbl=mkTbl(acIds,acCols,al?`${al} Summary`:'AC Summary',acOpts,acDm);
   const dcTbl=mkTbl(dcIds,dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts,dcDm);
@@ -6445,10 +6536,6 @@ function buildPdsWordContent(){
   const spacerP=wxPar('',{before:120,after:0});
   if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
   else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
-  if(annotator.notesList.length){
-    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40,keepNext:true}));
-    annotator.notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30,keepNext:true})));
-  }
   return out.filter(Boolean).join('');
 }
 
@@ -6525,10 +6612,10 @@ function buildLadHorizontalWordContent(){
   const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
   const avail=TOTAL_W-DESC_W-RATING_W-(hasAnyAnnot?NOTES_W:0);
   const HSZ=7.5;
-  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
-  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
-  const acOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:acColWidths,hasAnnot:hasAnyAnnot};
-  const dcOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot:hasAnyAnnot};
+  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
+  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
+  const acOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:acColWidths,hasAnnot:hasAnyAnnot};
+  const dcOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:dcColWidths,hasAnnot:hasAnyAnnot};
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
@@ -6560,8 +6647,12 @@ function ladAltActiveKeySet(groupId,cfgSec){
   const gc=cfgSec[groupId]; if(!gc) return new Set();
   return new Set(Object.keys(gc).filter(k=>gc[k]));
 }
+// Revision 72, item 2.1: TOTAL_W is 5000 (Word's percentage-of-table unit, out of 5000 = 100%)
+// instead of a real dxa measurement — every width here is already a fraction of TOTAL_W, so this
+// table now stretches to fill whatever page/section width it's actually placed on (see wxTc/
+// wxTableOpen), rather than assuming the fixed landscape width it used to be sized for.
 function ladAltWordColWidths(colsCount,hasAnnot){
-  const TOTAL_W=13392;
+  const TOTAL_W=5000;
   const labelW=Math.round(TOTAL_W*0.24);
   const cbW=Math.round(TOTAL_W*0.08);
   const notesW=hasAnnot?Math.round(TOTAL_W*0.04):0;

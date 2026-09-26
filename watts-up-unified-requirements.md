@@ -4738,6 +4738,132 @@ template round trip produced zero parse errors. Clean console.
 
 Revision 71 is now complete — all 4 phases (A-D) shipped and verified.
 
+## 72. Revision 72: More Word Document Formatting
+
+Source: "Watts Up Revision 72 (+) – More Word document formatting.txt" — a follow-up round after
+trying Revision 71 live. Three items: (1) the reference list's Revision 71 indent was itself the
+user's own error (wanted a quarter inch, not a half); (2) an attempt to put the two Summary tables
+(Load Analysis Summary, Power Distribution Summary) in a portrait section while keeping the two
+Detail tables (Load Analysis Detail Horizontal/Vertical) in landscape wasn't working — both kept
+rendering landscape; (3) long Summary tables still break awkwardly across pages, with a suggested
+fix (split by highest-order sibling) that explicitly names Word as the priority, on-screen as
+optional/lower-priority "depends on the difficulty and effects."
+
+Investigated item 2 before touching any code: `fillWattsUpDocx` (the sync-into-existing-document
+path) does pure per-content-control text replacement (`fillSdtBlock`) and never touches section
+breaks or page setup at all — which page orientation a content control lands on is determined
+entirely by how the user has structured sections in the Word document itself; the generator has no
+way to detect or control that. So the literal "both come in as landscape" symptom is a document
+section-setup issue outside this code's reach. What the code *can* fix is the reason manual column
+re-adjustment was ever needed: every table builder computed column widths as fixed absolute
+measurements sized for the landscape page specifically. Converting to percentage-based widths
+answers the "can tables adapt to whichever margin/orientation they land on" question directly, and
+was confirmed with the user (recommended: all 4 table types, not just the 2 Summary ones) before
+implementing. Item 3's on-screen scope was also confirmed after explaining the concrete effects
+(repeated sticky headers per split, visible gaps where there weren't any, no actual pagination bug
+existing on-screen to justify it) — Word-only, with the added requirement that row notes move from
+one combined list at the report's end to a local list attached to each split table.
+
+### Phase A: Reference list indent correction (item 1)
+
+*Shipped 2026-09-26.*
+
+`buildRefsParas()`'s indent corrected from `w:left="1080"` (0.75", i.e. the original 0.25" plus
+Revision 71's half-inch shift) to `w:left="720"` (0.5", i.e. the original 0.25" plus a quarter-inch
+shift) — `hanging="360"` unchanged throughout, preserving the same number-to-wrapped-text
+relationship established in Revision 71, just with the whole block's rightward shift halved.
+
+### Phase B: Percentage-based table widths (item 2.1)
+
+*Shipped 2026-09-26.*
+
+All 4 Word table builders (`buildTablesContent`, `buildPdsWordContent`,
+`buildLadHorizontalWordContent`, `buildLadVerticalWordContent`) converted from fixed absolute-dxa
+column widths (sized for the landscape page specifically, via a `TOTAL_W=13392` reference) to
+Word's percentage-of-table unit: `wxTableOpen` now declares `<w:tblW w:type="pct" w:w="5000"/>`
+(100% of whatever the containing section actually provides) instead of `type="auto" w="0"`, and
+`wxTc` emits `<w:tcW w:type="pct">` instead of `type="dxa"`. A new shared `pctW(dxa,totalDxa)`
+helper converts each builder's existing dxa math (kept unchanged, including
+`computeColWidths`'s per-column legibility-minimum check, which needs a real physical measurement
+to stay meaningful) into the 0-5000 percentage range at the point each builder finishes computing
+its own widths — every column-consuming function below that point (`buildWordDataRow`,
+`buildWordTblHeader`, banner rows, etc.) is unit-agnostic and needed no changes at all. `<w:tblGrid>`
+column hints keep using whatever numbers are threaded through (now the same percentage-scaled
+values, rather than realistic twip measurements) — a deliberate simplification, since Word renders
+from each cell's own `tcW` percentage when `tblW` is percentage-based regardless of `tblGrid`'s own
+values, and this project has no legacy-reader compatibility requirement beyond real Word.
+
+Net effect: every table now stretches to fill 100% of whatever page width its content control
+actually lands on — portrait or landscape — with its columns keeping their existing relative
+proportions, instead of assuming the landscape width it used to be sized for. This directly answers
+item 2.1's question (yes, adaptive-width tables are possible) and makes item 2.2's landscape-
+everywhere fallback unnecessary; setting up the actual portrait/landscape sections in the document
+remains entirely the user's own task in Word, since the generator never touches section structure.
+
+Verified live: all 4 builders confirmed well-formed with `<w:tblW w:type="pct" w:w="5000"/>` present
+and zero remaining `dxa`-type `tcW` cells; per-row percentage sums checked across all 4 builders,
+each landing within ±10 of 5000 (±0.2%, ordinary rounding slop, well within Word's tolerance); a
+full `fillWattsUpDocx`-against-the-bundled-template round trip produced zero parse errors with 143
+percentage-type width declarations present. Clean console.
+
+### Phase C: Split long Summary tables by highest-order sibling (item 3)
+
+*Shipped 2026-09-26.*
+
+Word-only, per the confirmed scope (on-screen `renderTable`/`renderPowerDistSummary` untouched —
+still one continuous table per AC/DC section). New shared `splitSectionGroups(secRoots,childrenOf)`:
+if a section has multiple "section-root" ids (either a genuine multi-root tree, or — for a DC
+section — its own topmost items past a conversion boundary, which aren't real tree roots but are
+still each other's highest-order siblings), each root's own subtree becomes its own group; if there's
+exactly one section-root, *its own children* become the split points instead, with the lone root
+folding into the first child's group — matching the source spec's own worked example exactly (a
+single "Aircraft Total" root with 4 bus children becomes 4 tables: the first carrying the root +
+first bus + its descendants, the rest one bus each).
+
+Replaces the old `buildWordSectionRows`/`buildWordRptTable` pair (Load Analysis Summary) with
+`buildWordSectionTables`, and the old `buildPdsWordRows` (Power Distribution Summary) with
+`buildPdsWordTables` — each now builds one complete `<w:tbl>...</w:tbl>` per split group instead of
+one continuous table wrapped once by the caller, with a fresh banner-dedup state per group (matching
+how separate tables would naturally reset these visually anyway) — real node depth is preserved
+exactly as it was in the unsplit version (not restarted per group), so a sibling shown in its own
+table still displays at the same indentation/text size it always did, rather than looking visually
+promoted to root level. PDS's version reuses its already-restarted `pdsLocalDepthMap` values
+directly (a PDS "section root" is simply any id whose own depth value is already 0) instead of
+recomputing a separate root-detection pass.
+
+**Row notes now travel with their table** (added requirement, confirmed with the user): each split
+group collects its own local notes list by re-invoking the shared `annotator` per row (dedup-safe —
+calling `.annotate()` again on an already-seen note/reference returns the same number without
+creating a duplicate list entry) and renders it directly after that group's own `</w:tbl>`, instead
+of the whole report collecting one combined list at the very end. The annotator instance is still
+shared across every group in a section, so footnote numbers stay sequential across the whole report
+even though they're now displayed piecemeal — the same convention the two Load Analysis Detail
+builders already use for their own per-block notes.
+
+Verified live with a seeded tree matching the source spec's own example almost exactly (a "Total
+Aircraft Load" root with 4 AC bus children — one removed-child-with-a-note, one with a nested TRU
+carrying a DC output bus, one New-status, one with another TRU/DC-bus carrying its own note — plus a
+second TRU→DC-bus chain to exercise DC's own multi-root case): both Load Analysis Summary and Power
+Distribution Summary produced 6 tables (4 AC groups matching the fold-first-child pattern exactly,
+including the New-status bus correctly sorting last per the app's own existing sibling-ordering
+convention; 2 DC groups, one per TRU-boundary local root, correctly NOT folded together since there
+were 2 of them) — confirmed by checking exactly which nodes' text appeared in each table.
+Cross-checked the depth-preservation claim directly: a TRU nested 2 levels deep within its own now-
+separate table still rendered at `ind:400`/`sz:15` (7.5pt), matching its real, pre-split tree depth
+exactly. Confirmed row notes land ONLY in the specific table whose own row referenced them (note "1"
+in the first table, note "2" in the last table, every other table correctly showing no notes
+paragraph at all), with sequential numbering preserved across the whole section rather than
+restarting per table. Confirmed the on-screen Load Analysis Summary/Power Distribution Summary views
+are completely unchanged (still exactly 2 tables total, one per AC/DC section, matching the
+Word-only scope). A full `fillWattsUpDocx`-against-the-bundled-template round trip produced zero
+parse errors (the bundled template predates several newer content control tags — `wu-pds`/
+`wu-lad-horizontal`/`wu-lad-vertical`/`wu-interval`/every `-pcm` tag aren't present in it at all, so
+this round trip only exercises `wu-tables` among the table-producing controls; PDS and both Detail
+builders were verified directly via their own standalone output instead, as in every phase before
+this one). Clean console.
+
+Revision 72 is now complete — all 3 phases (A-C) shipped and verified.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
