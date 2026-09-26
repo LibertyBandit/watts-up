@@ -6478,11 +6478,13 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
 
   const totalCols=2+(hasAnnot?1:0)+cols.length;
   const totalW=descW+ratingW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
-  // Revision 71, item 4.1: size now matches the row the label precedes (same depth-based formula
-  // buildWordDataRow uses) instead of a fixed 6.5pt — the caller passes that row's own depth.
+  // Revision 71, item 4.1: size (and, for full consistency with buildWordSectionRows/PDS's own
+  // banners, indentation) now matches the row the label precedes — same depth-based formula
+  // buildWordDataRow uses — instead of a fixed 6.5pt/200-twip regardless of context. The subject-
+  // level banner (depth 0) needs ind:0 to match the subject row itself, which has no indent at all.
   const bannerRow=(label,bold,depth)=>{
     const sz=Math.max(6.5,8.5-depth*0.5);
-    return wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+    return wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
   };
 
   const rows=[];
@@ -6646,11 +6648,14 @@ function buildLadAltWordBlock(n,cols,cfg,cfgSide,annotator,colWidths){
   const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*cols.length;
   // Revision 71, item 4.1: size now matches the row the label precedes — 8.5 for the subject
   // row's own banner (ladAltWordSubjectRow's own fixed size), 7.5 for a child's (ladAltWordChildRow's) —
-  // instead of a fixed 6.5pt regardless of context. Also item 2.3: keepNext added.
-  const bannerRow=(label,bold,sz)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+  // instead of a fixed 6.5pt regardless of context. Indentation matches too: the subject-level
+  // banner uses ind:0 (ladAltWordSubjectRow itself has no indent), child-level uses ind:200
+  // (matching ladAltWordChildRow's own indent) — was hardcoded to 200 for both. Also item 2.3:
+  // keepNext added.
+  const bannerRow=(label,bold,sz,ind=200)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
 
   const rows=[];
-  if(n.status==='new') rows.push(bannerRow('Installed',true,8.5));
+  if(n.status==='new') rows.push(bannerRow('Installed',true,8.5,0));
   const itemAnnot=annotateGroup(n,null); if(itemAnnot)pushEntries(itemAnnot.entries);
   rows.push(ladAltWordSubjectRow(n,cols,itemAnnot,colWidths));
 

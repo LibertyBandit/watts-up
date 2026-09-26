@@ -4704,6 +4704,40 @@ still includes a Rating column. A full `createNewWordReport()`-equivalent round 
 (`fillWattsUpDocx` against the bundled template, all 15 content controls) produced a complete
 `word/document.xml` with zero parse errors. Clean console.
 
+### Phase D: Detail Tables (item 4)
+
+*Shipped 2026-09-26.*
+
+Items 4.1 (label size matching the following row) and 4.2 (bold, 8.5-9pt breadcrumb path) turned
+out to already be implemented for both `buildLadWordBlock` (Load Analysis Detail Horizontal) and
+`buildLadAltWordBlock` (Load Analysis Detail Vertical) as part of Phase B's broader "keep the whole
+all-tables treatment consistent" pass — confirmed live rather than assumed, per the plan. Both
+builders' `bannerRow` already computed the label's text size from the row it precedes (depth-based
+for Horizontal, fixed 8.5/7.5 matching Vertical's own fixed subject/child row sizes) and both
+already had the breadcrumb path at bold+italic+9pt.
+
+**One real gap found and fixed while verifying**: both builders' `bannerRow` still hardcoded the
+label's *indentation* to 200 twips regardless of which row it precedes — harmless for a child-level
+banner (child rows are themselves indented 200 twips) but wrong for a subject-level "Installed"
+banner (shown when the block's own subject node is New-status), which should sit at the subject
+row's own zero indent, not 200. Not literally named by item 4.1's text (which only mentions text
+size), but the same underlying defect Phase C fixed for Power Distribution Summary's banners, and
+inconsistent with `buildWordSectionRows`'s own already-correct `ind:depth*200` banners — fixed here
+too rather than left as the one remaining inconsistent spot. `buildLadWordBlock`'s `bannerRow` now
+computes `ind:depth*200` from the same `depth` parameter already driving its text size;
+`buildLadAltWordBlock`'s `bannerRow` gained an explicit `ind` parameter (default 200, matching every
+existing child-level call site unchanged) with its one subject-level call site now passing `ind:0`.
+
+Verified live with a seeded tree exercising both banner levels (Bus A → Bus B [existing, children:
+Feeder 1 removed / Breaker 1 new] and Bus A → Bus C [new, child: Feeder 2 existing]): child-level
+Installed/Removed banners in both builders confirmed at `ind:200`/depth-matched size (8.0pt
+Horizontal, 7.5pt Vertical); the subject-level Installed banner (Bus C's own block) confirmed at
+`ind:0` (was incorrectly 200 before this fix) and 8.5pt in both builders; the breadcrumb path ("Bus
+A >") confirmed bold+italic+9pt (`sz:18`) in both. A full `fillWattsUpDocx`-against-the-bundled-
+template round trip produced zero parse errors. Clean console.
+
+Revision 71 is now complete — all 4 phases (A-D) shipped and verified.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
