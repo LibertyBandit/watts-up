@@ -4608,6 +4608,50 @@ old one, reference text/formatting (numbering, italic titles, revision/date) una
 `createNewWordReport()` round-trip confirms `wu-references` carries the new indent in the actual
 generated document. Clean console.
 
+### Phase B: All tables — borders and pagination (item 2)
+
+*Shipped 2026-09-26.*
+
+**Borders** (items 2.1/2.2): `wxTableOpen`'s left/right table-edge borders changed from `none` to
+`single` (matching the existing top/bottom rule weight and color exactly). `wxTc` gained a new
+`bottomBdr` option (the table-level bottom border in `wxTableOpen` only ever reaches the table's
+very last row, not the header specifically); `buildWordTblHeader`'s row 2 (the header's own last
+row — description/rating/notes/sub-column cells) now sets it on every cell, drawing a solid rule
+under the whole header. `buildLadAltWordHeader` (Load Analysis Detail Vertical's own separate
+header builder, since it doesn't share `buildWordTblHeader` with the other three table shapes)
+got the identical treatment.
+
+**Keep with next** (item 2.3): every table-row paragraph across all four table types now sets
+`keepNext` (already a supported `wxPar` option, just not applied at the row level before) —
+`buildWordTblHeader`'s cells, `buildWordDataRow`'s cells (used by the Load Analysis Summary and
+Power Distribution Summary tables), `buildWordSectionRows`'s Removed/Installed banner and spacer
+rows, and both Load Analysis Detail builders' own banner rows, data rows, and header cells. Also
+extended to each table's trailing "row notes" paragraphs (the numbered footnote lists) — both the
+whole-document ones in `buildTablesContent`/`buildPdsWordContent` and the per-block ones in the two
+Detail builders — matching item 2.3's "table rows *and row notes*" wording. The inter-table spacer
+paragraphs (between the AC and DC tables, and between one Detail block and the next) were left
+without `keepNext` deliberately — they sit *between* separate tables, not inside one, so keeping
+them attached to whatever follows doesn't serve the "don't split a table across a page" goal.
+
+**Also fixed while here, since it's the identical bug**: `buildWordSectionRows`'s Removed/Installed
+labels (used by the Load Analysis Summary table) had the same fixed-6.5pt-regardless-of-context
+issue items 3.4.1/4.1 describe for Power Distribution Summary/Detail Tables specifically — not
+explicitly named in either item, but clearly the same underlying defect, so fixed here too for
+consistency rather than left as the one remaining inconsistent spot: the label now uses
+`Math.max(6.5, 8.5-depth*0.5)`, the exact same formula `buildWordDataRow` itself already uses for
+the row it precedes.
+
+Verified live: all four table builders (`buildTablesContent`/`buildPdsWordContent`/
+`buildLadHorizontalWordContent`/`buildLadVerticalWordContent`) still produce well-formed XML; the
+table shell's `<w:tblBorders>` shows `single` on all four edges; header cells confirmed carrying the
+new bottom border; a broad, non-zero `keepNext` count throughout (150+ in the Load Analysis Summary
+table alone, 250+ in Load Analysis Detail Vertical). Confirmed the Load Analysis Summary table's
+Removed/Installed label size genuinely varies by depth, not coincidentally still fixed — a depth-4
+label showed 6.5pt (identical to the old fixed value, since `Math.max` floors there) while a
+shallower depth-1 label showed a distinctly larger 8pt, proving the formula is live rather than
+accidentally still constant. A full `createNewWordReport()` round-trip produced a complete
+document with zero parse errors. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

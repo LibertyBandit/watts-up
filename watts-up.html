@@ -6038,10 +6038,14 @@ function wxSdtBlock(tag,contentXml){
   return `<w:sdt><w:sdtPr><w:tag w:val="${tag}"/></w:sdtPr><w:sdtContent>${contentXml}</w:sdtContent></w:sdt>`;
 }
 
-function wxTc(inner,{w,span,vm,topBdr,leftBdr,shd}={}){
+// Revision 71, item 2.2: gained `bottomBdr` — used only on the header's own last row, to draw a
+// solid rule under it (the table-level bottom border in wxTableOpen only ever reaches the very
+// last row of the whole table, not the header specifically).
+function wxTc(inner,{w,span,vm,topBdr,leftBdr,bottomBdr,shd}={}){
   const bdrParts=[
     topBdr?'<w:top w:val="single" w:sz="6" w:space="0" w:color="888888"/>':'',
     leftBdr?'<w:left w:val="single" w:sz="12" w:space="0" w:color="777777"/>':'',
+    bottomBdr?'<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>':'',
   ].join('');
   const tcPr=[
     w!=null?`<w:tcW w:w="${w}" w:type="dxa"/>`:'',
@@ -6068,6 +6072,9 @@ function wxTr(inner,{h,exact,hdr}={}){
 // buildRptHeader(cols,hasAnnot,leftCellContent) convention exactly. Defaults to '' so the existing
 // Load Analysis Summary/Power Distribution Summary tables (which never pass a 4th argument) are
 // completely unaffected.
+// Revision 71, items 2.2/2.3: row 2 (the header's own last row) gets bottomBdr on every cell for
+// a solid rule under the whole header, and every paragraph here gets keepNext so the header never
+// separates from the first body row that follows it.
 function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths},leftCellContentXml){
   const HSZ=7.5;
   const runs=[];
@@ -6077,25 +6084,28 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths},leftC
   });
   // Row 1: description (vMerge start) | rating (vMerge start) | notes (vMerge start) | group headers
   let r1='';
-  r1+=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0}),{w:descW,vm:'start'});
-  r1+=wxTc(wxPar('',{before:0,after:0}),{w:ratingW,vm:'start'});
-  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,vm:'start',leftBdr:true});
+  r1+=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0,keepNext:true}),{w:descW,vm:'start'});
+  r1+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'start'});
+  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   runs.forEach(g=>{
-    r1+=wxTc(wxPar(wxRun(g.label,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),
+    r1+=wxTc(wxPar(wxRun(g.label,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),
       {w:g.w,span:g.count>1?g.count:undefined,leftBdr:true});
   });
   // Row 2: description (vMerge cont) | rating (vMerge cont) | notes (vMerge cont) | sub-column labels
   let r2='';
-  r2+=wxTc(wxPar('',{before:0,after:0}),{w:descW,vm:'cont'});
-  r2+=wxTc(wxPar('',{before:0,after:0}),{w:ratingW,vm:'cont'});
-  if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0}),{w:notesW,vm:'cont',leftBdr:true});
+  r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:descW,vm:'cont',bottomBdr:true});
+  r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'cont',bottomBdr:true});
+  if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:notesW,vm:'cont',leftBdr:true,bottomBdr:true});
   cols.forEach((c,i)=>{
-    r2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),
-      {w:colWidths[i],leftBdr:c.isGroupFirst});
+    r2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),
+      {w:colWidths[i],leftBdr:c.isGroupFirst,bottomBdr:true});
   });
   return wxTr(r1,{h:300,hdr:true})+wxTr(r2,{h:260,hdr:true});
 }
 
+// Revision 71, item 2.3: every cell's paragraph gets keepNext, so Word resists breaking the page
+// between this row and whichever one follows it (the chain of keepNext across every row in a
+// table discourages a page break landing anywhere inside the table body).
 function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWidths,hasAnnot}){
   const isProt=NT.PROTECTION.includes(n.type);
   const isConvIn=n.convRole==='in';
@@ -6105,21 +6115,21 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   const sz=Math.max(6.5,8.5-depth*0.5);
   const indDxa=depth*200;
   const descRun=removed?wxRun(mainDesc,{i:true,sz}):n.status==='new'?wxRun(mainDesc,{b:true,sz}):wxRun(mainDesc,{sz});
-  const descCell=wxTc(wxPar(descRun,{ind:indDxa,before:20,after:20}),{w:descW,topBdr});
+  const descCell=wxTc(wxPar(descRun,{ind:indDxa,before:20,after:20,keepNext:true}),{w:descW,topBdr});
   // Revision 42: dedicated Rating column (CB/fuse amps) alongside the description column.
   const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
-  const ratingCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz}):'',{before:20,after:20,jc:'right'}),{w:ratingW,topBdr});
+  const ratingCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:ratingW,topBdr});
   let notesCell='';
   if(hasAnnot){
     const marker=am&&am[n.id]?am[n.id].marker:'';
-    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,topBdr,leftBdr:true});
+    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,topBdr,leftBdr:true});
   }
   let numCells='';
   cols.forEach((col,i)=>{
     const{group,k,isPf,isGroupFirst}=col;
     const lB=isGroupFirst;
     const w=colWidths[i];
-    const emDash=()=>{numCells+=wxTc(wxPar(wxRun('—',{sz}),{before:20,after:20,jc:'right'}),{w,topBdr,leftBdr:lB});};
+    const emDash=()=>{numCells+=wxTc(wxPar(wxRun('—',{sz}),{before:20,after:20,jc:'right',keepNext:true}),{w,topBdr,leftBdr:lB});};
     if(isConvIn&&cfg.convInNcOnly&&group!=='nc'){emDash();return;}
     let val=null;let isNeg=false;
     if(group==='cap'){if(!hasC||!n.capacity){emDash();return;}val=n.capacity[k];}
@@ -6141,7 +6151,7 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
     const fmtd=isPf?fmtPfRpt(val):fmtRpt(val);
     if(fmtd==null){emDash();return;}
     const txt=isNeg?`(${fmtd})`:fmtd;
-    numCells+=wxTc(wxPar(wxRun(txt,{sz}),{before:20,after:20,jc:'right'}),{w,topBdr,leftBdr:lB});
+    numCells+=wxTc(wxPar(wxRun(txt,{sz}),{before:20,after:20,jc:'right',keepNext:true}),{w,topBdr,leftBdr:lB});
   });
   return wxTr(descCell+ratingCell+notesCell+numCells);
 }
@@ -6166,16 +6176,21 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,ratingW,notesW,colWidths,h
     const pid=n.parentId??'__root__';
     let nowInRem=inRem,nowInAdd=inAdd;
     if(prevDepth>depth)
-      rows.push(wxTr(wxTc(wxPar('',{before:0,after:0}),{w:totalW,span:totalCols>1?totalCols:undefined}),{h:56,exact:true}));
+      rows.push(wxTr(wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}),{h:56,exact:true}));
     prevDepth=depth;
     if(!inRem&&!inAdd){
+      // Revision 71, item 3.4.1 (extended here for consistency to the Load Analysis Summary
+      // table, which has the identical fixed-size issue though not explicitly named in either
+      // item 3 or 4): the label's size now matches the row it precedes — the same depth-based
+      // formula buildWordDataRow itself uses — instead of a fixed 6.5pt regardless of context.
+      const labelSz=Math.max(6.5,8.5-depth*0.5);
       if(n.status==='removed'&&!emRem.has(pid)){
         emRem.add(pid);
-        rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:6.5}),{ind:depth*200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+        rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
         nowInRem=true;
       }else if(n.status==='new'&&!emAdd.has(pid)){
         emAdd.add(pid);
-        rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:6.5}),{ind:depth*200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+        rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
         nowInAdd=true;
       }
     }
@@ -6192,11 +6207,13 @@ function buildWordSectionRows(acDc,cols,cfg,am,{descW,ratingW,notesW,colWidths,h
 // same table styling instead of duplicating it.
 function wxTableOpen(colWidths){
   const gridCols=colWidths.map(w=>`<w:gridCol w:w="${w}"/>`).join('');
+  // Revision 71, item 2.1: left/right edges now solid (were "none"), matching the existing
+  // top/bottom rule weight and color exactly.
   const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>`+
     `<w:top w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
-    `<w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
+    `<w:left w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
-    `<w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
+    `<w:right w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:insideH w:val="single" w:sz="4" w:space="0" w:color="dddddd"/>` +
     `<w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
     `</w:tblBorders><w:tblLayout w:type="fixed"/>` +
@@ -6296,8 +6313,8 @@ function buildTablesContent(){
   if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
   else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
   if(notesList.length){
-    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40}));
-    notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
+    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40,keepNext:true}));
+    notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30,keepNext:true})));
   }
   return out.join('');
 }
@@ -6371,8 +6388,8 @@ function buildPdsWordContent(){
   if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
   else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
   if(annotator.notesList.length){
-    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40}));
-    annotator.notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30})));
+    out.push(wxPar(wxRun('Notes',{b:true,sz:11}),{before:100,after:40,keepNext:true}));
+    annotator.notesList.forEach(({num,text})=>out.push(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:30,keepNext:true})));
   }
   return out.filter(Boolean).join('');
 }
@@ -6397,25 +6414,31 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
   kids.forEach(k=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs); if(a){am[k.id]={marker:a.marker};pushEntries(a.entries);} });
   const amArg=hasAnnot?am:null;
 
+  // Revision 71, item 4.2: bold (was plain) and larger (was 7pt) — italic retained.
   const path=pathForWord(n);
-  const pathXml=path?wxRun(path,{i:true,sz:7}):'';
+  const pathXml=path?wxRun(path,{b:true,i:true,sz:9}):'';
 
   const totalCols=2+(hasAnnot?1:0)+cols.length;
   const totalW=descW+ratingW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
-  const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:6.5}:{i:true,sz:6.5}),{ind:200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+  // Revision 71, item 4.1: size now matches the row the label precedes (same depth-based formula
+  // buildWordDataRow uses) instead of a fixed 6.5pt — the caller passes that row's own depth.
+  const bannerRow=(label,bold,depth)=>{
+    const sz=Math.max(6.5,8.5-depth*0.5);
+    return wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+  };
 
   const rows=[];
-  if(n.status==='new') rows.push(bannerRow('Installed',true));
+  if(n.status==='new') rows.push(bannerRow('Installed',true,0));
   rows.push(buildWordDataRow(n,0,cols,cfg,amArg,false,colOpts));
   let seenRemoved=false, seenAdded=(n.status==='new');
   kids.forEach(k=>{
-    if(k.status==='removed'&&!seenRemoved){rows.push(bannerRow('Removed',false));seenRemoved=true;}
-    else if(k.status==='new'&&!seenAdded){rows.push(bannerRow('Installed',true));seenAdded=true;}
+    if(k.status==='removed'&&!seenRemoved){rows.push(bannerRow('Removed',false,1));seenRemoved=true;}
+    else if(k.status==='new'&&!seenAdded){rows.push(bannerRow('Installed',true,1));seenAdded=true;}
     rows.push(buildWordDataRow(k,1,cols,cfg,amArg,false,colOpts));
   });
 
   blockNotes.sort((a,b)=>a.num-b.num);
-  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20})).join('');
+  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
 
   return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
     buildWordTblHeader(cols,hasAnnot,colOpts,pathXml)+
@@ -6485,30 +6508,34 @@ function ladAltWordColWidths(colsCount,hasAnnot){
   const numW=Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,colsCount));
   return {labelW,cbW,notesW,numW,hasAnnot};
 }
+// Revision 71, items 2.2/2.3: bottomBdr on every header cell (solid rule under the header), and
+// keepNext throughout this whole table shape (this report has no shared header/row builders of
+// its own to fix once, unlike the group-column tables above, so each function below gets the
+// same treatment individually).
 function buildLadAltWordHeader(cols,hasAnnot,{labelW,cbW,notesW,numW},leftCellContentXml){
   const HSZ=7.5;
-  let r=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0}),{w:labelW});
-  r+=wxTc(wxPar('',{before:0,after:0}),{w:cbW});
-  if(hasAnnot) r+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true});
+  let r=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0,keepNext:true}),{w:labelW,bottomBdr:true});
+  r+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:cbW,bottomBdr:true});
+  if(hasAnnot) r+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true,bottomBdr:true});
   cols.forEach((c,i)=>{
-    r+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center'}),{w:numW,leftBdr:i===0});
+    r+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0,bottomBdr:true});
   });
   return wxTr(r,{h:280,hdr:true});
 }
 function ladAltWordSubjectRow(n,cols,annot,{labelW,cbW,notesW,numW,hasAnnot}){
   const mainDesc=(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'');
   const descRun=n.status==='removed'?wxRun(mainDesc,{i:true,sz:8.5}):n.status==='new'?wxRun(mainDesc,{b:true,sz:8.5}):wxRun(mainDesc,{sz:8.5});
-  const labelCell=wxTc(wxPar(descRun,{before:20,after:20}),{w:labelW});
+  const labelCell=wxTc(wxPar(descRun,{before:20,after:20,keepNext:true}),{w:labelW});
   const ratingVal=(NT.PROTECTION.includes(n.type)&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
-  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:8.5}):'',{before:20,after:20,jc:'right'}),{w:cbW});
-  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true}):'';
-  const blanks=cols.map((c,i)=>wxTc(wxPar('',{before:20,after:20}),{w:numW,leftBdr:i===0})).join('');
+  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:8.5}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
+  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
+  const blanks=cols.map((c,i)=>wxTc(wxPar('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:i===0})).join('');
   return wxTr(labelCell+cbCell+notesCell+blanks);
 }
 function ladAltWordGroupRow(label,src,cols,activeSet,groupId,annot,{labelW,cbW,notesW,numW,hasAnnot}){
-  const labelCell=wxTc(wxPar(wxRun(label,{sz:8.5}),{ind:340,before:20,after:20}),{w:labelW});
-  const cbCell=wxTc(wxPar('',{before:20,after:20}),{w:cbW});
-  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true}):'';
+  const labelCell=wxTc(wxPar(wxRun(label,{sz:8.5}),{ind:340,before:20,after:20,keepNext:true}),{w:labelW});
+  const cbCell=wxTc(wxPar('',{before:20,after:20,keepNext:true}),{w:cbW});
+  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
   const cells=cols.map((c,i)=>{
     let cellXml='';
     if(activeSet.has(c.k)){
@@ -6516,7 +6543,7 @@ function ladAltWordGroupRow(label,src,cols,activeSet,groupId,annot,{labelW,cbW,n
       if((groupId==='nc'||groupId==='newload'||groupId==='rem')&&val!=null&&val<0){isNeg=true;val=Math.abs(val);}
       cellXml=wxRun(rptTxt(val,c.isPf||false,isNeg),{sz:7.5});
     }
-    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right'}),{w:numW,leftBdr:i===0});
+    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
   }).join('');
   return wxTr(labelCell+cbCell+notesCell+cells);
 }
@@ -6525,10 +6552,10 @@ function ladAltWordChildRow(k,cols,ncSet,addedSet,annot,{labelW,cbW,notesW,numW,
   const modifierSuffix=(k.status==='existing'&&!isLd)?' (Net Change)':'';
   const kDesc=(k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
   const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
-  const labelCell=wxTc(wxPar(descRun,{ind:200,before:20,after:20}),{w:labelW});
+  const labelCell=wxTc(wxPar(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW});
   const ratingVal=(NT.PROTECTION.includes(k.type)&&k.capacity?.a!=null)?fmtRpt(k.capacity.a):null;
-  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:7.5}):'',{before:20,after:20,jc:'right'}),{w:cbW});
-  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center'}),{w:notesW,leftBdr:true}):'';
+  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:7.5}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
+  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
   const activeSet=isLd?addedSet:ncSet;
   const cells=cols.map((c,i)=>{
     let cellXml='';
@@ -6538,7 +6565,7 @@ function ladAltWordChildRow(k,cols,ncSet,addedSet,annot,{labelW,cbW,notesW,numW,
       else{val=k._netChange?.[c.k]; if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}}
       cellXml=wxRun(rptTxt(val,c.isPf||false,isNeg),{sz:7.5});
     }
-    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right'}),{w:numW,leftBdr:i===0});
+    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
   }).join('');
   return wxTr(labelCell+cbCell+notesCell+cells);
 }
@@ -6559,10 +6586,13 @@ function buildLadAltWordBlock(n,cols,cfg,cfgSide,annotator,colWidths){
 
   const totalCols=2+(hasAnnot?1:0)+cols.length;
   const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*cols.length;
-  const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:6.5}:{i:true,sz:6.5}),{ind:200,before:10,after:10}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+  // Revision 71, item 4.1: size now matches the row the label precedes — 8.5 for the subject
+  // row's own banner (ladAltWordSubjectRow's own fixed size), 7.5 for a child's (ladAltWordChildRow's) —
+  // instead of a fixed 6.5pt regardless of context. Also item 2.3: keepNext added.
+  const bannerRow=(label,bold,sz)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
 
   const rows=[];
-  if(n.status==='new') rows.push(bannerRow('Installed',true));
+  if(n.status==='new') rows.push(bannerRow('Installed',true,8.5));
   const itemAnnot=annotateGroup(n,null); if(itemAnnot)pushEntries(itemAnnot.entries);
   rows.push(ladAltWordSubjectRow(n,cols,itemAnnot,colWidths));
 
@@ -6574,8 +6604,8 @@ function buildLadAltWordBlock(n,cols,cfg,cfgSide,annotator,colWidths){
   }
   let shownRemoved=false, shownAdded=(n.status==='new');
   kids.forEach(k=>{
-    if(k.status==='removed'&&!shownRemoved){rows.push(bannerRow('Removed',false));shownRemoved=true;}
-    else if(k.status==='new'&&!shownAdded){rows.push(bannerRow('Installed',true));shownAdded=true;}
+    if(k.status==='removed'&&!shownRemoved){rows.push(bannerRow('Removed',false,7.5));shownRemoved=true;}
+    else if(k.status==='new'&&!shownAdded){rows.push(bannerRow('Installed',true,7.5));shownAdded=true;}
     const kAnnot=annotator.annotate(k.rowNotes,k.rowRefs); if(kAnnot)pushEntries(kAnnot.entries);
     rows.push(ladAltWordChildRow(k,cols,ncSet,addedSet,kAnnot,colWidths));
   });
@@ -6589,10 +6619,11 @@ function buildLadAltWordBlock(n,cols,cfg,cfgSide,annotator,colWidths){
     rows.push(ladAltWordGroupRow('Reserve',n._remainingCapacity,cols,remSet,'rem',a,colWidths)); }
 
   blockNotes.sort((a,b)=>a.num-b.num);
-  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20})).join('');
+  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
 
+  // Revision 71, item 4.2: bold (was plain) and larger (was 7pt) — italic retained.
   const path=pathForWord(n);
-  const pathXml=path?wxRun(path,{i:true,sz:7}):'';
+  const pathXml=path?wxRun(path,{b:true,i:true,sz:9}):'';
 
   return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...cols.map(()=>numW)])+
     buildLadAltWordHeader(cols,hasAnnot,colWidths,pathXml)+
