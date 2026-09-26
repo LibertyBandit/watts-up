@@ -242,6 +242,9 @@
     .rpt-onscreen .rpt-grp-first{border-left:2px solid var(--text-muted) !important}
     .rpt-onscreen .rpt-lbl-removed td{font-style:italic;font-size:.66rem;padding-top:.2rem;padding-bottom:.05rem;border:none;background:transparent !important}
     .rpt-onscreen .rpt-lbl-added td{font-weight:700;font-size:.66rem;padding-top:.2rem;padding-bottom:.05rem;border:none;background:transparent !important}
+    /* Revision 71, item 3.4.1: PDS's own Installed/Removed labels match the summary-table body
+       text size (.76rem) instead of the smaller fixed size the other reports' labels use. */
+    .rpt-onscreen .pds-lbl td{font-size:.76rem}
     .rpt-onscreen .rpt-parent-sep td{border-top:2px solid var(--text-muted) !important}
     .rpt-onscreen .rpt-notes-col{width:28px;text-align:center !important;padding:.15rem .1rem !important}
     .rpt-onscreen .rpt-note-marker{font-size:.62rem;color:var(--text-muted)}
@@ -2307,6 +2310,20 @@ function renderTable() {
 // ── POWER DISTRIBUTION SUMMARY (Total Aircraft Load / Generation / Conversion / Distribution only) ──
 const PDS_TYPES=new Set([...NT.ROOT,...NT.GENERATION,...NT.CONVERSION,...NT.DISTRIBUTION]);
 const PDS_GROUP_IDS=['cap','nc','newload','rem'];
+// Revision 71, item 3.3: depth restarted at 0 for each section's own top-level item(s) — rather
+// than the real tree depth — so the DC section's highest-level items get the same indentation
+// (and, in Word, the same text size) as the AC root, instead of inheriting whatever depth they
+// happen to sit at below a TRU/conversion boundary. `ids` must already be in preOrder (ancestors
+// before descendants), which every PDS caller's filtered list already is.
+function pdsLocalDepthMap(ids) {
+  const idSet=new Set(ids);
+  const dm={};
+  ids.forEach(id=>{
+    const p=state.nodes[id]?.parentId;
+    dm[id]=(p!=null&&idSet.has(p))?(dm[p]||0)+1:0;
+  });
+  return dm;
+}
 function pdsCellVal(n,col,ov) {
   const {group,k,isPf}=col;
   if (group==='cap') { const cap=hasCap(n.type)&&n.capacity; return cap?powTd(n.capacity,k):naTd(); }
@@ -2323,21 +2340,35 @@ function pdsThead(cols,hasAnnot) {
     <tr>${cols.map(c=>`<th class="sub-hdr">${c.l}</th>`).join('')}</tr></thead>`;
 }
 function pdsRows(ids,cols,dm,annotator,hasAnyAnnot) {
-  return ids.map(id=>{
-    const n=state.nodes[id]; if (!n) return '';
+  // Revision 71, item 3.4/3.4.2: Installed/Removed banners, shown once per parent (matching the
+  // established convention used everywhere else in the app), directly in the on-screen view.
+  const ncols=1+(hasAnyAnnot?1:0)+cols.length;
+  const emRem=new Set(),emAdd=new Set();
+  const out=[];
+  ids.forEach(id=>{
+    const n=state.nodes[id]; if (!n) return;
+    const pid=n.parentId??'__root__';
+    const d=dm[id]||0;
+    if (n.status==='removed'&&!emRem.has(pid)) {
+      emRem.add(pid);
+      out.push(`<tr class="rpt-lbl-removed pds-lbl"><td colspan="${ncols}" style="padding-left:${d*16}px">Removed</td></tr>`);
+    } else if (n.status==='new'&&!emAdd.has(pid)) {
+      emAdd.add(pid);
+      out.push(`<tr class="rpt-lbl-added pds-lbl"><td colspan="${ncols}" style="padding-left:${d*16}px">Installed</td></tr>`);
+    }
     const ws=n._warnings||[]; const ov=ws.some(w=>w.code==='W3');
     const wn=ws.length>0&&!ov;
     const rCls=ov?'row-warn-r':(wn?'row-warn-y':'');
     const dCls=n.status==='removed'?' style="text-decoration:line-through;opacity:.55"':'';
     const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
     const dl=(esc(n.description)||'<em>unnamed</em>')+rdHtml;
-    const d=dm[id]||0;
     const cells=cols.map(col=>pdsCellVal(n,col,ov)).join('');
     const annot=annotator.annotate(n.rowNotes,n.rowRefs);
     const annotCell=hasAnyAnnot?(annot?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>'):'';
-    return `<tr class="${rCls}">
-      <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>${annotCell}${cells}</tr>`;
-  }).join('');
+    out.push(`<tr class="${rCls}">
+      <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>${annotCell}${cells}</tr>`);
+  });
+  return out.join('');
 }
 function renderPowerDistSummary() {
   const el=document.getElementById('pds-container');
@@ -2349,10 +2380,12 @@ function renderPowerDistSummary() {
   const allIds=preOrder(state.rootIds,state.nodes).filter(id=>{
     const n=state.nodes[id]; return n&&PDS_TYPES.has(n.type)&&n.convRole!=='in';
   });
-  const dm={};
-  preOrder(state.rootIds,state.nodes).forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
   const acIds=allIds.filter(id=>state.nodes[id]?.acDc==='ac');
+  // Revision 71, item 3.3: each section gets its own depth map, restarted at 0, instead of one
+  // depth map spanning the whole tree (see pdsLocalDepthMap).
+  const dcDm=pdsLocalDepthMap(dcIds);
+  const acDm=pdsLocalDepthMap(acIds);
 
   // Row notes/references (Revision 42, copied from Load Analysis Detail's approach): item-level
   // only, no group-scoping — PDS rows are one-per-node, same shape as the original Load Analysis
@@ -2363,8 +2396,8 @@ function renderPowerDistSummary() {
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const dcLbl=acDcVoltageLabel('dc'), acLbl=acDcVoltageLabel('ac');
-  const dcSection=dcIds.length?`<div class="table-section-heading">${dcLbl?`${dcLbl} Summary`:'DC Summary'}</div><table class="summary-table">${pdsThead(dcCols,hasAnyAnnot)}<tbody>${pdsRows(dcIds,dcCols,dm,annotator,hasAnyAnnot)}</tbody></table>`:'';
-  const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${pdsThead(acCols,hasAnyAnnot)}<tbody>${pdsRows(acIds,acCols,dm,annotator,hasAnyAnnot)}</tbody></table>`:'';
+  const dcSection=dcIds.length?`<div class="table-section-heading">${dcLbl?`${dcLbl} Summary`:'DC Summary'}</div><table class="summary-table">${pdsThead(dcCols,hasAnyAnnot)}<tbody>${pdsRows(dcIds,dcCols,dcDm,annotator,hasAnyAnnot)}</tbody></table>`:'';
+  const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${pdsThead(acCols,hasAnyAnnot)}<tbody>${pdsRows(acIds,acCols,acDm,annotator,hasAnyAnnot)}</tbody></table>`:'';
   let html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No Generation, Conversion, or Distribution items to summarize.</div>';
   else if (annotator.notesList.length) html+=`<ol class="rpt-detail-notes">${annotator.notesList.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`;
@@ -6075,17 +6108,18 @@ function wxTr(inner,{h,exact,hdr}={}){
 // Revision 71, items 2.2/2.3: row 2 (the header's own last row) gets bottomBdr on every cell for
 // a solid rule under the whole header, and every paragraph here gets keepNext so the header never
 // separates from the first body row that follows it.
-function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths},leftCellContentXml){
+function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths,hasRating=true},leftCellContentXml){
   const HSZ=7.5;
   const runs=[];
   cols.forEach((c,i)=>{
     if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1,w:colWidths[i]});
     else{runs[runs.length-1].count++;runs[runs.length-1].w+=colWidths[i];}
   });
-  // Row 1: description (vMerge start) | rating (vMerge start) | notes (vMerge start) | group headers
+  // Row 1: description (vMerge start) | rating (vMerge start, Revision 71 item 3.1: omitted for
+  // Power Distribution Summary) | notes (vMerge start) | group headers
   let r1='';
   r1+=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0,keepNext:true}),{w:descW,vm:'start'});
-  r1+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'start'});
+  if(hasRating)r1+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'start'});
   if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   runs.forEach(g=>{
     r1+=wxTc(wxPar(wxRun(g.label,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),
@@ -6094,7 +6128,7 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths},leftC
   // Row 2: description (vMerge cont) | rating (vMerge cont) | notes (vMerge cont) | sub-column labels
   let r2='';
   r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:descW,vm:'cont',bottomBdr:true});
-  r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'cont',bottomBdr:true});
+  if(hasRating)r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'cont',bottomBdr:true});
   if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:notesW,vm:'cont',leftBdr:true,bottomBdr:true});
   cols.forEach((c,i)=>{
     r2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),
@@ -6106,7 +6140,7 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths},leftC
 // Revision 71, item 2.3: every cell's paragraph gets keepNext, so Word resists breaking the page
 // between this row and whichever one follows it (the chain of keepNext across every row in a
 // table discourages a page break landing anywhere inside the table body).
-function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWidths,hasAnnot}){
+function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWidths,hasAnnot,hasRating=true}){
   const isProt=NT.PROTECTION.includes(n.type);
   const isConvIn=n.convRole==='in';
   const isLd=isLoad(n.type);const hasC=hasCap(n.type);
@@ -6117,8 +6151,12 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   const descRun=removed?wxRun(mainDesc,{i:true,sz}):n.status==='new'?wxRun(mainDesc,{b:true,sz}):wxRun(mainDesc,{sz});
   const descCell=wxTc(wxPar(descRun,{ind:indDxa,before:20,after:20,keepNext:true}),{w:descW,topBdr});
   // Revision 42: dedicated Rating column (CB/fuse amps) alongside the description column.
-  const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
-  const ratingCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:ratingW,topBdr});
+  // Revision 71, item 3.1: omitted entirely for Power Distribution Summary (hasRating:false).
+  let ratingCell='';
+  if(hasRating){
+    const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+    ratingCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:ratingW,topBdr});
+  }
   let notesCell='';
   if(hasAnnot){
     const marker=am&&am[n.id]?am[n.id].marker:'';
@@ -6324,20 +6362,34 @@ function buildTablesContent(){
 // PDS_TYPES/PDS_GROUP_IDS). Reuses buildWordTblHeader/buildWordDataRow — the exact same per-cell
 // logic the Load Analysis Summary table (buildTablesContent, above) already uses — since PDS's
 // value groups (Capacity/Net Change/New Load/Reserve) are computed identically; only the ROW
-// SELECTION differs: a flat, type-filtered list at real-tree depth (matching
-// renderPowerDistSummary's own on-screen logic exactly), not a full hierarchical children-of
-// traversal, and PDS never shows Removed/Installed banner rows (the on-screen report doesn't
-// either). One deliberate, low-risk simplification: this reuses buildWordTblHeader/buildWordDataRow
-// as-is, which include a Rating (CB/fuse) column — always blank here since PDS_TYPES excludes
-// Protection nodes entirely, matching the on-screen table's real absence of any such column in
-// effect, just with a harmless empty ~800-DXA column rather than no column at all. Keeping the
-// exact shared functions (rather than building yet another near-duplicate pair without it) was
-// judged the safer tradeoff.
+// SELECTION differs: a flat, type-filtered list at (Revision 71 item 3.3: per-section-restarted,
+// see pdsLocalDepthMap) depth, matching renderPowerDistSummary's own on-screen logic exactly, not a
+// full hierarchical children-of traversal.
+// Revision 71, item 3.1: PDS passes hasRating:false (see buildPdsWordContent), so
+// buildWordTblHeader/buildWordDataRow omit the Rating column entirely for this report.
+// Revision 71, item 3.4/3.4.1: Installed/Removed banners, shown once per parent (matching
+// buildWordSectionRows's own convention) with label size matching the row that follows.
 function buildPdsWordRows(ids,cols,dm,cfg,am,opts){
-  return ids.map(id=>{
-    const n=state.nodes[id]; if(!n) return '';
-    return buildWordDataRow(n,dm[id]||0,cols,cfg,am,false,opts);
-  }).join('');
+  const{descW,ratingW,notesW,colWidths,hasAnnot,hasRating=true}=opts;
+  const totalCols=1+(hasRating?1:0)+(hasAnnot?1:0)+cols.length;
+  const totalW=descW+(hasRating?ratingW:0)+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
+  const emRem=new Set(),emAdd=new Set();
+  const rows=[];
+  ids.forEach(id=>{
+    const n=state.nodes[id]; if(!n) return;
+    const pid=n.parentId??'__root__';
+    const depth=dm[id]||0;
+    const labelSz=Math.max(6.5,8.5-depth*0.5);
+    if(n.status==='removed'&&!emRem.has(pid)){
+      emRem.add(pid);
+      rows.push(wxTr(wxTc(wxPar(wxRun('Removed',{i:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+    }else if(n.status==='new'&&!emAdd.has(pid)){
+      emAdd.add(pid);
+      rows.push(wxTr(wxTc(wxPar(wxRun('Installed',{b:true,sz:labelSz}),{ind:depth*200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined})));
+    }
+    rows.push(buildWordDataRow(n,depth,cols,cfg,am,false,opts));
+  });
+  return rows.join('');
 }
 function buildPdsWordContent(){
   const cfg=reportCfg||defaultPrintCfg();
@@ -6346,10 +6398,12 @@ function buildPdsWordContent(){
   const allIds=preOrder(state.rootIds,state.nodes).filter(id=>{
     const n=state.nodes[id]; return n&&PDS_TYPES.has(n.type)&&n.convRole!=='in';
   });
-  const dm={};
-  preOrder(state.rootIds,state.nodes).forEach(id=>{ const p=state.nodes[id]?.parentId; dm[id]=p===null?0:(dm[p]||0)+1; });
   const dcIds=allIds.filter(id=>state.nodes[id]?.acDc!=='ac');
   const acIds=allIds.filter(id=>state.nodes[id]?.acDc==='ac');
+  // Revision 71, item 3.3: each section's depth restarts at 0 (see pdsLocalDepthMap), matching
+  // the on-screen renderPowerDistSummary's own per-section depth maps exactly.
+  const dcDm=pdsLocalDepthMap(dcIds);
+  const acDm=pdsLocalDepthMap(acIds);
 
   // Local note/reference numbering, restarted for this report — matches the on-screen
   // renderPowerDistSummary's own fresh makeAnnotator() call exactly (not the shared
@@ -6364,25 +6418,29 @@ function buildPdsWordContent(){
   const hasAnnot=Object.keys(am).length>0;
   const amArg=hasAnnot?am:null;
 
-  const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
-  const avail=TOTAL_W-DESC_W-RATING_W-(hasAnnot?NOTES_W:0);
+  // Revision 71, item 3.1: no Rating column, so its width is reclaimed into the value columns
+  // instead of the Rating column now being an unused, no-longer-blank width.
+  const TOTAL_W=13392,DESC_W=2800,NOTES_W=600;
+  const avail=TOTAL_W-DESC_W-(hasAnnot?NOTES_W:0);
   const HSZ=7.5;
   const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ);
   const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ);
-  const acOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:acColWidths,hasAnnot};
-  const dcOpts={descW:DESC_W,ratingW:RATING_W,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot};
+  const acOpts={descW:DESC_W,ratingW:0,notesW:NOTES_W,colWidths:acColWidths,hasAnnot,hasRating:false};
+  const dcOpts={descW:DESC_W,ratingW:0,notesW:NOTES_W,colWidths:dcColWidths,hasAnnot,hasRating:false};
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const al=acDcVoltageLabel('ac'),dl=acDcVoltageLabel('dc');
-  const mkTbl=(ids,cols,label,opts)=>{
+  // Revision 71, item 3.2: Bold 11pt plain text instead of Heading8 for PDS's own Summary labels
+  // specifically (Detail tables and the Load Analysis Summary table are untouched — see 3.2.1).
+  const mkTbl=(ids,cols,label,opts,dm)=>{
     if(!ids.length)return'';
-    return wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
-      wxTableOpen([opts.descW,opts.ratingW,...(opts.hasAnnot?[opts.notesW]:[]),...opts.colWidths])+
+    return wxPar(wxRun(label,{b:true,sz:11}),{before:160,after:60,keepNext:true})+
+      wxTableOpen([opts.descW,...(opts.hasAnnot?[opts.notesW]:[]),...opts.colWidths])+
       buildWordTblHeader(cols,opts.hasAnnot,opts)+
       buildPdsWordRows(ids,cols,dm,cfg,amArg,opts)+`</w:tbl>`;
   };
-  const acTbl=mkTbl(acIds,acCols,al?`${al} Summary`:'AC Summary',acOpts);
-  const dcTbl=mkTbl(dcIds,dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts);
+  const acTbl=mkTbl(acIds,acCols,al?`${al} Summary`:'AC Summary',acOpts,acDm);
+  const dcTbl=mkTbl(dcIds,dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts,dcDm);
   const out=[];
   const spacerP=wxPar('',{before:120,after:0});
   if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}

@@ -4652,6 +4652,58 @@ shallower depth-1 label showed a distinctly larger 8pt, proving the formula is l
 accidentally still constant. A full `createNewWordReport()` round-trip produced a complete
 document with zero parse errors. Clean console.
 
+### Phase C: Power Distribution Summary specifics (item 3)
+
+*Shipped 2026-09-26.*
+
+**Rating column removed** (item 3.1): `buildWordTblHeader` and `buildWordDataRow` gained an
+optional `hasRating` flag (default `true`, so the Load Analysis Summary table's own Rating column
+is untouched); PDS now passes `hasRating:false` and omits `ratingW` from its own `wxTableOpen` grid
+entirely — not just a zero-width column, the column doesn't exist at all. Its former width is
+reclaimed into the value columns instead of sitting unused.
+
+**Heading style** (items 3.2/3.2.1): PDS's own "115 VAC Summary"/"28 VDC Summary" heading changed
+from `pStyle Heading8` to a plain paragraph with a bold, 11pt run — scoped to `buildPdsWordContent`'s
+own `mkTbl` only. `buildTablesContent` (Load Analysis Summary, which happens to produce an
+identically-worded heading) and both Detail table builders keep `Heading8` unchanged, per 3.2.1's
+explicit carve-out.
+
+**DC section restart** (item 3.3): new shared `pdsLocalDepthMap(ids)` computes depth restarted at 0
+for each section's own top-level item(s), instead of real tree depth — a DC item whose nearest
+qualifying PDS ancestor is a TRU (excluded from PDS's own filtered `dcIds`/`acIds`) now gets depth 0,
+matching the AC root's own indentation. Since `buildWordDataRow` ties both indentation (`ind`) and
+label text size (`sz`) to the same `depth` parameter, restarting the depth map fixes both at once —
+confirmed live (see below) that a DC top-level item's Word row jumped from 7.0pt (its old real-depth-3
+size) to 8.5pt (matching the AC root) purely from the depth-map change, no separate size-only fix
+needed. `renderPowerDistSummary` gets the identical treatment on-screen — one restarted depth map per
+section instead of one global map — for indentation there (the on-screen table has no depth-based
+text sizing to restart in the first place, confirmed unchanged from before).
+
+**Installed/Removed banners** (items 3.4/3.4.1/3.4.2): PDS had no banner logic at all before this
+phase, in Word or on-screen. `buildPdsWordRows` gained the same per-parent-deduped banner pattern
+`buildWordSectionRows` already uses (bold "Installed" / italic "Removed", shown once per parent, not
+once per row), with label size following the same `Math.max(6.5, 8.5-depth*0.5)` formula as the row
+it precedes — using the section's own restarted depth, so a banner at the DC section's own top level
+matches the AC root's size too. Per 3.4.2's explicit note, the identical banner treatment (existence
+*and* size-matching, not just existence) was added to `pdsRows()`'s on-screen rendering as well: a new
+`.pds-lbl` CSS class overrides the existing `.rpt-lbl-removed`/`.rpt-lbl-added` classes' fixed
+`.66rem` size to `.76rem` (`.summary-table`'s own body text size) scoped so it doesn't affect the
+Load Analysis Summary table, which shares those same base classes and table shell but wasn't asked
+for this treatment.
+
+Verified live with a seeded tree (AC Root → AC Bus → TRU → DC Bus 1 [new] → DC Feeder 1 [removed] →
+DC Bus 2): on-screen, DC Bus 1 rendered at 0px indentation (was 48px under the old global depth) with
+an "Installed" banner directly above it also at 0px, and DC Feeder 1's "Removed" banner at 16px
+(depth 1, restarted) rather than the old 32px; `buildPdsWordContent()` confirmed the same DC Bus 1 row
+at `ind:0, sz:17` (8.5pt) and the "Removed" banner at `ind:200, sz:16` (8pt, italic), the "Installed"
+banner at `ind:0, sz:17` (8.5pt, bold), and both PDS tables' `<w:tblGrid>` carrying exactly 9
+`gridCol`s (1 description + 8 value columns, no rating, no notes since this tree has no row
+notes/references) instead of 10. Cross-checked `buildTablesContent()` in the same session to confirm
+zero regression: its own "115 VAC Summary" heading still carries `pStyle Heading8`, and its grid
+still includes a Rating column. A full `createNewWordReport()`-equivalent round trip
+(`fillWattsUpDocx` against the bundled template, all 15 content controls) produced a complete
+`word/document.xml` with zero parse errors. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
