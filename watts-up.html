@@ -6673,7 +6673,11 @@ function buildLadHorizontalWordContent(){
   }
 
   // Revision 72 Follow-Up: TOTAL_W sized against Letter portrait, not landscape — see pctW's comment.
-  const TOTAL_W=9360,DESC_W=2800,RATING_W=800,NOTES_W=600;
+  // Revision 72 Follow-Up (2): RATING_W matches NOTES_W — the Rating cell only ever needs to fit a
+  // parenthesized amperage like "(999 A)" (7 characters including the parens) plus a little
+  // padding, which is comfortably covered by the same width already used for the Notes column's own
+  // short footnote markers; the previous 800 was noticeably wider than that column needs.
+  const TOTAL_W=9360,DESC_W=2800,NOTES_W=600,RATING_W=NOTES_W;
   const HSZ=7.5;
   const acLayout=layoutReportWidths(AC_GROUPS,acCols,TOTAL_W,DESC_W,RATING_W,hasAnyAnnot?NOTES_W:0,HSZ);
   const dcLayout=layoutReportWidths(DC_GROUPS,dcCols,TOTAL_W,DESC_W,RATING_W,hasAnyAnnot?NOTES_W:0,HSZ);
@@ -6717,7 +6721,12 @@ function ladAltActiveKeySet(groupId,cfgSec){
 function ladAltWordColWidths(colsCount,hasAnnot){
   const TOTAL_W=5000;
   const labelW=Math.round(TOTAL_W*0.24);
-  const cbW=Math.round(TOTAL_W*0.08);
+  // Revision 72 Follow-Up (2): matches the Notes column's own 0.04 fraction (used just below,
+  // conditionally) — the Rating cell only needs room for a parenthesized amperage like "(999 A)"
+  // (7 characters) plus a little padding, comfortably covered at the Notes column's own width; the
+  // previous 0.08 was noticeably wider than that needs. Not written as `=notesW` directly since
+  // notesW is conditionally 0 when there are no notes, but the Rating cell always renders.
+  const cbW=Math.round(TOTAL_W*0.04);
   const notesW=hasAnnot?Math.round(TOTAL_W*0.04):0;
   // Revision 72 Follow-Up: floors numW at the same value-width minimum colMins enforces elsewhere
   // (7 characters — e.g. the digits in "(45,000)" — against the same portrait-sized 9360 reference;

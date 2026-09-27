@@ -4959,6 +4959,28 @@ trip produced zero parse errors. Clean console.
 
 Requirements doc: new §72F section (this one). **Committed, not pushed.**
 
+**Follow-up (2), same day**: the percentage-width fix above was tried live and confirmed acceptable
+as-is, including the known portrait/14-column limit — the user's own stated position is that if a
+table genuinely doesn't fit a portrait page, reformatting that section to landscape is their own
+call to make, not something the generator needs to solve for. Separately, the Rating (CB/fuse
+amperage) column on the two Detail reports (`buildLadHorizontalWordContent`,
+`ladAltWordColWidths`/Load Analysis Detail Vertical) was noticeably wider than needed — the cell
+only ever holds a parenthesized amperage like "(999 A)" (7 characters including the parens) plus a
+little padding. Narrowed both to match their own report's Notes column width exactly (the user's own
+suggestion, confirmed sufficient by them in the live rendered document): LAD-Horizontal's
+`RATING_W` changed from a fixed 800 to `NOTES_W` (600) directly; LAD-Vertical's `cbW` changed from
+`TOTAL_W*0.08` to `TOTAL_W*0.04`, the same fraction its own `notesW` already uses when notes are
+present (not written as a direct reference to `notesW`, since that value is conditionally 0 when a
+report has no notes at all, while the Rating cell always renders). Deliberately scoped to the two
+Detail reports only, per the user's own wording — Load Analysis Summary's identically-named
+`RATING_W=800` constant is untouched, so its Rating column keeps its original width.
+
+Verified live: both Detail builders still produce well-formed XML; confirmed Load Analysis Summary's
+own Rating column width is unchanged (still 427 in its own pct terms) while LAD-Horizontal's dropped
+from 427 to 321 (now matching its own Notes column) and LAD-Vertical's `cbW` dropped from 400 to 200
+(now matching its own `notesW`). A full `fillWattsUpDocx` round trip produced zero parse errors.
+Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
