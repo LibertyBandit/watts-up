@@ -6900,15 +6900,21 @@ const xe=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt
 // exists in the document and was updated" from "this tag isn't present at all" — needed once the
 // template is a user-customizable external file rather than our own fixed, known-good one: a tag
 // the user deleted (or a template that predates it) must be reported, not silently ignored.
-function fillSdtText(xml,tag,value,found){
+// Revision 73 (header/footer sync fix): the last parameter is now a cumulative tag->hit-count map
+// shared across every XML part a single sync pass touches (body, then every header/footer part
+// found), rather than each call independently deciding "not found here" means "missing" — a tag
+// that lives only in a header, not the body, was being wrongly reported as missing every time
+// under the old per-call logic. fillWattsUpDocx now makes the actual missing/not-missing call once,
+// after every part has had a chance to contribute a hit.
+function fillSdtText(xml,tag,value,hitCounts){
   const sv=xe(value||'');
   const tXml=(sv.startsWith(' ')||sv.endsWith(' '))?`<w:t xml:space="preserve">${sv}</w:t>`:`<w:t>${sv}</w:t>`;
   const marker=`<w:tag w:val="${tag}"/>`;
-  let result=xml,searchFrom=0,hits=0;
+  let result=xml,searchFrom=0,hitCount=0;
   while(true){
     const idx=result.indexOf(marker,searchFrom);
     if(idx<0)break;
-    hits++;
+    hitCount++;
     const s0=result.lastIndexOf('<w:sdt>',idx);
     const c0=result.indexOf('<w:sdtContent>',s0);
     const c1=result.indexOf('</w:sdtContent>',c0)+15;
@@ -6917,16 +6923,16 @@ function fillSdtText(xml,tag,value,found){
     result=result.slice(0,c0)+newChunk+result.slice(c1);
     searchFrom=c0+newChunk.length;
   }
-  if (found&&!hits) found.missing.push(tag);
+  if (hitCounts&&hitCount) hitCounts[tag]=(hitCounts[tag]||0)+hitCount;
   return result;
 }
-function fillSdtBlock(xml,tag,contentXml,found){
+function fillSdtBlock(xml,tag,contentXml,hitCounts){
   const marker=`<w:tag w:val="${tag}"/>`;
-  let result=xml,searchFrom=0,hits=0;
+  let result=xml,searchFrom=0,hitCount=0;
   while(true){
     const idx=result.indexOf(marker,searchFrom);
     if(idx<0)break;
-    hits++;
+    hitCount++;
     const s0=result.lastIndexOf('<w:sdt>',idx);
     const c0=result.indexOf('<w:sdtContent>',s0);
     const c1=result.indexOf('</w:sdtContent>',c0)+15;
@@ -6934,7 +6940,7 @@ function fillSdtBlock(xml,tag,contentXml,found){
     result=result.slice(0,c0)+newChunk+result.slice(c1);
     searchFrom=c0+newChunk.length;
   }
-  if (found&&!hits) found.missing.push(tag);
+  if (hitCounts&&hitCount) hitCounts[tag]=(hitCounts[tag]||0)+hitCount;
   return result;
 }
 function updateDocProp(xml,name,value,found){
@@ -6999,56 +7005,72 @@ function buildForPcm(tag,builderFn){
   if (!state.analyses.pcm) return `<w:p><w:r><w:t xml:space="preserve">${xe(tag+' — no data')}</w:t></w:r></w:p>`;
   return buildForAnalysis('pcm',builderFn);
 }
+// Every tag fillWattsUpXmlPart knows how to fill, in the same order it fills them — used once at
+// the end of fillWattsUpDocx to decide which ones truly never matched anywhere (see hitCounts
+// there), not per individual XML part.
+const WU_FILL_TAGS=['wu-docnumber','wu-revision','wu-make','wu-model','wu-designation','wu-serial',
+  'wu-flightphase','wu-preparedby','wu-interval','wu-revdate','wu-intro','wu-general-notes',
+  'wu-references','wu-compliance','wu-tables','wu-pds','wu-lad-horizontal','wu-lad-vertical',
+  'wu-references-pcm','wu-tables-pcm','wu-pds-pcm','wu-lad-horizontal-pcm','wu-lad-vertical-pcm'];
+// Revision 73 (header/footer sync fix): the actual fill logic, extracted so the exact same full set
+// of tags/content can run against ANY XML part — the body, or any header/footer part the document
+// happens to have — instead of only the body getting the complete set while header2.xml
+// specifically got a hardcoded 5-tag subset. `hitCounts` accumulates across every call this whole
+// sync makes (see fillWattsUpDocx), so a tag that only lives in a header, not the body, is still
+// correctly recognized as present.
+function fillWattsUpXmlPart(xml,st,hitCounts){
+  const m=st.meta;
+  [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
+   ['wu-make',m.make],['wu-model',m.model],
+   ['wu-designation',m.marketingDesignation||m.designation],
+   ['wu-serial',m.serialNumber],['wu-flightphase',m.flightPhase],
+   ['wu-preparedby',m.preparedBy],['wu-interval',m.interval]
+  ].forEach(([tag,val])=>{xml=fillSdtText(xml,tag,val,hitCounts);});
+  // wu-revdate has multiple runs — use block replacement
+  xml=fillSdtBlock(xml,'wu-revdate',wuRevDateParaXml(m),hitCounts);
+  xml=fillSdtBlock(xml,'wu-intro',buildBodyTextParas(m.introText),hitCounts);
+  xml=fillSdtBlock(xml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes),hitCounts);
+  xml=fillSdtBlock(xml,'wu-references',buildForActiveProject(()=>buildRefsParas()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-compliance',buildBodyTextParas(m.complianceText),hitCounts);
+  xml=fillSdtBlock(xml,'wu-tables',buildForActiveProject(()=>buildTablesContent()),hitCounts);
+  // Revision 70 (Phase G), items 3.2.2-3.2.4: Active Project's Power Distribution Summary and
+  // both Load Analysis Detail layouts, alongside the existing Load Analysis Summary (wu-tables).
+  xml=fillSdtBlock(xml,'wu-pds',buildForActiveProject(()=>buildPdsWordContent()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-lad-horizontal',buildForActiveProject(()=>buildLadHorizontalWordContent()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-lad-vertical',buildForActiveProject(()=>buildLadVerticalWordContent()),hitCounts);
+  // Revision 70 (Phase H), item 3.3: parallel controls scoped to Previous & Concurrent
+  // Modifications specifically, regardless of which analysis is currently on-screen.
+  xml=fillSdtBlock(xml,'wu-references-pcm',buildForPcm('wu-references-pcm',()=>buildRefsParas()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-tables-pcm',buildForPcm('wu-tables-pcm',()=>buildTablesContent()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-pds-pcm',buildForPcm('wu-pds-pcm',()=>buildPdsWordContent()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-lad-horizontal-pcm',buildForPcm('wu-lad-horizontal-pcm',()=>buildLadHorizontalWordContent()),hitCounts);
+  xml=fillSdtBlock(xml,'wu-lad-vertical-pcm',buildForPcm('wu-lad-vertical-pcm',()=>buildLadVerticalWordContent()),hitCounts);
+  return xml;
+}
 // Fills every Watts-Up-managed content control/property in an already-loaded zip with the
 // current app state, in place. Returns a report of anything expected but not found — a tag the
 // document doesn't have (deleted by the user, or a template predating it) is never fatal, just
 // noted, matching the rest of this app's warning-banner convention rather than blocking the
 // whole sync over one missing section.
+// Revision 73 (header/footer sync fix): now scans every word/header*.xml and word/footer*.xml part
+// the document actually has, not just word/header2.xml (the bundled template's own header) — a
+// content control the user added to any header or footer, anywhere in the document, using any of
+// the tags above, is now found and filled the same way the body is. Absent header/footer parts are
+// completely normal (most documents don't need one) and are never reported as missing.
 async function fillWattsUpDocx(zip,st){
   const found={missing:[],missingProps:[],missingFiles:[]};
-  const m=st.meta;
+  const hitCounts={};
   const docFile=zip.file('word/document.xml');
   if (docFile) {
-    let docXml=await docFile.async('string');
-    [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
-     ['wu-make',m.make],['wu-model',m.model],
-     ['wu-designation',m.marketingDesignation||m.designation],
-     ['wu-serial',m.serialNumber],['wu-flightphase',m.flightPhase],
-     ['wu-preparedby',m.preparedBy],['wu-interval',m.interval]
-    ].forEach(([tag,val])=>{docXml=fillSdtText(docXml,tag,val,found);});
-    // wu-revdate has multiple runs — use block replacement
-    docXml=fillSdtBlock(docXml,'wu-revdate',wuRevDateParaXml(m),found);
-    docXml=fillSdtBlock(docXml,'wu-intro',buildBodyTextParas(m.introText),found);
-    docXml=fillSdtBlock(docXml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes),found);
-    docXml=fillSdtBlock(docXml,'wu-references',buildForActiveProject(()=>buildRefsParas()),found);
-    docXml=fillSdtBlock(docXml,'wu-compliance',buildBodyTextParas(m.complianceText),found);
-    docXml=fillSdtBlock(docXml,'wu-tables',buildForActiveProject(()=>buildTablesContent()),found);
-    // Revision 70 (Phase G), items 3.2.2-3.2.4: Active Project's Power Distribution Summary and
-    // both Load Analysis Detail layouts, alongside the existing Load Analysis Summary (wu-tables).
-    docXml=fillSdtBlock(docXml,'wu-pds',buildForActiveProject(()=>buildPdsWordContent()),found);
-    docXml=fillSdtBlock(docXml,'wu-lad-horizontal',buildForActiveProject(()=>buildLadHorizontalWordContent()),found);
-    docXml=fillSdtBlock(docXml,'wu-lad-vertical',buildForActiveProject(()=>buildLadVerticalWordContent()),found);
-    // Revision 70 (Phase H), item 3.3: parallel controls scoped to Previous & Concurrent
-    // Modifications specifically, regardless of which analysis is currently on-screen.
-    docXml=fillSdtBlock(docXml,'wu-references-pcm',buildForPcm('wu-references-pcm',()=>buildRefsParas()),found);
-    docXml=fillSdtBlock(docXml,'wu-tables-pcm',buildForPcm('wu-tables-pcm',()=>buildTablesContent()),found);
-    docXml=fillSdtBlock(docXml,'wu-pds-pcm',buildForPcm('wu-pds-pcm',()=>buildPdsWordContent()),found);
-    docXml=fillSdtBlock(docXml,'wu-lad-horizontal-pcm',buildForPcm('wu-lad-horizontal-pcm',()=>buildLadHorizontalWordContent()),found);
-    docXml=fillSdtBlock(docXml,'wu-lad-vertical-pcm',buildForPcm('wu-lad-vertical-pcm',()=>buildLadVerticalWordContent()),found);
-    zip.file('word/document.xml',docXml);
+    zip.file('word/document.xml',fillWattsUpXmlPart(await docFile.async('string'),st,hitCounts));
   } else found.missingFiles.push('word/document.xml');
-  // header2.xml is specific to the bundled template's own layout — an externally-restructured
-  // document may not have this exact header part (different header file, or none at all), so
-  // this is a soft skip (noted, not thrown) rather than the hard requirement it is for our own
-  // internal template.
-  const hdrFile=zip.file('word/header2.xml');
-  if (hdrFile) {
-    let hdrXml=await hdrFile.async('string');
-    [['wu-docnumber',m.documentNumber],['wu-revision',m.revisionNumber||m.revisionLevel],
-     ['wu-make',m.make],['wu-model',m.model],['wu-serial',m.serialNumber]
-    ].forEach(([tag,val])=>{hdrXml=fillSdtText(hdrXml,tag,val,found);});
-    zip.file('word/header2.xml',hdrXml);
-  } else found.missingFiles.push('word/header2.xml');
+  const hfNames=Object.keys(zip.files).filter(n=>/^word\/(header|footer)\d*\.xml$/.test(n));
+  for (const name of hfNames) {
+    const f=zip.file(name);
+    if (!f) continue;
+    zip.file(name,fillWattsUpXmlPart(await f.async('string'),st,hitCounts));
+  }
+  WU_FILL_TAGS.forEach(tag=>{ if(!hitCounts[tag]) found.missing.push(tag); });
   await writeWattsUpMetaParts(zip,st,found);
   return found;
 }

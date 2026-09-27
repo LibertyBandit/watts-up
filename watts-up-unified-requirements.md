@@ -4981,6 +4981,44 @@ from 427 to 321 (now matching its own Notes column) and LAD-Vertical's `cbW` dro
 (now matching its own `notesW`). A full `fillWattsUpDocx` round trip produced zero parse errors.
 Clean console.
 
+## 73. Header/Footer Content Control Sync Fix
+
+*Shipped 2026-09-27.*
+
+User reported: content controls added to a Word document's header were not being detected or
+updated by Sync. Root cause traced directly in `fillWattsUpDocx`: it only ever scanned
+`word/document.xml` (the body) for the full set of Watts-Up tags, and `word/header2.xml`
+specifically — hardcoded by name, matching only the bundled template's own header — for a small,
+hardcoded 5-tag subset (`wu-docnumber`/`wu-revision`/`wu-make`/`wu-model`/`wu-serial`). A content
+control the user added to a *different* header/footer part, or using *any other* tag (e.g.
+`wu-interval`, `wu-flightphase`, or even a body-sized block like `wu-references`), was silently never
+touched at all.
+
+Extracted the full fill sequence (every tag, both plain-text and block replacement) into a new
+`fillWattsUpXmlPart(xml,st,hitCounts)`, now run against the body *and* every `word/header*.xml`/
+`word/footer*.xml` part the document actually has (`Object.keys(zip.files)` scanned by name pattern,
+not a hardcoded filename) — a content control in any header or footer, using any of the known tags,
+is now filled exactly like the body is. Absent header/footer parts are normal (most documents don't
+need one) and are never reported as missing.
+
+This required also reworking how a tag gets reported as "missing" in the post-sync summary: the old
+per-call logic (`fillSdtText`/`fillSdtBlock` immediately deciding "not found in *this* XML string"
+meant "missing") would have wrongly flagged every tag that lives only in a header, not the body, as
+missing on every sync — the exact opposite of the fix's own goal. Changed the last parameter of both
+functions from an immediate missing-list push to a cumulative tag→hit-count map (`hitCounts`),
+shared across every part a sync pass touches; `fillWattsUpDocx` now makes the actual missing/present
+call once, after the body and every header/footer part have all had a chance to contribute a hit.
+
+Verified live against the bundled template: fabricated an extra `word/header3.xml` part (not part of
+the real template) containing a `wu-interval` content control in proper CT_SdtPr child order, ran a
+full sync, and confirmed it was correctly filled with a distinctive test value — proving a control
+in an arbitrary header part, not just `header2.xml`, is now reached. Cross-checked the "missing"
+aggregation both ways: with the fabricated header present, `wu-interval` correctly does *not* appear
+in the missing list (a genuine hit, just not in the body); with it absent (a fresh template load),
+`wu-interval` correctly *does* appear (this bundled template genuinely lacks it anywhere), confirming
+the aggregation change didn't mask real gaps while fixing the false-positive ones. Both
+`word/document.xml` and `word/header2.xml` remained well-formed after the fill. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support
