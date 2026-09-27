@@ -4864,6 +4864,101 @@ this one). Clean console.
 
 Revision 72 is now complete — all 3 phases (A-C) shipped and verified.
 
+## 72F. Revision 72 Follow-Up: Column Width Safety + reportCfg Persistence
+
+*Shipped 2026-09-26.*
+
+Two items raised after trying Revision 72's percentage-width tables live: (1) with the program's
+default report column settings selected, the rightmost "Reserve" column was squeezing its header
+label and larger numeric values onto two lines; (2) report column-selection settings (`reportCfg`)
+should travel with the saved project (JSON file or the Word file's embedded data) instead of
+resetting to defaults on every load.
+
+**Column width safety.** Root-caused as two compounding issues, both in the shared width-computation
+math the percentage-width conversion (§72 Phase B) sits on top of:
+
+1. `computeColWidths`'s minimum-width enforcement only ever considered a group's own HEADER LABEL
+   text (e.g., "Reserve," 7 characters) — it never accounted for how wide the NUMBER VALUES a
+   column actually holds could get (a large signed total like "(45,000)" is comparably wide, and the
+   original check had no equivalent for it at all). Fixed with a new `colMins(groups,cols,pt)`: each
+   column's minimum is now whichever is larger of the header-word check (unchanged) or a worst-case
+   value-width estimate (~7 characters for a regular numeric column, ~4 for a power-factor one, e.g.
+   "0.85").
+2. The percentage conversion's reference width (`pctW`'s `totalDxa`) was still the *landscape* page
+   width (13392) even after §72 Phase B made tables percentage-based — a column's minimum, computed
+   and converted against that generous reference, could still render below its own minimum once
+   placed on a narrower (portrait) page, since the same percentage share is a smaller absolute width
+   there. Changed to a portrait-sized reference (9360 — Letter portrait, 12240 wide, assuming
+   standard 1" margins, since this document's actual portrait margins aren't known from here) in the
+   three builders that compute column widths this way (`buildTablesContent`, `buildPdsWordContent`,
+   `buildLadHorizontalWordContent`), so a column's guaranteed minimum holds even on the narrowest
+   page it might land on; the same share simply renders wider on landscape, which is harmless.
+
+A third, deeper issue surfaced while verifying the first two: the *previous* per-column formula
+(`Math.max(naive, minimum)` per column independently) let minimum-enforced columns grab extra space
+without any other column's share shrinking to compensate, so a wide column selection's widths could
+collectively sum to well over the table's own declared 100% — depending on how Word happens to
+handle an over-100% table (unverified behavior this project has no way to test directly, only
+structural/XML validity). Replaced with `redistribute(mins,avail)`: every column gets at least its
+own minimum, whatever's left over is split evenly across all of them, and if the minimums alone
+already exceed `avail`, every column is shrunk proportionally so the set still sums to exactly
+`avail` — guaranteed, rather than assumed. Layered underneath that, `layoutReportWidths(...)` also
+lets the **description column** shrink (down to a 1800-twip floor, still comfortably wide for a
+typical description) to make room for value columns under pressure, rather than making numeric
+columns absorb a shortfall around an unyielding description width — matching the app's own existing,
+accepted tradeoff that a description may wrap onto multiple lines, while a header or number must not.
+`ladAltWordColWidths` (Load Analysis Detail Vertical, not directly reported but the same underlying
+gap) got an analogous minimum floor for its own shared value column.
+
+**Known remaining limit, by design, not a bug**: with the *full default* AC column set (14 value
+columns) selected, the description column already at its floor still can't free up enough room for
+every column to reach its own full ideal minimum on a portrait page — verified directly (a seeded
+50,000 VA-scale tree): the Reserve column improved from roughly 428 to about 502 twips of actual
+portrait width through this fix, but that's still short of the ~659-twip ideal for a 7-character
+value. There simply isn't enough physical page width for 14 meaningfully-sized columns plus a
+readable description on a portrait page — no width formula changes that. With a more modest column
+selection (verified with a 4-column case: Capacity/Net Change/Reserve), Reserve comfortably exceeds
+its minimum (about 1423 twips) with no tightness at all. Reducing the columns shown via Report
+Settings remains the practical answer for a wide column selection specifically on a portrait page.
+
+Verified live: all 4 Word table builders (`buildTablesContent`/`buildPdsWordContent`/
+`buildLadHorizontalWordContent`/`buildLadVerticalWordContent`) still produce well-formed XML;
+confirmed the 14-column default AC set's per-column gridCol/tcW values now sum to almost exactly
+5000 (within ordinary rounding) instead of overshooting it by 30%+ as an intermediate version of
+this fix did before the redistribute/description-shrink logic was added; confirmed the 4-column
+modest case is unaffected (no shrinking needed, Reserve already comfortably wide). A full
+`fillWattsUpDocx`-against-the-bundled-template round trip produced zero parse errors. Clean console.
+
+**reportCfg persistence.** `reportCfg` was a standalone module-level variable (`let reportCfg=null`),
+entirely outside `state` — never included in the JSON export (`snapshotState`/`doExport`), never
+restored by JSON import (`doImport`), and never written into or read back from the Word file's
+embedded project data (`writeWattsUpMetaParts`/`importDocx`), so it silently reset to
+`defaultPrintCfg()` on every fresh load regardless of what the user had last selected.
+
+Added explicitly at every save/load site rather than folding `reportCfg` onto `state` itself (which
+would have required touching every one of its ~14 scattered read/write call sites for no real
+benefit): `snapshotState()` now includes `reportCfg` as a top-level sibling of `meta`/`analyses`/etc.
+(covers both `doExport()`'s JSON file save and `persist()`'s localStorage autosave in one change);
+`writeWattsUpMetaParts` spreads `reportCfg` alongside the real `state` object before stringifying,
+without mutating `state` itself, so it round-trips through the Word file's embedded JSON exactly
+like every other field already does. On the read side: `doImport`, `importDocx`, and the launch
+dialog's "resume" branch each now do `reportCfg = parsed.reportCfg || defaultPrintCfg()` right after
+assigning the new `state` — falling back to defaults exactly when the field is missing, per the
+"if that data is missing on load, set to the defaults" request, with no special-casing needed since
+this is a brand new field with no legacy partial-format history to reconcile. `doNewProject()` and
+the launch dialog's "open" fallback baseline both now also reset `reportCfg=null` alongside their
+existing `collapsed=new Set()` reset, so starting fresh doesn't inherit whatever was last selected
+in a previous project.
+
+Verified live: a distinctive, non-default `reportCfg` (Reserve group's active keys changed,
+`convInNcOnly` flipped) round-tripped byte-for-byte through both `snapshotState()`→`JSON.parse` and
+`writeWattsUpMetaParts()`→`importDocx`'s own extraction logic; confirmed a `reportCfg`-free object
+(simulating a pre-existing save from before this feature) correctly falls back to
+`defaultPrintCfg()` instead of throwing or leaving it `undefined`. A full `fillWattsUpDocx` round
+trip produced zero parse errors. Clean console.
+
+Requirements doc: new §72F section (this one). **Committed, not pushed.**
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support

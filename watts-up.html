@@ -1855,7 +1855,10 @@ function snapshotState() {
     return a?{label:a.label,introText:a.introText,generalNotes:a.generalNotes,references:a.references,
       rowNoteDefs:a.rowNoteDefs,nodes:strip(a.nodes),rootIds:a.rootIds}:null;
   };
-  return {meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved};
+  // Revision 72 Follow-Up: report column-selection settings (reportCfg) travel with the project
+  // now, instead of resetting to defaults every time a file is loaded — see doImport/importDocx
+  // below for the read-back half, and writeWattsUpMetaParts for the Word-file equivalent.
+  return {meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved,reportCfg};
 }
 
 function persist() {
@@ -1916,7 +1919,7 @@ function doImport(file) {
     try {
       const p=JSON.parse(e.target.result);
       migrateLegacy(p);validateImport(p);
-      state=p;recalc();renderAll();persist();
+      state=p;reportCfg=p.reportCfg||defaultPrintCfg();recalc();renderAll();persist();
     } catch(err){alert('Import failed: '+err.message);}
   };
   r.readAsText(file);
@@ -1980,7 +1983,7 @@ async function importDocx(file){
           .map(text=>({key:uid(),text,sharedPeerKey:null}));
       }
     }
-    state=parsed;recalc();renderAll();persist();
+    state=parsed;reportCfg=parsed.reportCfg||defaultPrintCfg();recalc();renderAll();persist();
   }catch(err){alert('Import failed: '+err.message);}
 }
 
@@ -6350,11 +6353,12 @@ function buildRefsParas(){
     `</w:p>`
   ).join('');
 }
-// Per-column widths: each column starts at an even share of the available width, but is
-// widened if needed so its group's longest unbreakable word (e.g. "Existing") still fits
-// on one line — multi-word labels may still wrap between words, which is acceptable.
-function computeColWidths(groups,cols,avail,pt){
-  const naive=Math.floor(avail/cols.length);
+// Revision 72 Follow-Up: every value column's own minimum — enough room for its group's longest
+// unbreakable header word (e.g. "Existing") AND its own worst-case VALUE, whichever is larger. A
+// single-column group like "Reserve" has a short header but can hold a large signed total (e.g.
+// "(45,000)", ~7-8 characters), wider than most group labels' longest word — the header-only check
+// this used to be missed that entirely. A power-factor column ("0.85") never needs more than ~4.
+function colMins(groups,cols,pt){
   const counts={};
   cols.forEach(c=>{counts[c.group]=(counts[c.group]||0)+1;});
   const groupMinPerCol={};
@@ -6365,15 +6369,73 @@ function computeColWidths(groups,cols,avail,pt){
     const groupW=Math.ceil(longest*pt*9.5)+160; // ~9.5 DXA/char/pt (bold) + cell padding
     groupMinPerCol[gid]=Math.ceil(groupW/counts[gid]);
   });
-  return cols.map(c=>Math.max(naive,groupMinPerCol[c.group]||0));
+  return cols.map(c=>{
+    const valChars=c.isPf?4:7;
+    const valMinW=Math.ceil(valChars*pt*9.5)+160;
+    return Math.max(groupMinPerCol[c.group]||0,valMinW);
+  });
 }
-// Revision 72, item 2.1: converts a real dxa width (computed against a nominal 13392-wide
-// landscape reference — kept purely so computeColWidths's legibility-minimum math above stays a
-// meaningful physical measurement) into Word's percentage-of-table unit (fiftieths of a percent,
-// out of 5000 = 100%) for wxTc/wxTableOpen. Every one of the 4 Word table builders below runs its
-// own dxa math through this at the end, so the RATIOS between columns are unchanged but the table
-// itself (via wxTableOpen's w:tblW type="pct") now stretches to fill whatever page/section width
-// it's actually placed on — portrait or landscape — instead of assuming landscape's width always.
+// Distributes `avail` across `mins.length` columns so the result always sums to exactly `avail` —
+// every column gets at least its own minimum, and whatever's left over beyond that is split evenly
+// across all of them. This replaces each column independently taking whichever is larger of an
+// even share or its own minimum, which let minimum-enforced columns (Reserve, or any other
+// single-column group) grab extra space without anyone else's share shrinking to compensate, so
+// the columns' widths as a whole could end up wanting more than `avail` altogether — and since the
+// table's total width is pinned to exactly 100% (see wxTableOpen/pctW), that meant depending on how
+// Word happens to handle an over-100% table, unverified behavior this project has no way to test
+// directly. If even the minimums alone add up to more than `avail` (a wide column selection on a
+// narrow page), every column is shrunk proportionally so the set still sums to exactly `avail` —
+// each one may then fall below its own ideal minimum, but no less unevenly than any other, which is
+// the best any pure width formula can do once there's genuinely not enough room for everything at
+// once.
+function redistribute(mins,avail){
+  const minSum=mins.reduce((a,b)=>a+b,0);
+  if(minSum<=0) return mins.map(()=>Math.floor(avail/Math.max(1,mins.length)));
+  if(minSum>=avail) return mins.map(m=>Math.max(1,Math.round(m*avail/minSum)));
+  const slack=avail-minSum;
+  const per=Math.floor(slack/mins.length);
+  let extra=slack-per*mins.length;
+  return mins.map(m=>{ const bonus=per+(extra>0?1:0); if(extra>0)extra--; return m+bonus; });
+}
+// Revision 72 Follow-Up: value columns (headers and numbers) must never wrap, but the description
+// column may — it already does, for any description too long to fit on one line, and that's always
+// been an accepted tradeoff (see buildWordDataRow). So when a wide column selection needs more room
+// than fits alongside a full-width description, the description is what shrinks (down to
+// DESC_FLOOR, still comfortably wide for a typical description) to make room — rather than every
+// value column getting squeezed to fit around an unyielding description width, which is what
+// letting redistribute() alone absorb the shortfall would otherwise do. Returns
+// {descW,ratingW,notesW,colWidths}, all in the same dxa units as the caller's own
+// TOTAL_W/DESC_W/etc, ready for pctW conversion.
+const DESC_FLOOR=1800;
+function layoutReportWidths(groups,cols,TOTAL_W,DESC_W,RATING_W,NOTES_W,pt){
+  const mins=colMins(groups,cols,pt);
+  const minSum=mins.reduce((a,b)=>a+b,0);
+  const fixedOverhead=RATING_W+NOTES_W;
+  const availIdeal=TOTAL_W-DESC_W-fixedOverhead;
+  let descW=DESC_W,avail=availIdeal;
+  if(minSum>availIdeal){
+    const shrink=minSum-availIdeal;
+    descW=Math.max(DESC_FLOOR,DESC_W-shrink);
+    avail=TOTAL_W-descW-fixedOverhead;
+  }
+  return {descW,ratingW:RATING_W,notesW:NOTES_W,colWidths:redistribute(mins,avail)};
+}
+// Revision 72, item 2.1: converts a real dxa width into Word's percentage-of-table unit (fiftieths
+// of a percent, out of 5000 = 100%) for wxTc/wxTableOpen. Every one of the 4 Word table builders
+// below runs its own dxa math through this at the end, so the RATIOS between columns are unchanged
+// but the table itself (via wxTableOpen's w:tblW type="pct") now stretches to fill whatever
+// page/section width it's actually placed on — portrait or landscape — instead of assuming
+// landscape's width always.
+// Revision 72 Follow-Up: `totalDxa` (the reference used both for layoutReportWidths's own math and
+// for this final conversion) changed from a landscape-sized 13392 to a portrait-sized 9360 (Letter
+// portrait, 12240 wide, assuming standard 1" margins each side — a reasonable assumption in the
+// absence of knowing this document's actual portrait margins) precisely so a column's enforced
+// minimum width still holds in the NARROWEST page it might land on; the same percentage share
+// simply renders wider still on a landscape page, which is harmless. With every column of a wide
+// report (e.g. all 14 default AC sub-columns) genuinely needing legibility room, portrait remains
+// inherently tight — this guarantees each column gets at least a fair share of whatever room the
+// description column's own floor leaves for it, not that a very wide column selection looks equally
+// roomy on a narrow page as it would on a wide one.
 function pctW(dxa,totalDxa){ return Math.round(dxa/totalDxa*5000); }
 // Revision 72, item 3: row notes moved from one combined list at the very end of the whole report
 // to a local list right after each split table — the annotator instance is still shared across
@@ -6386,14 +6448,15 @@ function buildTablesContent(){
   const dcCols=activeCols(DC_GROUPS,cfg.dc);
   const annotator=makeAnnotator();
   const hasAnnot=Object.values(state.nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
-  // Letter landscape (Rev 1 template): 15840 wide, margins L=1440 R=1008 -> 13392 usable
-  const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
-  const avail=TOTAL_W-DESC_W-RATING_W-(hasAnnot?NOTES_W:0);
+  // Revision 72 Follow-Up: sized against Letter portrait (12240 wide, standard 1" margins -> 9360
+  // usable) rather than the landscape width this used to assume — see pctW's own comment — so
+  // columns stay legible even on the narrower page a content control might land on.
+  const TOTAL_W=9360,DESC_W=2800,RATING_W=800,NOTES_W=600;
   const HSZ=7.5;
-  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
-  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
-  const acOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:acColWidths,hasAnnot};
-  const dcOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:dcColWidths,hasAnnot};
+  const acLayout=layoutReportWidths(AC_GROUPS,acCols,TOTAL_W,DESC_W,RATING_W,hasAnnot?NOTES_W:0,HSZ);
+  const dcLayout=layoutReportWidths(DC_GROUPS,dcCols,TOTAL_W,DESC_W,RATING_W,hasAnnot?NOTES_W:0,HSZ);
+  const acOpts={descW:pctW(acLayout.descW,TOTAL_W),ratingW:pctW(acLayout.ratingW,TOTAL_W),notesW:pctW(acLayout.notesW,TOTAL_W),colWidths:acLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot};
+  const dcOpts={descW:pctW(dcLayout.descW,TOTAL_W),ratingW:pctW(dcLayout.ratingW,TOTAL_W),notesW:pctW(dcLayout.notesW,TOTAL_W),colWidths:dcLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot};
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const vLbl=acDc=>{
     const n=state.nodes[state.rootIds.find(id=>state.nodes[id]?.acDc===acDc)]??
@@ -6513,13 +6576,13 @@ function buildPdsWordContent(){
 
   // Revision 71, item 3.1: no Rating column, so its width is reclaimed into the value columns
   // instead of the Rating column now being an unused, no-longer-blank width.
-  const TOTAL_W=13392,DESC_W=2800,NOTES_W=600;
-  const avail=TOTAL_W-DESC_W-(hasAnnot?NOTES_W:0);
+  // Revision 72 Follow-Up: TOTAL_W sized against Letter portrait, not landscape — see pctW's comment.
+  const TOTAL_W=9360,DESC_W=2800,NOTES_W=600;
   const HSZ=7.5;
-  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
-  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
-  const acOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:0,notesW:pctW(NOTES_W,TOTAL_W),colWidths:acColWidths,hasAnnot,hasRating:false};
-  const dcOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:0,notesW:pctW(NOTES_W,TOTAL_W),colWidths:dcColWidths,hasAnnot,hasRating:false};
+  const acLayout=layoutReportWidths(AC_GROUPS,acCols,TOTAL_W,DESC_W,0,hasAnnot?NOTES_W:0,HSZ);
+  const dcLayout=layoutReportWidths(DC_GROUPS,dcCols,TOTAL_W,DESC_W,0,hasAnnot?NOTES_W:0,HSZ);
+  const acOpts={descW:pctW(acLayout.descW,TOTAL_W),ratingW:0,notesW:pctW(acLayout.notesW,TOTAL_W),colWidths:acLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot,hasRating:false};
+  const dcOpts={descW:pctW(dcLayout.descW,TOTAL_W),ratingW:0,notesW:pctW(dcLayout.notesW,TOTAL_W),colWidths:dcLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot,hasRating:false};
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const al=acDcVoltageLabel('ac'),dl=acDcVoltageLabel('dc');
@@ -6609,13 +6672,13 @@ function buildLadHorizontalWordContent(){
     });
   }
 
-  const TOTAL_W=13392,DESC_W=2800,RATING_W=800,NOTES_W=600;
-  const avail=TOTAL_W-DESC_W-RATING_W-(hasAnyAnnot?NOTES_W:0);
+  // Revision 72 Follow-Up: TOTAL_W sized against Letter portrait, not landscape — see pctW's comment.
+  const TOTAL_W=9360,DESC_W=2800,RATING_W=800,NOTES_W=600;
   const HSZ=7.5;
-  const acColWidths=computeColWidths(AC_GROUPS,acCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
-  const dcColWidths=computeColWidths(DC_GROUPS,dcCols,avail,HSZ).map(w=>pctW(w,TOTAL_W));
-  const acOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:acColWidths,hasAnnot:hasAnyAnnot};
-  const dcOpts={descW:pctW(DESC_W,TOTAL_W),ratingW:pctW(RATING_W,TOTAL_W),notesW:pctW(NOTES_W,TOTAL_W),colWidths:dcColWidths,hasAnnot:hasAnyAnnot};
+  const acLayout=layoutReportWidths(AC_GROUPS,acCols,TOTAL_W,DESC_W,RATING_W,hasAnyAnnot?NOTES_W:0,HSZ);
+  const dcLayout=layoutReportWidths(DC_GROUPS,dcCols,TOTAL_W,DESC_W,RATING_W,hasAnyAnnot?NOTES_W:0,HSZ);
+  const acOpts={descW:pctW(acLayout.descW,TOTAL_W),ratingW:pctW(acLayout.ratingW,TOTAL_W),notesW:pctW(acLayout.notesW,TOTAL_W),colWidths:acLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot:hasAnyAnnot};
+  const dcOpts={descW:pctW(dcLayout.descW,TOTAL_W),ratingW:pctW(dcLayout.ratingW,TOTAL_W),notesW:pctW(dcLayout.notesW,TOTAL_W),colWidths:dcLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot:hasAnyAnnot};
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
@@ -6656,7 +6719,12 @@ function ladAltWordColWidths(colsCount,hasAnnot){
   const labelW=Math.round(TOTAL_W*0.24);
   const cbW=Math.round(TOTAL_W*0.08);
   const notesW=hasAnnot?Math.round(TOTAL_W*0.04):0;
-  const numW=Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,colsCount));
+  // Revision 72 Follow-Up: floors numW at the same value-width minimum colMins enforces elsewhere
+  // (7 characters — e.g. the digits in "(45,000)" — against the same portrait-sized 9360 reference;
+  // see pctW's comment), so a value column here can't be squeezed narrower than the numbers it
+  // holds just because many power-unit columns are selected at once.
+  const minNumW=pctW(Math.ceil(7*7.5*9.5)+160,9360);
+  const numW=Math.max(minNumW,Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,colsCount)));
   return {labelW,cbW,notesW,numW,hasAnnot};
 }
 // Revision 71, items 2.2/2.3: bottomBdr on every header cell (solid rule under the header), and
@@ -6875,7 +6943,11 @@ function updateDocProp(xml,name,value,found){
 // other optional part.
 async function writeWattsUpMetaParts(zip,st,found){
   const m=st.meta;
-  const jsonStr=JSON.stringify(st).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Revision 72 Follow-Up: reportCfg (the report column-selection settings, a standalone module
+  // variable — see its own declaration — rather than a property of `st`) is spread in here as a
+  // sibling of meta/analyses/etc. rather than mutating the real state object, so it round-trips
+  // through importDocx exactly like every other field already does.
+  const jsonStr=JSON.stringify({...st,reportCfg}).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   zip.file('customXml/item1.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
     `<wuData xmlns="urn:watts-up:v1"><json>${jsonStr}</json></wuData>`);
@@ -7616,7 +7688,7 @@ function doNewProject(){
     : 'Start a new analysis? Any unsaved changes will be lost.';
   if (!confirm(msg)) return false;
   disconnectWordDoc(true);
-  state=freshState();collapsed=new Set();recalc();renderAll();persist();
+  state=freshState();collapsed=new Set();reportCfg=null;recalc();renderAll();persist();
   return true;
 }
 // Shared with the launch dialog's "Open" choice, and with the toolbar's gated version below. Bare
@@ -7704,7 +7776,7 @@ async function runLaunchDialog(){
       // unlike the toolbar's mid-session Open, there is no prior `state` here to fall back to.
       // Deliberately not persisted: if the picker is cancelled, whatever was already saved in
       // localStorage (this same `saved` snapshot) must be left untouched, not overwritten blank.
-      state=freshState();collapsed=new Set();recalc();renderAll();
+      state=freshState();collapsed=new Set();reportCfg=null;recalc();renderAll();
       doOpenProject();
       return;
     }
@@ -7712,8 +7784,8 @@ async function runLaunchDialog(){
     if (choice==='resume') {
       if (!confirm('This will resume your previous session, which is not connected to a Word document. Use "Open" instead if you want to connect one.\n\nContinue and resume without a connection?')) continue;
       migrateLegacy(saved);
-      try{validateImport(saved);state=saved;}
-      catch(e){state=freshState();}
+      try{validateImport(saved);state=saved;reportCfg=saved.reportCfg||defaultPrintCfg();}
+      catch(e){state=freshState();reportCfg=null;}
       collapsed=new Set();recalc();renderAll();
       return;
     }
