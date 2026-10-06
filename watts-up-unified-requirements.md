@@ -5019,9 +5019,161 @@ in the missing list (a genuine hit, just not in the body); with it absent (a fre
 the aggregation change didn't mask real gaps while fixing the false-positive ones. Both
 `word/document.xml` and `word/header2.xml` remained well-formed after the fill. Clean console.
 
+## 74. Three-Phase AC Support
+
+Designed 2026-09-30 through 2026-10-05 in a structured design interview (every branch of the design
+tree was walked and confirmed before any code was written). This section is the agreed design;
+implementation proceeds in phases A-D, with the status of each recorded below.
+
+### 74.1 Agreed design
+
+**Problem.** Today a three-phase system can only be modeled as three unrelated single-phase
+branches that happen to converge at a TRU. The pain point is the output reports and the logical
+association between the phases of one real item (Revision 57's multi-phase TRU input is the only
+phase-aware mechanism).
+
+**Model.** An AC item can be split into *phase-mates*: separate nodes tied together by a shared
+group, each carrying a phase label (default A, B, C). Below the split the tree stays sorted by
+phase: at the **origin** the phase-mates are true siblings under one *unsplit* parent
+(Generator → Bus 1 (A), Bus 1 (B), Bus 1 (C)); deeper, each phase-mate sits under the matching
+phase-mate of its parent (Bus 1 (A) → Feeder 1 (A), Bus 1 (B) → Feeder 1 (B), ...), so each phase is
+its own branch and deeper phase-mates are tied together by the group link plus the rule that their
+parents are *distinct* phase-mates of one parent group. The unsplit items above the split (Total
+Aircraft Load, generators) carry no label and sum the phase branches.
+
+**No calculation-engine change.** Each phase-mate's Net Change is simply its own phase branch's
+load; the unsplit parent above the split sums all of them (via the existing W/VAR roll-up).
+Amps at an unsplit aggregate stay `VA ÷ node voltage` (the sum of the phase currents); aircraft AC
+generators are normally rated in total VA, and a per-phase rating can be modeled with an ordinary
+Bus acting as a "pseudo-bus" under the generator that divides the capacity by phase.
+
+**Which nodes carry a label.** Any AC node inside a split branch, including a lone single-phase
+breaker on phase B. Nodes outside a split branch (including the unsplit aggregates above it) carry
+none, and the label is suppressed in display. Labels are AC-only: DC nodes and conversion outputs
+never carry one. New items (grids, Add Item(s), +Child) inherit the parent's label the way they
+inherit voltage and AC/DC.
+
+**Enabling a split.** Nothing is split by default. A split begins only when the user turns on a
+"Multi-phase" option on an eligible node (Edit Item): that node becomes the origin with the first
+label (A) and its existing subtree is relabeled A. Eligible: any AC node that is not top-level,
+not a Load, not a conversion type, and not already inside a split branch (so Total Aircraft Load,
+and any parentless node of any type, can't be split in the first pass; Generators/Alternators can).
+Items are always *created* single-phase through the grids/Add dialog; phase-mates are added
+afterward through Edit Item, much like a TRU's additional inputs. Up to three phase-mates.
+
+**Adding phase-mates.** At the origin: the existing item takes the first label, new phase-mates get
+the next unused labels and share the same unsplit parent. Deeper: the new phase-mate's parent is
+chosen from the *unused* phase-mates of the primary's parent group and its label follows that
+parent. New phase-mates start as a single node (descendants are not cloned).
+
+**Labels.** Default A, B, C; editable only at the origin (Edit dialog tab, or the Ø cell in the
+grids for origin rows); descendants inherit; renaming cascades down that phase's branch. Up to 8
+characters (e.g. `A - N`), unique within the group, any printable text. Display name =
+description + ` (Ø` + label + `)` + ` [ref des]` everywhere a description appears (tree, grids,
+reports, dialogs, warnings), e.g. `Bus 1 (ØA)`.
+
+**Primary and synced fields.** The phase-mate with the lowest position in the group is the
+*primary* (initially the item the split was started from; if it is deleted the next one is
+promoted automatically). The primary owns these fields and the others mirror them: type,
+description, ref des, status, and capacity (non-loads; capacity is per-phase and identical across
+phases); voltage/AC-DC come from the parent. Independent per phase-mate: Existing Load, load
+values, Net Change override, row notes and references.
+
+**Edit dialog (Phase B).** Opening Edit on any phase-mate edits the whole group: shared fields once
+(editable from any tab), plus a tab strip styled like the TRU's Input/Output toggle, labeled with
+the phase labels, that switches the per-phase fields (label, Existing Load, Net Change Override or
+Load Value, Notes & References). TRU-style draft: Save commits every tab, Cancel discards. A
+"+ Phase" button adds a phase-mate. Removing a phase-mate is only through Delete. In the grids,
+non-primary rows show the synced cells read-only; origin rows' labels are editable in a new Ø column
+(shown only when the analysis contains a labeled node). Origin phase-mates stay adjacent in label
+order; the up/down arrows move them as a block.
+
+**Group operations (Phase C).**
+- *Move:* multi-member groups keep their labels in every move; they attach by label to a labeled
+  parent group (every label must exist there; nothing is created or relabeled) or all to one
+  unsplit parent. Under a labeled parent a group becomes subservient (its labels follow the new
+  branch's origin); a deeper group moved under an unsplit parent becomes an origin. A lone item
+  takes on its destination: the label of the parent phase-mate it lands under, or unlabeled under
+  an unsplit parent, its subtree following. A multi-member Load group can't move under an unsplit
+  parent (loads can't be origins). Top-level destinations are not allowed for groups.
+- *Duplicate:* for an item with phase-mates, scope choice *this phase only* (a new lone phase-mate
+  beside it) or *all phases* (each copy under its own parent phase-mate, new shared group), crossed
+  with the existing Item only / Entire branch. Relocate afterwards with Move.
+- *Delete:* *this phase only* or *all phases*, each with its descendants (a phase-B subtree never
+  survives its phase-B parent), counts shown in the confirmation. Deleting the primary promotes the
+  next phase-mate; a group may shrink to any subset of its parent's phases. Existing refusals
+  (shared items, TRU group cascade) are unchanged.
+
+**Deferred, with interim behavior.**
+- *Sharing with the other analysis (Phase D):* mutual exclusion for this pass — an item inside a
+  split branch can't be shared, and a split can't be enabled on a node whose subtree contains a
+  shared item. Later: whole-group sharing, controlled from the primary, as TRUs do.
+- *TRU / conversion:* a conversion input under a labeled bus inherits that bus's label; the TRU
+  group logic is untouched and the inputs aren't linked as phase-mates; DC outputs carry no label;
+  AC outputs of conversions start unlabeled and can't be split yet. Later: TRU inputs become
+  phase-mates of one split node.
+- *Reports:* unchanged apart from the display-name suffix. *Phase-imbalance warning:* deferred
+  (only meaningful at the generator/highest split level; a standard spec needs to be looked up).
+- *Persistence:* JSON and the Word-embedded data carry the new fields automatically; older files
+  load fully unsplit. A file whose phase data breaks the structural rules above fails import with a
+  clear message; harmless drift in a synced field is quietly re-synced from the primary on import.
+
+### 74.2 Implementation status
+
+**Phase A (shipped 2026-10-05): model, inheritance, display names, validation.** No UI yet creates
+phase-mates (that is Phase B), so this phase is verified through direct data manipulation.
+- *Model:* new node fields `phase` (label or null), `phaseGroupId`, `phaseSeq` (lowest = primary).
+  The "origin" and "primary" are derived (`isPhaseOrigin`, `phasePrimary`), never stored, so they
+  can't go stale; this stands in for the "multi-phase" boolean discussed in the design — a node is
+  a split origin exactly when it has a label and its parent has none.
+- *Inheritance:* every parent link in the app goes through `attachChild`, so the rule lives there:
+  under a labeled parent an AC non-conversion-output node takes the parent's label (cascading down
+  its subtree); DC nodes and conversion outputs are cleared; top-level nodes are cleared. Moving a
+  node through Edit (and a TRU input through the TRU editor) to an unlabeled parent clears the
+  moved branch (`phaseAfterReparent`). Under an unlabeled parent an existing label is left alone, so
+  a duplicate beside its original stays a valid (lone) origin.
+- *Helpers:* `dispName`/`phaseSuffix` (display name), `setPhaseLabel` (validated rename with
+  cascade), `phaseGroupMembers`, `syncPhaseGroup`/`syncAllPhaseGroups` (mirror the primary's synced
+  fields), `phaseViolations` (structural rules, used by `validateImport`).
+- *Duplicates:* copies (`cloneNodeShallow`, `duplicateBranch`) get a fresh group of one, so a copy
+  is never a second member of the original's group; interim behavior equals "this phase only".
+- *Display:* the display name is applied in the tree, the Load Analysis Summary and Power
+  Distribution Summary tables, both Load Analysis Detail layouts and their breadcrumbs, Print, all
+  four Word builders, the parent/sibling selectors, the grid filter and read-only description
+  cells, and the warning/confirmation messages.
+- *Persistence:* `migrateLegacy` backfills the new fields on older files; `validateImport` now
+  rejects a structurally invalid phase tree.
+
+Verified live: (1) a regression fingerprint — an unlabeled seeded tree (generator, buses, breaker,
+new/removed loads, a sub-bus, a TRU with a DC bus and load, a row note) was built in both the
+committed version and the new one and 12 outputs hashed (the four Word builders, the references,
+the on-screen tree/summary/PDS/both Detail layouts, Print, and every warning): all 12 identical, so
+unlabeled projects behave exactly as before. (2) A phased tree (generator → three bus phase-mates →
+feeder and load per phase): labels inherit per branch, the generator and Total Aircraft Load stay
+unlabeled, each phase-mate's Net Change is its own branch's load (1000/2000/3000 VA) and the
+generator and root show the combined 6000 VA. (3) Label rules (blank, over 8 characters,
+duplicate, no label) are rejected with clear messages; `A - N` accepted; a rename cascades down only
+that phase's branch. (4) Validator: every rule (duplicate label, top-level label, non-AC label,
+child/parent label mismatch, unlabeled child of a labeled parent, load/Root origin, over-length
+label, missing group, mixed origin/deeper levels, parents not phases of one item) reports a clear
+message. (5) A TRU under a labeled bus: input inherits, output/DC bus/DC load none. (6) Duplicate
+node and branch: new lone groups, original group untouched, valid. (7) Moves through the real Edit
+dialog: a lone load adopts the destination phase (B, then back to C), clears under the unsplit
+generator, and a feeder with a child load clears/restores together. (8) Deleting a phase-mate
+shrinks the group and the next one becomes primary. (9) Editing the primary and syncing mirrors
+description/ref des/status/capacity while loads stay independent. (10) Old-style files migrate to
+unlabeled defaults; a tampered file fails import with a clear message; JSON and Word-embedded
+round-trips preserve everything and the generated document parses cleanly. Clean console.
+
+**Phase B (next):** Edit dialog phases section and tabs, synced-field propagation and read-only
+treatment (dialog and grids), Ø column. **Phase C:** Move/Duplicate/Delete group operations.
+**Phase D:** sharing guards and origin ordering. Not in this effort: TRU phase-mates, whole-group
+sharing, reports, imbalance warning, conversion AC-output splits.
+
 ## Appendix A: Future Enhancements
 
-- Three-phase AC circuit support
+- Three-phase AC circuit support — in progress, see §74 (remaining: TRU phase-mates, whole-group
+  sharing, report layout, phase-imbalance warning, splits on conversion AC outputs)
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)

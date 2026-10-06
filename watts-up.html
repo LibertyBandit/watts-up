@@ -1068,10 +1068,143 @@ function siblingArray(node) {
   return p.childIds;
 }
 function attachChild(id,parentId) {
-  if (!parentId) { state.rootIds.push(id); return; }
+  if (!parentId) { state.rootIds.push(id); phaseOnAttach(id,null); return; }
   const p=state.nodes[parentId]; if (!p) return;
   if (!Array.isArray(p.childIds)) p.childIds=[];
   p.childIds.push(id);
+  phaseOnAttach(id,parentId);
+}
+
+// ── PHASES (Revision 74, Phase A) ────────────────────────────────────────────
+// Three-phase support: an AC item can be split into "phase-mates" — separate nodes sharing a
+// phaseGroupId, each carrying a phase label. Below the split every AC descendant inherits its
+// parent's label, so each phase is its own branch; the unsplit item above the split (Total
+// Aircraft Load, generator, ...) carries no label and simply sums the phase branches. Per node:
+//   phase        label text ('A', 'A - N', ...), or null when the node isn't inside a split branch
+//   phaseGroupId shared by the mates of one logical item (a lone labeled item has a group of one)
+//   phaseSeq     order within the group — the lowest is the "primary", which owns the synced fields
+//                (type, description, ref des, status, non-load capacity) the others mirror
+// An "origin" is a labeled node whose parent is unlabeled — derived, never stored, so it can't go
+// stale. Labels apply to AC nodes only; DC nodes and conversion outputs never carry one.
+const PHASE_LABEL_MAX=8;
+const PHASE_DEFAULT_LABELS=['A','B','C'];
+const PHASE_SYNC_FIELDS=['type','description','refDes','status'];
+function phaseSuffix(n) { return n&&n.phase?` (Ø${n.phase})`:''; }
+function dispName(n,fallback='unnamed') { return (((n&&n.description)||fallback)+phaseSuffix(n)).trim(); }
+function phaseInherits(n) { return n.acDc==='ac'&&n.convRole!=='out'; }
+function isPhaseOrigin(n,nodes) {
+  if (!n||!n.phase) return false;
+  const p=n.parentId?(nodes||state.nodes)[n.parentId]:null;
+  return !(p&&p.phase);
+}
+function phaseGroupMembers(gid,nodes) {
+  if (!gid) return [];
+  return Object.values(nodes||state.nodes).filter(n=>n.phaseGroupId===gid).sort((a,b)=>(a.phaseSeq||0)-(b.phaseSeq||0));
+}
+function phasePrimary(n,nodes) { return phaseGroupMembers(n.phaseGroupId,nodes)[0]||n; }
+function clearPhaseSubtree(id) {
+  const n=state.nodes[id]; if (!n) return;
+  n.phase=null; n.phaseGroupId=null; n.phaseSeq=0;
+  (n.childIds||[]).forEach(clearPhaseSubtree);
+}
+// Stamps `label` on a node and every AC descendant that inherits one, keeping any group ids they
+// already have; DC nodes and conversion outputs get their label cleared instead of inheriting.
+function cascadePhase(id,label) {
+  const n=state.nodes[id]; if (!n) return;
+  n.phase=label;
+  if (!n.phaseGroupId) n.phaseGroupId=uid();
+  (n.childIds||[]).forEach(cid=>{
+    const c=state.nodes[cid]; if (!c) return;
+    if (phaseInherits(c)) cascadePhase(cid,label);
+    else { c.phase=null; c.phaseGroupId=null; c.phaseSeq=0; }
+  });
+}
+// Every way a node gets linked under a parent (new item, duplicate, move, TRU inputs) funnels
+// through attachChild, so the inheritance rule lives here: under a labeled parent a node takes
+// that parent's label; top-level nodes can't carry one. Under an unlabeled parent nothing changes
+// — an existing label there is a legitimate origin (e.g. a duplicate beside its original); a node
+// being *moved* to an unlabeled parent is cleared by phaseAfterReparent.
+function phaseOnAttach(id,parentId) {
+  const n=state.nodes[id]; if (!n) return;
+  const p=parentId?state.nodes[parentId]:null;
+  if (!p) { clearPhaseSubtree(id); return; }
+  if (!p.phase) return;
+  if (phaseInherits(n)) cascadePhase(id,p.phase);
+  else { n.phase=null; n.phaseGroupId=null; n.phaseSeq=0; }
+}
+function phaseAfterReparent(id,newParentId) {
+  const p=newParentId?state.nodes[newParentId]:null;
+  if (!(p&&p.phase)) clearPhaseSubtree(id);
+}
+// Renames one phase-mate's label (origin level only — callers enforce that) and carries it down
+// that mate's whole branch. Returns an error message, or null on success.
+function setPhaseLabel(id,label) {
+  const n=state.nodes[id];
+  if (!n||!n.phase) return 'This item has no phase label.';
+  label=String(label==null?'':label).trim();
+  if (!label) return 'A phase label can\'t be blank.';
+  if (label.length>PHASE_LABEL_MAX) return `A phase label can be at most ${PHASE_LABEL_MAX} characters.`;
+  if (phaseGroupMembers(n.phaseGroupId).some(m=>m.id!==id&&m.phase===label)) return `Another phase of this item already uses "${label}".`;
+  cascadePhase(id,label);
+  return null;
+}
+// Copies the primary's synced fields onto every other member of the group.
+function syncPhaseGroup(gid,nodes) {
+  const members=phaseGroupMembers(gid,nodes);
+  if (members.length<2) return;
+  const prim=members[0];
+  members.slice(1).forEach(m=>{
+    PHASE_SYNC_FIELDS.forEach(f=>{ m[f]=prim[f]; });
+    if (hasCap(prim.type)&&!isLoad(prim.type)) m.capacity=prim.capacity?{...prim.capacity}:null;
+  });
+}
+function syncAllPhaseGroups(nodes) {
+  const gids=new Set();
+  Object.values(nodes).forEach(n=>{ if (n.phaseGroupId) gids.add(n.phaseGroupId); });
+  gids.forEach(g=>syncPhaseGroup(g,nodes));
+}
+// Structural rules for phase data; returns a list of problems (empty when valid). Used on import,
+// so a hand-edited or corrupted file fails with a clear message instead of loading into a tree the
+// editor can't make sense of.
+function phaseViolations(ns) {
+  const out=[]; const groups={};
+  const nm=n=>`"${dispName(n)}"`;
+  Object.values(ns).forEach(n=>{
+    const par=n.parentId?ns[n.parentId]:null;
+    if (!n.phase) {
+      if (n.phaseGroupId) out.push(`${nm(n)} has a phase group but no phase label`);
+      if (par&&par.phase&&phaseInherits(n)) out.push(`${nm(n)} sits under the phase-labeled item ${nm(par)} but has no phase label`);
+      return;
+    }
+    if (typeof n.phase!=='string'||!n.phase.trim()||n.phase!==n.phase.trim()||n.phase.length>PHASE_LABEL_MAX) { out.push(`${nm(n)} has an invalid phase label`); return; }
+    if (n.acDc!=='ac') out.push(`${nm(n)} has a phase label but isn't AC`);
+    if (n.convRole==='out') out.push(`${nm(n)} is a conversion output and can't have a phase label`);
+    if (!n.phaseGroupId) out.push(`${nm(n)} has a phase label but no phase group`);
+    if (!par) out.push(`${nm(n)} is top-level and can't have a phase label`);
+    else if (par.phase) {
+      if (par.phase!==n.phase) out.push(`${nm(n)} has a different phase label than its parent ${nm(par)}`);
+    } else if (n.type==='Root'||isLoad(n.type)||isConv(n.type)) out.push(`${nm(n)} can't start a phase split (item type)`);
+    (groups[n.phaseGroupId]=groups[n.phaseGroupId]||[]).push(n);
+  });
+  Object.values(groups).forEach(ms=>{
+    if (ms.length<2) return;
+    const labels=new Set(),seqs=new Set();
+    ms.forEach(m=>{
+      if (labels.has(m.phase)) out.push(`two phases of ${nm(m)} share the label "${m.phase}"`);
+      labels.add(m.phase);
+      if (seqs.has(m.phaseSeq||0)) out.push(`two phases of ${nm(m)} share the same group position`);
+      seqs.add(m.phaseSeq||0);
+    });
+    const deeper=ms.filter(m=>{ const p=m.parentId?ns[m.parentId]:null; return p&&p.phase; });
+    if (deeper.length&&deeper.length!==ms.length) { out.push(`the phases of ${nm(ms[0])} mix split-origin and deeper levels`); return; }
+    if (!deeper.length) {
+      if (new Set(ms.map(m=>m.parentId)).size!==1) out.push(`the phases of ${nm(ms[0])} don't share one parent`);
+    } else {
+      if (new Set(ms.map(m=>m.parentId)).size!==ms.length) out.push(`two phases of ${nm(ms[0])} share a parent`);
+      if (new Set(ms.map(m=>ns[m.parentId].phaseGroupId)).size!==1) out.push(`the parents of ${nm(ms[0])}'s phases aren't phases of one item`);
+    }
+  });
+  return out;
 }
 function detachChild(id,parentId) {
   if (!parentId) { state.rootIds=state.rootIds.filter(r=>r!==id); return; }
@@ -1153,7 +1286,7 @@ let state=null;
 
 function makeNode(type,parentId,overrides={}) {
   const node={id:uid(),type,description:'',refDes:'',status:'existing',parentId,convRole:null,
-    convGroupId:null,phaseOrder:0,
+    convGroupId:null,phaseOrder:0,phase:null,phaseGroupId:null,phaseSeq:0,
     voltage:null,acDc:'dc',rowNotes:[],rowRefs:[],childIds:[],sharedPeerId:null,
     _netChange:null,_newLoad:null,_remainingCapacity:null,_warnings:[]};
   if (hasCap(type)) {node.capacity=null;node.existingLoad=mkPow(0,0,0,0,1);node.netChangeOverride=null;}
@@ -1281,12 +1414,12 @@ function shareWithOther(nodeId) {
     chain.slice(0,-1).forEach(a=>{
       if (seenAncestorIds.has(a.id)) return;
       seenAncestorIds.add(a.id);
-      allNewAncestorNames.push(a.description||'unnamed');
+      allNewAncestorNames.push(dispName(a));
     });
   });
   if (allNewAncestorNames.length) {
     const otherLabel=state.analyses[otherId].label;
-    const label=group?`this TRU's items`:`"${n.description||'unnamed'}"`;
+    const label=group?`this TRU's items`:`"${dispName(n)}"`;
     if (!confirm(`Sharing ${label} with ${otherLabel} will also share its ancestor(s): ${allNewAncestorNames.join(', ')}. Continue?`)) return;
   }
 
@@ -1365,7 +1498,7 @@ function unshareNode(id) {
   // original IN/OUT-pair-only version (Revision 52 items 6/7): never leave the group in an
   // inconsistent, half-shared state.
   const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n):null;
-  const label=group?`this TRU's items`:`"${n.description||'unnamed'}"`;
+  const label=group?`this TRU's items`:`"${dispName(n)}"`;
   if (!confirm(`Stop sharing ${label}? Both items remain — they just won't stay linked anymore.`)) return;
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   const other=state.analyses[otherId];
@@ -1609,6 +1742,9 @@ function migrateLegacy(p) {
       if (n.sharedPeerId===undefined) n.sharedPeerId=null;
       if (n.convGroupId===undefined) n.convGroupId=null;
       if (n.phaseOrder===undefined) n.phaseOrder=0;
+      if (n.phase===undefined) n.phase=null;
+      if (n.phaseGroupId===undefined) n.phaseGroupId=null;
+      if (n.phaseSeq===undefined) n.phaseSeq=0;
       if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
       // Revision 36: rowNotes entries reference a shared note-text bank (this analysis's own
       // rowNoteDefs) instead of storing text inline, so the same note can be cited by multiple
@@ -1655,6 +1791,10 @@ function migrateLegacy(p) {
         if (outNode) outNode.convGroupId=gid;
       }
     });
+    // Phase-mates mirror their primary's synced fields; re-applying that here quietly repairs
+    // harmless drift (a hand-edited copy of one field) so only real structural problems reach
+    // validateImport.
+    syncAllPhaseGroups(an.nodes);
   });
   installAnalysisView(p);
 }
@@ -1718,13 +1858,13 @@ function warnNode(node,nodes) {
   if (isLoad(node.type)) {
     const lv=node.loadValue?.w;
     if (lv!==null&&lv!==undefined&&lv<0)
-      w.push({code:'W1',message:`Negative load value — "${esc(node.description)}".`});
+      w.push({code:'W1',message:`Negative load value — "${esc(dispName(node,''))}".`});
   }
   if (hasCap(node.type)) {
     const nl=node._newLoad;
     const nlV=node.acDc==='ac'?nl?.va:nl?.w;
     if (nlV!==null&&nlV!==undefined&&nlV<0)
-      w.push({code:'W2',message:`Negative new load — "${esc(node.description)}".`});
+      w.push({code:'W2',message:`Negative new load — "${esc(dispName(node,''))}".`});
     // A blank/never-entered capacity is treated as zero capacity for this comparison — a
     // positive new load against no capacity at all is exactly as overloaded as one against an
     // explicit 0, and previously only the explicit-0 case warned (the null-capacity case was
@@ -1732,14 +1872,14 @@ function warnNode(node,nodes) {
     const capVRaw=node.acDc==='ac'?node.capacity?.va:node.capacity?.w;
     const capV=(capVRaw===null||capVRaw===undefined)?0:capVRaw;
     if (nlV!==null&&nlV!==undefined&&nlV>capV)
-      w.push({code:'W3',message:`Overloaded: new load exceeds capacity — "${esc(node.description)}".`});
+      w.push({code:'W3',message:`Overloaded: new load exceeds capacity — "${esc(dispName(node,''))}".`});
     // Existing Load fields collapse blank entry to an explicit zero on save (calcAcPowerGroup/
     // autoDc), so there's no stored "never entered" state to distinguish from a real zero —
     // zero is treated as the blank signal here, same convention as the capacity check above.
     if ((node.status==='existing'||node.status==='removed')) {
       const elV=node.acDc==='ac'?node.existingLoad?.va:node.existingLoad?.w;
       if (elV===null||elV===undefined||elV===0)
-        w.push({code:'W4',message:`Existing load not entered — "${esc(node.description)}".`});
+        w.push({code:'W4',message:`Existing load not entered — "${esc(dispName(node,''))}".`});
     }
   }
   if (hasCap(node.type)&&node.status==='existing'&&nodes) {
@@ -1773,7 +1913,7 @@ function warnNode(node,nodes) {
       if (group) ownW*=Math.max(1,group.inputs.length);
     }
     if (sumW>ownW+1e-6)
-      w.push({code:'W5',message:`Children's existing/removed load exceeds this item's existing load — "${esc(node.description)}".`});
+      w.push({code:'W5',message:`Children's existing/removed load exceeds this item's existing load — "${esc(dispName(node,''))}".`});
   }
   return w;
 }
@@ -1883,6 +2023,8 @@ function validateImport(p) {
       if (n.parentId!==null&&!ns[n.parentId]) throw new Error(`Node "${n.description}" has unknown parent.`);
       if (!ALL_TYPES.includes(n.type)) throw new Error(`Unknown node type: "${n.type}".`);
     });
+    const pv=phaseViolations(ns);
+    if (pv.length) throw new Error(`"${an.label||id}" analysis has a phase problem — ${pv[0]}.`);
   });
 }
 
@@ -2012,7 +2154,7 @@ function delNode(id) {
   const toDelete=[...branch,...groupExtra];
   const sharedIds=toDelete.filter(x=>state.nodes[x].sharedPeerId);
   if (sharedIds.length) {
-    const names=sharedIds.map(x=>state.nodes[x].description||'unnamed').join(', ');
+    const names=sharedIds.map(x=>dispName(state.nodes[x])).join(', ');
     alert(`Can't delete — shared with the other analysis: ${names}. Unshare first.`);
     return;
   }
@@ -2094,10 +2236,10 @@ function buildTreeLi(node,nodes) {
   const li=document.createElement('li'); li.dataset.nid=node.id;
   const toggleCls=hasKids?'toggle-btn'+(collapsed.has(node.id)?' is-collapsed':''):'toggle-btn leaf';
   const descCls=node.status==='removed'?'node-desc removed-text':'node-desc';
-  const descText=esc(node.description).trim()||'<em style="opacity:.5">unnamed</em>';
+  const descText=(esc(node.description).trim()||'<em style="opacity:.5">unnamed</em>')+esc(phaseSuffix(node));
   const refDesSpan=node.refDes?` <span class="node-refdes">[${esc(node.refDes)}]</span>`:'';
   const descLabel=descText+refDesSpan;
-  const descTitle=(node.description||'unnamed')+(node.refDes?' ['+node.refDes+']':'');
+  const descTitle=dispName(node)+(node.refDes?' ['+node.refDes+']':'');
   const ncDisplay=ncHtml(node._netChange,node.acDc,isLoad(node.type));
   const isTerminal=isLoad(node.type)||node.status==='removed'||node.convRole==='in';
   // Rendered (not omitted) even when hidden, same reasoning as ncHtml above: an omitted button
@@ -2185,7 +2327,7 @@ function renderTable() {
     const rCls=ov?'row-warn-r':(wn?'row-warn-y':'');
     const dCls=n.status==='removed'?' style="text-decoration:line-through;opacity:.55"':'';
     const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
-    const dl=(esc(n.description)||'<em>unnamed</em>')+rdHtml;
+    const dl=(esc(n.description)||'<em>unnamed</em>')+esc(phaseSuffix(n))+rdHtml;
     const flag=ov?'🔴':(wn?'⚠️':'');
     return {rCls,dCls,dl,flag,ov};
   }
@@ -2364,7 +2506,7 @@ function pdsRows(ids,cols,dm,annotator,hasAnyAnnot) {
     const rCls=ov?'row-warn-r':(wn?'row-warn-y':'');
     const dCls=n.status==='removed'?' style="text-decoration:line-through;opacity:.55"':'';
     const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
-    const dl=(esc(n.description)||'<em>unnamed</em>')+rdHtml;
+    const dl=(esc(n.description)||'<em>unnamed</em>')+esc(phaseSuffix(n))+rdHtml;
     const cells=cols.map(col=>pdsCellVal(n,col,ov)).join('');
     const annot=annotator.annotate(n.rowNotes,n.rowRefs);
     const annotCell=hasAnyAnnot?(annot?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>'):'';
@@ -2473,7 +2615,7 @@ function pathForWord(n){
   if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
   const chain=[]; let cur=parent;
   while (cur) {
-    chain.unshift(cur.description||'unnamed');
+    chain.unshift(dispName(cur));
     const curParent=cur.parentId?state.nodes[cur.parentId]:null;
     if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
     cur=curParent;
@@ -2516,7 +2658,7 @@ function renderLoadAnalysisDetail() {
     if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
     const chain=[]; let cur=parent;
     while (cur) {
-      chain.unshift(esc(cur.description||'unnamed'));
+      chain.unshift(esc(dispName(cur)));
       const curParent=cur.parentId?nodes[cur.parentId]:null;
       if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
       cur=curParent;
@@ -2631,7 +2773,7 @@ function renderLoadAnalysisDetailAlt() {
     if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
     const chain=[]; let cur=parent;
     while (cur) {
-      chain.unshift(esc(cur.description||'unnamed'));
+      chain.unshift(esc(dispName(cur)));
       const curParent=cur.parentId?nodes[cur.parentId]:null;
       if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
       cur=curParent;
@@ -2725,7 +2867,7 @@ function renderLoadAnalysisDetailAlt() {
     const parentFs='8.5pt',childFs='7.5pt';
     const rows=[];
 
-    const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
+    const mainDesc=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''));
     // Revision 42: the modifier column is gone. An Installed-status parent now gets a banner row
     // above it instead (matching the original Load Analysis Detail report's convention exactly)
     // — no "Removed" banner for a Removed-status parent's own row either way, matching that same
@@ -2759,7 +2901,7 @@ function renderLoadAnalysisDetailAlt() {
       // change), so this only applies to non-load existing children. Now appended directly onto
       // the description instead of a separate modifier column (Revision 42).
       const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
-      const kDesc=esc((k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
+      const kDesc=esc(dispName(k)+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
       const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
       rows.push(`<tr${warnRowCls(k)} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
     });
@@ -2829,7 +2971,7 @@ function gridFilterBar() {
   const branchOptions=branchIds.map(id=>{
     const n=nodes[id]; if (!n) return '';
     const indent='&nbsp;&nbsp;'.repeat(dm[id]||0);
-    return `<option value="${id}"${gridFilterBranchId===id?' selected':''}>${indent}${esc(n.description||'unnamed')}</option>`;
+    return `<option value="${id}"${gridFilterBranchId===id?' selected':''}>${indent}${esc(dispName(n))}</option>`;
   }).join('');
   const hasFilters=gridFilterAcDc!=='all'||!!gridFilterBranchId;
   return `<div class="grid-filter-bar">
@@ -3142,7 +3284,7 @@ function gridTypeCell(n,depth,editable=true){
   return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}<select data-field="type" class="grid-type-select"${shapes.length<=1?' disabled':''}>${typeOpts}${truOpt}</select></div></td>`;
 }
 function gridDescInputCell(n,editable=true){
-  if (!editable) return `<td class="grid-col-desc"><span class="grid-desc-readonly" title="${esc(n.description||'unnamed')}">${esc(n.description||'unnamed')}</span></td>`;
+  if (!editable) return `<td class="grid-col-desc"><span class="grid-desc-readonly" title="${esc(dispName(n))}">${esc(dispName(n))}</span></td>`;
   return `<td class="grid-col-desc"><input data-field="description" value="${esc(n.description||'')}" placeholder="Description"></td>`;
 }
 function gridRefDesCell(n,editable=true){
@@ -3478,7 +3620,7 @@ function gridFieldChanged(e,renderFn){
 function gridDeleteRow(id,renderFn){
   const n=state.nodes[id]; if (!n) return;
   const kidCount=children(id,state.nodes).length;
-  if (kidCount>0 && !confirm(`Delete "${n.description||'this item'}" and its ${kidCount} child item(s)? This can only be undone via Cancel.`)) return;
+  if (kidCount>0 && !confirm(`Delete "${dispName(n,'this item')}" and its ${kidCount} child item(s)? This can only be undone via Cancel.`)) return;
   delNode(id);
   renderAll();
 }
@@ -3489,7 +3631,7 @@ async function gridDuplicateRow(id,renderFn){
   if (kidCount>0) {
     const choice=await showChoiceDialog({
       title:'Duplicate Item',
-      message:`"${n.description||'This item'}" has ${kidCount} child item(s). Duplicate this item only, or the entire branch (including its ${kidCount} descendant(s))?`,
+      message:`"${dispName(n,'This item')}" has ${kidCount} child item(s). Duplicate this item only, or the entire branch (including its ${kidCount} descendant(s))?`,
       options:[
         {label:'Item Only',value:'item'},
         {label:'Entire Branch',value:'branch',primary:true}
@@ -4069,7 +4211,7 @@ function fillParentSelect(selId,excludeId,selectedId) {
     const o=document.createElement('option');o.value=id;
     const d=nodeDepth(id,state.nodes);
     const typeLbl=n.type==='Root'?'':` (${displayType(n)})`;
-    o.textContent=' '.repeat(d*2)+(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'')+typeLbl;
+    o.textContent=' '.repeat(d*2)+dispName(n)+(n.refDes?` [${n.refDes}]`:'')+typeLbl;
     if (id===selectedId) o.selected=true;
     sel.appendChild(o);
   });
@@ -4179,6 +4321,7 @@ function duplicateBranch(rootId) {
     // make these still-uncorrected copies transiently look like extra members of the *original*
     // group.
     copy.convGroupId=null;
+    copy.phaseGroupId=copy.phase?uid():null; copy.phaseSeq=0;
     copy.description=(copy.description||'')+' (copy)';
     state.nodes[copy.id]=copy;
   });
@@ -4266,7 +4409,7 @@ function fillAdditionalParentSelect(selId,primaryParentId,excludeIds,selectedId,
     if (excluded.has(sn.id)&&sn.id!==selectedId) return;
     const o=document.createElement('option');o.value=sn.id;
     const d=nodeDepth(sn.id,state.nodes);
-    o.textContent=' '.repeat(d*2)+(sn.description||'unnamed')+(sn.refDes?` [${sn.refDes}]`:'');
+    o.textContent=' '.repeat(d*2)+dispName(sn)+(sn.refDes?` [${sn.refDes}]`:'');
     if (sn.id===selectedId) o.selected=true;
     sel.appendChild(o);
   });
@@ -4530,6 +4673,9 @@ function cloneNodeShallow(orig,overrides={}) {
   copy.childIds=[];
   copy.sharedPeerId=null;
   copy.convGroupId=null;
+  // A copy is its own new phase group of one (same label, beside the original) — never a second
+  // member of the original's group, which would repeat that group's label.
+  copy.phaseGroupId=copy.phase?uid():null; copy.phaseSeq=0;
   copy.description=(copy.description||'')+' (copy)';
   return Object.assign(copy,overrides);
 }
@@ -4728,7 +4874,7 @@ function efRenderSiblings(parentId,excludeId) {
   body.innerHTML=`<table class="sibling-table"><thead><tr><th>Type</th><th>Description</th><th>Status</th></tr></thead>
     <tbody>${sibs.map(n=>{
       const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
-      return `<tr data-id="${n.id}"><td>${badgeHtml(n)||esc(displayType(n))}</td><td>${esc(n.description||'')+rdHtml}</td><td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td></tr>`;
+      return `<tr data-id="${n.id}"><td>${badgeHtml(n)||esc(displayType(n))}</td><td>${esc(n.description||'')+esc(phaseSuffix(n))+rdHtml}</td><td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td></tr>`;
     }).join('')}</tbody></table>`;
   body.querySelectorAll('tr[data-id]').forEach(r=>r.addEventListener('click',()=>{closeModal();openEdit(r.dataset.id);}));
 }
@@ -5030,7 +5176,7 @@ function doEditSaveTru(n) {
       const newParentNode=newPrimaryParentId?state.nodes[newPrimaryParentId]:null;
       const newParentPeerId=newPrimaryParentId?(newParentNode&&newParentNode.sharedPeerId):null;
       if (newPrimaryParentId&&!newParentPeerId) {
-        alert(`Can't move this item here — "${newParentNode?newParentNode.description||'unnamed':'the new parent'}" isn't shared with ${other?other.label:'the other analysis'}. Share it first, or unshare this item, before moving it.`);
+        alert(`Can't move this item here — "${newParentNode?dispName(newParentNode):'the new parent'}" isn't shared with ${other?other.label:'the other analysis'}. Share it first, or unshare this item, before moving it.`);
         return;
       }
       if (peer) {
@@ -5044,6 +5190,7 @@ function doEditSaveTru(n) {
     }
     detachChild(primary.id,primary.parentId);
     attachChild(primary.id,newPrimaryParentId);
+    phaseAfterReparent(primary.id,newPrimaryParentId);
     primary.parentId=newPrimaryParentId;
   }
   const primaryParentNode=newPrimaryParentId?state.nodes[newPrimaryParentId]:null;
@@ -5063,7 +5210,7 @@ function doEditSaveTru(n) {
     let node;
     if (slot.nodeId&&state.nodes[slot.nodeId]) {
       node=state.nodes[slot.nodeId];
-      if (node.parentId!==slot.parentId) { detachChild(node.id,node.parentId); attachChild(node.id,slot.parentId); node.parentId=slot.parentId; }
+      if (node.parentId!==slot.parentId) { detachChild(node.id,node.parentId); attachChild(node.id,slot.parentId); phaseAfterReparent(node.id,slot.parentId); node.parentId=slot.parentId; }
     } else {
       const newId=addNode(slot.parentId,{type:'TRU',status,convRole:'in',convGroupId:primary.convGroupId,
         acDc:CONV_IN_ACDC.TRU,voltage:inV,netChangeOverride:null});
@@ -5202,10 +5349,10 @@ function doEditSave() {
   const newTracksExisting=data.status==='existing'||data.status==='removed';
   if (hasCap(type)&&!isLoad(type)&&!n.convRole&&n.status!==data.status) {
     if (oldTracksExisting&&data.status==='new') {
-      if (!confirm(`Changing status to Installed will clear "${n.description||'this item'}"'s Existing Load values. Continue?`)) return;
+      if (!confirm(`Changing status to Installed will clear "${dispName(n,'this item')}"'s Existing Load values. Continue?`)) return;
       clearExistingLoadOnSave=true;
     } else if (n.status==='new'&&newTracksExisting) {
-      if (!confirm(`Changing status to ${statusLabel(data.status)} will clear "${n.description||'this item'}"'s Net Change values. Continue?`)) return;
+      if (!confirm(`Changing status to ${statusLabel(data.status)} will clear "${dispName(n,'this item')}"'s Net Change values. Continue?`)) return;
       clearNetChangeOnSave=true;
     }
   }
@@ -5229,7 +5376,7 @@ function doEditSave() {
       const newParentNode=newParentId?state.nodes[newParentId]:null;
       const newParentPeerId=newParentId?(newParentNode&&newParentNode.sharedPeerId):null;
       if (newParentId&&!newParentPeerId) {
-        alert(`Can't move this item here — "${newParentNode?newParentNode.description||'unnamed':'the new parent'}" isn't shared with ${other?other.label:'the other analysis'}. Share it first, or unshare this item, before moving it.`);
+        alert(`Can't move this item here — "${newParentNode?dispName(newParentNode):'the new parent'}" isn't shared with ${other?other.label:'the other analysis'}. Share it first, or unshare this item, before moving it.`);
         return;
       }
       if (peer) {
@@ -5243,6 +5390,7 @@ function doEditSave() {
     }
     detachChild(mNode,oldParentId);
     attachChild(mNode,newParentId);
+    phaseAfterReparent(mNode,newParentId);
   }
   data.parentId=newParentId;
 
@@ -5808,7 +5956,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder){
   const ws=n._warnings||[];const ov=ws.some(w=>w.code==='W3');const wn=ws.length>0&&!ov;
   const removed=n.status==='removed';
   const cfgSide=n.acDc==='ac'?cfg.ac:cfg.dc;
-  const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
+  const mainDesc=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''));
   const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
   const ampSpan=ampInline?`<span style="float:right;color:#555;font-size:6.5pt;margin-left:6pt;white-space:nowrap">(${ampInline} A)</span>`:'';
   const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
@@ -5912,7 +6060,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
   const ws=n._warnings||[];const ov=ws.some(w=>w.code==='W3');const wn=ws.length>0&&!ov;
   const removed=n.status==='removed';
   const cfgSide=n.acDc==='ac'?cfg.ac:cfg.dc;
-  const mainDesc=esc((n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:''));
+  const mainDesc=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''));
   // Revision 42: the CB/fuse rating gets its own dedicated column here (shown regardless of
   // whether Amps is a selected capacity column) instead of an inline float in the description
   // cell — Word wasn't right-justifying the inline version consistently, per the same reasoning
@@ -6154,7 +6302,7 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   const isConvIn=n.convRole==='in';
   const isLd=isLoad(n.type);const hasC=hasCap(n.type);
   const removed=n.status==='removed';
-  const mainDesc=(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'');
+  const mainDesc=dispName(n)+(n.refDes?` [${n.refDes}]`:'');
   const sz=Math.max(6.5,8.5-depth*0.5);
   const indDxa=depth*200;
   const descRun=removed?wxRun(mainDesc,{i:true,sz}):n.status==='new'?wxRun(mainDesc,{b:true,sz}):wxRun(mainDesc,{sz});
@@ -6751,7 +6899,7 @@ function buildLadAltWordHeader(cols,hasAnnot,{labelW,cbW,notesW,numW},leftCellCo
   return wxTr(r,{h:280,hdr:true});
 }
 function ladAltWordSubjectRow(n,cols,annot,{labelW,cbW,notesW,numW,hasAnnot}){
-  const mainDesc=(n.description||'unnamed')+(n.refDes?` [${n.refDes}]`:'');
+  const mainDesc=dispName(n)+(n.refDes?` [${n.refDes}]`:'');
   const descRun=n.status==='removed'?wxRun(mainDesc,{i:true,sz:8.5}):n.status==='new'?wxRun(mainDesc,{b:true,sz:8.5}):wxRun(mainDesc,{sz:8.5});
   const labelCell=wxTc(wxPar(descRun,{before:20,after:20,keepNext:true}),{w:labelW});
   const ratingVal=(NT.PROTECTION.includes(n.type)&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
@@ -6778,7 +6926,7 @@ function ladAltWordGroupRow(label,src,cols,activeSet,groupId,annot,{labelW,cbW,n
 function ladAltWordChildRow(k,cols,ncSet,addedSet,annot,{labelW,cbW,notesW,numW,hasAnnot}){
   const isLd=isLoad(k.type);
   const modifierSuffix=(k.status==='existing'&&!isLd)?' (Net Change)':'';
-  const kDesc=(k.description||'unnamed')+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
+  const kDesc=dispName(k)+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
   const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
   const labelCell=wxTc(wxPar(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW});
   const ratingVal=(NT.PROTECTION.includes(k.type)&&k.capacity?.a!=null)?fmtRpt(k.capacity.a):null;
@@ -7644,7 +7792,7 @@ function initEvents() {
   document.getElementById('btn-del').addEventListener('click',()=>{
     if (!mNode) return;
     const n=state.nodes[mNode];const kids=children(mNode,state.nodes);
-    const msg=kids.length?`"${n.description||'This item'}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${n.description||'this item'}"?`;
+    const msg=kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${dispName(n,'this item')}"?`;
     if (!confirm(msg)) return;
     delNode(mNode);closeModal();
   });
