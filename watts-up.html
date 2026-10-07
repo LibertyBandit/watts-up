@@ -288,14 +288,17 @@
     .data-grid .grid-desc-readonly,.data-grid .grid-refdes-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;padding:.14rem .27rem;font-size:.67rem}
     .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.61rem;color:var(--text-muted)}
     .data-grid .grid-col-refdes input{font-family:monospace;font-size:.61rem}
+    .data-grid .grid-col-phase input{font-family:monospace;font-size:.61rem;width:100%}
     /* DC tint covers the identity columns (Type through AC/DC) and stops before the editable
        numeric groups, so it doesn't compete with the disabled-cell fill further right. Explicit
        classes, not nth-child, so column order can change safely. */
     .data-grid tbody tr.row-dc .grid-col-type,.data-grid tbody tr.row-dc .grid-col-desc,
     .data-grid tbody tr.row-dc .grid-col-refdes,.data-grid tbody tr.row-dc .grid-col-status,
+    .data-grid tbody tr.row-dc .grid-col-phase,
     .data-grid tbody tr.row-dc .grid-col-v,.data-grid tbody tr.row-dc .grid-col-acdc{background:rgba(88,166,255,.22)}
     .data-grid tbody tr.row-dc:hover .grid-col-type,.data-grid tbody tr.row-dc:hover .grid-col-desc,
     .data-grid tbody tr.row-dc:hover .grid-col-refdes,.data-grid tbody tr.row-dc:hover .grid-col-status,
+    .data-grid tbody tr.row-dc:hover .grid-col-phase,
     .data-grid tbody tr.row-dc:hover .grid-col-v,.data-grid tbody tr.row-dc:hover .grid-col-acdc{background:rgba(88,166,255,.32)}
     /* Lives on the inner (already depth-indented) flex div, not the <td> itself, so the bar
        starts at the badge's actual position (matching the LH tree pane's indented look) instead
@@ -335,6 +338,16 @@
       font-weight:700;letter-spacing:.3px;color:var(--text-secondary);cursor:pointer}
     .tru-view-btn:hover{color:var(--text-primary)}
     .tru-view-btn.active{background:var(--accent-blue);color:#fff}
+    /* Revision 74 (Phase B): Edit-dialog "Phases" box — phase tabs reuse the TRU toggle's look. */
+    .phase-box{margin:.45rem 0;padding:.3rem .55rem .5rem;border:1px solid var(--border);border-radius:6px;background:rgba(88,166,255,.05)}
+    .phase-enable{font-size:.75rem;color:var(--text-secondary);display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap}
+    .phase-enable.disabled{opacity:.55;cursor:default}
+    #ef-phase-tabs{flex-wrap:wrap;align-items:center;width:auto;max-width:100%}
+    .phase-tab-new{font-style:italic}
+    .phase-tab-x{margin-left:.4rem;opacity:.65;font-weight:400}
+    .phase-tab-x:hover{opacity:1}
+    .phase-add-btn{background:none;border:1px dashed var(--border);border-radius:4px;padding:.2rem .7rem;font-size:.72rem;color:var(--text-secondary);cursor:pointer;margin-left:2px}
+    .phase-add-btn:hover{color:var(--text-primary);border-color:var(--text-muted)}
     .tru-parent-row{position:relative}
     .tru-parent-remove{position:absolute;right:-.3rem;top:-.3rem;background:var(--bg-elevated);
       border:1px solid var(--border);border-radius:50%;width:18px;height:18px;line-height:16px;
@@ -598,9 +611,26 @@
             </div>
           </div>
 
+          <!-- Revision 74 (Phase B): phase tabs. Moved by efPhasePlaceBox() to sit between the shared
+               Capacity fields and the per-phase fields (Existing Load / Net Change Override, or Load
+               Value), which is the part of this form that switches with the selected tab. -->
+          <div id="ef-phase-box" class="phase-box hidden">
+            <div class="section-label-row">
+              <div class="section-label">Phases</div>
+              <label id="ef-phase-enable-wrap" class="phase-enable hidden"><input type="checkbox" id="ef-phase-enable"> Multi-phase</label>
+            </div>
+            <span id="ef-phase-hint" class="field-hint hidden"></span>
+            <div id="ef-phase-tabs-wrap" class="hidden">
+              <div class="tru-view-toggle" id="ef-phase-tabs"></div>
+              <div class="form-row">
+                <div class="form-group" style="flex:0 0 120px"><label>Phase label</label><input id="ef-phase-label" type="text" maxlength="8"></div>
+                <div class="form-group hidden" id="ef-phase-parent-group" style="flex:1"><label>Parent for this phase</label><select id="ef-phase-parent"></select></div>
+              </div>
+            </div>
+          </div>
           <div id="ef-sec-cap" class="hidden">
             <div class="section-label-row">
-              <div class="section-label">Capacity</div>
+              <div class="section-label" id="ef-cap-heading">Capacity</div>
               <button type="button" class="btn-reset" data-ids="ef-cap-a,ef-cap-w,ef-cap-a2,ef-cap-va">Reset</button>
             </div>
             <div id="ef-cap-dc">
@@ -1148,20 +1178,38 @@ function setPhaseLabel(id,label) {
   cascadePhase(id,label);
   return null;
 }
-// Copies the primary's synced fields onto every other member of the group.
-function syncPhaseGroup(gid,nodes) {
-  const members=phaseGroupMembers(gid,nodes);
+// Copies the primary's synced fields onto every other member of the group. Runs inside every
+// recalc (see recalcAnalysis), so an edit to the primary from any path — Edit dialog, either grid,
+// anything added later — reaches its phase-mates without each path having to remember to. A status
+// change that crosses into or out of Installed also clears the field that stops being meaningful
+// on each mate, the same rule the Edit dialog applies to the primary (Existing Load clears when an
+// item becomes Installed, Net Change when an Installed item goes back to Existing/Removed); the
+// grids' own toggle only ever flips Existing<->Removed, which clears nothing.
+function syncPhaseGroup(gid,nodes,members) {
+  members=members||phaseGroupMembers(gid,nodes);
   if (members.length<2) return;
   const prim=members[0];
   members.slice(1).forEach(m=>{
+    const oldStatus=m.status;
     PHASE_SYNC_FIELDS.forEach(f=>{ m[f]=prim[f]; });
+    ensureTypeFields(m);
+    if (oldStatus!==m.status&&hasCap(m.type)&&!isLoad(m.type)&&!m.convRole) {
+      const oldTracks=oldStatus==='existing'||oldStatus==='removed';
+      const newTracks=m.status==='existing'||m.status==='removed';
+      if (oldTracks&&m.status==='new') m.existingLoad=mkPow();
+      else if (oldStatus==='new'&&newTracks) m.netChangeOverride=null;
+    }
     if (hasCap(prim.type)&&!isLoad(prim.type)) m.capacity=prim.capacity?{...prim.capacity}:null;
   });
 }
 function syncAllPhaseGroups(nodes) {
-  const gids=new Set();
-  Object.values(nodes).forEach(n=>{ if (n.phaseGroupId) gids.add(n.phaseGroupId); });
-  gids.forEach(g=>syncPhaseGroup(g,nodes));
+  const byGroup={};
+  Object.values(nodes).forEach(n=>{ if (n.phaseGroupId) (byGroup[n.phaseGroupId]=byGroup[n.phaseGroupId]||[]).push(n); });
+  Object.values(byGroup).forEach(ms=>{
+    if (ms.length<2) return;
+    ms.sort((a,b)=>(a.phaseSeq||0)-(b.phaseSeq||0));
+    syncPhaseGroup(null,nodes,ms);
+  });
 }
 // Structural rules for phase data; returns a list of problems (empty when valid). Used on import,
 // so a hand-edited or corrupted file fails with a clear message instead of loading into a tree the
@@ -1924,6 +1972,7 @@ function warnNode(node,nodes) {
 // Project).
 function recalcAnalysis(an) {
   if (!an) return;
+  syncAllPhaseGroups(an.nodes);
   const roots=an.rootIds||(an.rootId?[an.rootId]:[]);
   postOrder(roots,an.nodes).forEach(id=>{
     const n=an.nodes[id]; const v=n.voltage||0;
@@ -2993,7 +3042,12 @@ function sameShapeTypes(type){ for (const g of SAME_SHAPE_GROUPS) if (g.includes
 // IN/OUT structure, not a single-node type change, so switching one in place has no safe
 // meaning without also building/attaching the other half. Everything else is switchable.
 const GRID_SWITCHABLE_TYPES=[...NT.GENERATION,...NT.DISTRIBUTION,...NT.PROTECTION,...NT.LOAD];
-function gridAvailableTypes(n){ return (n.convRole||n.type==='Root') ? [n.type] : GRID_SWITCHABLE_TYPES; }
+function gridAvailableTypes(n){
+  if (n.convRole||n.type==='Root') return [n.type];
+  // A split origin can't become a Load (loads can't start a phase split); deeper phase-mates can.
+  if (n.phase&&isPhaseOrigin(n)) return GRID_SWITCHABLE_TYPES.filter(t=>!isLoad(t));
+  return GRID_SWITCHABLE_TYPES;
+}
 // A TRU can't be created by switching a row's own type in place (it's a paired IN/OUT node
 // structure, not a single-node change) — this sentinel value is a trigger, not a real type: its
 // change handler (gridFieldChanged) intercepts it, opens the Add Item(s) modal with this row
@@ -3272,6 +3326,31 @@ function siblingOrderInfoForNode(n){
 // single ~300px cell couldn't fit a badge, a type dropdown, a description, and a ref des all at
 // once (the dropdown alone was squeezed to ~12px). Each now gets a column properly sized for
 // its own content.
+// Revision 74 (Phase B): the phase-label column only exists while the analysis has at least one
+// labeled item, so projects that don't use phases see no change at all. gridPhaseSecondary holds
+// every phase-mate that isn't its group's primary — those rows mirror the primary's type,
+// description, ref des, status and capacity, so those cells are read-only there.
+let gridPhaseCol=false;
+let gridPhaseSecondary=new Set();
+function gridPhasePrepare() {
+  const nodes=Object.values(state.nodes);
+  gridPhaseCol=nodes.some(n=>n.phase);
+  gridPhaseSecondary=new Set();
+  if (!gridPhaseCol) return;
+  const byGroup={};
+  nodes.forEach(n=>{ if (n.phaseGroupId&&!n.convRole) (byGroup[n.phaseGroupId]=byGroup[n.phaseGroupId]||[]).push(n); });
+  Object.values(byGroup).forEach(ms=>{
+    if (ms.length<2) return;
+    ms.sort((a,b)=>(a.phaseSeq||0)-(b.phaseSeq||0));
+    ms.slice(1).forEach(m=>gridPhaseSecondary.add(m.id));
+  });
+}
+function gridPhaseCell(n,editable) {
+  if (!gridPhaseCol) return '';
+  if (!n.phase) return `<td class="grid-col-phase"></td>`;
+  if (editable&&isPhaseOrigin(n)) return `<td class="grid-col-phase"><input data-field="phase" value="${esc(n.phase)}" maxlength="${PHASE_LABEL_MAX}" title="Phase label — editable here at the split origin"></td>`;
+  return `<td class="grid-col-phase"><span class="grid-refdes-readonly" title="Phase label">${esc(n.phase)}</span></td>`;
+}
 function gridTypeCell(n,depth,editable=true){
   // 10px/level (was 14px) so deep nesting leaves more of the Type column for the badge+select.
   const indent=`style="padding-left:${depth*10}px"`;
@@ -3370,6 +3449,9 @@ function truGridRole(n) {
 }
 function gridShareInfo(n,gridKey){
   if (!state) return {show:false};
+  // Items inside a phase split can't be shared with the other analysis yet (whole-phase-group
+  // sharing is a later addition), so no Share button is offered for them.
+  if (n.phase) return {show:false};
   // Revision 52 (items 6/7): a conversion-output row is managed via its IN row's Share/Unshare,
   // same as Dup/Del already are (canDelDup) — sharing/unsharing always handles the IN/OUT pair
   // together, so a separate control on OUT would be redundant at best and confusing at worst.
@@ -3491,16 +3573,17 @@ function buildExRemRow(n,depth){
   // Revision 47 (Phase 2c): a shared non-load item's Existing Load is computed from its PCM
   // peer's new-load, not entered here — shown as a read-only value (gridDisplayCells) instead
   // of the normal editable cells, and its Reset button is hidden (nothing to reset to).
+  const phaseLocked=gridPhaseSecondary.has(n.id);
   const exLoadLocked=apExistingLoadLocked(n)||truValueLocked;
   const exLoadCells=exLoadLocked
     ?gridDisplayCells(n,'existingLoad',hasCap(n.type))
     :gridPowerGroupCells(n,'existingLoad',hasCap(n.type));
   return `<tr data-nid="${n.id}" class="${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}">
-    ${gridTypeCell(n,depth)}${gridDescInputCell(n)}${gridRefDesCell(n)}
-    ${truStatusLocked?gridStatusDisplayCell(n):gridStatusToggleCell(n,otherStatus)}
+    ${gridTypeCell(n,depth,!phaseLocked)}${gridDescInputCell(n,!phaseLocked)}${gridRefDesCell(n,!phaseLocked)}${gridPhaseCell(n,true)}
+    ${(truStatusLocked||phaseLocked)?gridStatusDisplayCell(n):gridStatusToggleCell(n,otherStatus)}
     ${gridVoltAcdcCells(n)}
     ${gridEffCell(n,truValueLocked,truValueLocked)}${gridPfCell(n,truValueLocked,truValueLocked)}
-    ${gridCapCells(n,truValueLocked,truValueLocked)}${gridGroupResetCell('capacity',hasCap(n.type)&&!truValueLocked)}
+    ${gridCapCells(n,truValueLocked||phaseLocked,truValueLocked||phaseLocked)}${gridGroupResetCell('capacity',hasCap(n.type)&&!truValueLocked&&!phaseLocked)}
     ${exLoadCells}${gridGroupResetCell('existingLoad',hasCap(n.type)&&!exLoadLocked)}
     ${gridPowerGroupCells(n,'loadValue',isLoad(n.type),truValueLocked)}${gridGroupResetCell('loadValue',isLoad(n.type)&&!truValueLocked)}
     ${gridActionsCell(n,false,'exrem')}
@@ -3521,6 +3604,7 @@ function gridColgroup(resettable3){
   // by ~0.9 from their pre-rebalance values so the grid reads at a comfortable density at 100%
   // browser zoom instead of requiring ~90% zoom.
   const widths=[270,170,80,90,47,52,50,47, 58,58,58,31, 58,58,58,58,58,31, 58,58,58,58,58];
+  if (gridPhaseCol) widths.splice(3,0,62);
   if (resettable3) widths.push(31);
   widths.push(190);
   const total=widths.reduce((a,b)=>a+b,0);
@@ -3529,7 +3613,7 @@ function gridColgroup(resettable3){
 }
 function gridHeader(group2Label,group3Label,resettable3=true){
   return `<thead><tr>
-    <th class="left grid-col-type" rowspan="2">Item Type</th><th class="left grid-col-desc" rowspan="2">Description</th><th class="left grid-col-refdes" rowspan="2">Ref Des</th><th class="grid-col-status" rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
+    <th class="left grid-col-type" rowspan="2">Item Type</th><th class="left grid-col-desc" rowspan="2">Description</th><th class="left grid-col-refdes" rowspan="2">Ref Des</th>${gridPhaseCol?'<th class="grid-col-phase" rowspan="2" title="Phase label">Ø</th>':''}<th class="grid-col-status" rowspan="2">Status</th><th rowspan="2">V</th><th rowspan="2">AC/DC</th><th rowspan="2">Eff.</th><th rowspan="2">PF</th>
     <th class="group-hdr" colspan="3">Capacity</th><th class="reset-hdr" rowspan="2"></th>
     <th class="group-hdr" colspan="5">${group2Label}</th><th class="reset-hdr" rowspan="2"></th>
     <th class="group-hdr" colspan="5">${group3Label}</th>${resettable3?'<th class="reset-hdr" rowspan="2"></th>':''}
@@ -3546,11 +3630,12 @@ function buildNewRow(n,depth){
   // phase's values are mirrored across every input by doEditSaveTru, so they're locked here too
   // (source spec §3.5.1); description/Ref Des stay editable via the existing !isExistingCtx gate.
   const truValueLocked=truGridRole(n)==='additional';
-  const forceVals=isExistingCtx||truValueLocked;
+  const phaseLocked=gridPhaseSecondary.has(n.id);
+  const forceVals=isExistingCtx||truValueLocked||phaseLocked;
   // Show the locked value for a TRU additional-input row, unless existing-context hiding also
   // applies — that takes precedence (Revision 23's deliberate "no old values in New-grid context"
   // behavior wins over Revision 57's "show the mirrored value" for additional-input rows).
-  const showLockedVals=truValueLocked&&!isExistingCtx;
+  const showLockedVals=(truValueLocked||phaseLocked)&&!isExistingCtx;
   // New-status, non-load, childless items can carry a direct Net Change override instead of
   // the usual computed (children-summed) value — the same netChangeOverride field the Edit
   // modal already supports, just exposed for direct grid entry in this specific case. Explicitly
@@ -3561,7 +3646,7 @@ function buildNewRow(n,depth){
   const ncOverridable=!isExistingCtx&&!isLoad(n.type)&&!n.convRole&&children(n.id,state.nodes).length===0;
   const rowCls=`${n.acDc!=='ac'?'row-dc':''}${gridWarnClass(n)}${isExistingCtx?' row-readonly':''}`;
   return `<tr data-nid="${n.id}" class="${rowCls}">
-    ${gridTypeCell(n,depth,!isExistingCtx)}${gridDescInputCell(n,!isExistingCtx)}${gridRefDesCell(n,!isExistingCtx)}
+    ${gridTypeCell(n,depth,!isExistingCtx&&!phaseLocked)}${gridDescInputCell(n,!isExistingCtx&&!phaseLocked)}${gridRefDesCell(n,!isExistingCtx&&!phaseLocked)}${gridPhaseCell(n,!isExistingCtx)}
     ${gridStatusDisplayCell(n)}
     ${gridVoltAcdcCells(n,isExistingCtx)}
     ${gridEffCell(n,forceVals,showLockedVals)}${gridPfCell(n,forceVals,showLockedVals)}
@@ -3586,6 +3671,12 @@ function gridFieldChanged(e,renderFn){
     const aftype=document.getElementById('af-type');
     aftype.value='TRU';
     aftype.dispatchEvent(new Event('change',{bubbles:true}));
+    return;
+  }
+  if (field==='phase') {
+    const err=isPhaseOrigin(n)?setPhaseLabel(id,el.value):'Phase labels can only be changed at the split origin.';
+    if (err) alert(err);
+    recalc();persist();renderAll();
     return;
   }
   if (field==='description') n.description=el.value;
@@ -3800,6 +3891,7 @@ function renderExRemGrid(){
   // Revision 57 (Phase 4): tree-display order (source spec §3.1) — a TRU's output row now
   // follows its last input phase, matching the Power Distribution Tree's own relocation, instead
   // of raw structural traversal order.
+  gridPhasePrepare();
   const {ids:allIds,depths:dm}=preOrderDisplayWithDepth(state.rootIds,state.nodes);
   const statusIds=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='removed'); });
   const ids=applyGridFilters(statusIds,state.nodes);
@@ -3817,6 +3909,7 @@ function renderNewGrid(){
   const scrollPos=gridScrollPos(el);
   if (!state||!state.rootIds?.length) { el.innerHTML='<div class="empty-state">No data.</div>'; return; }
   // Revision 57 (Phase 4): tree-display order (source spec §3.1) — see renderExRemGrid.
+  gridPhasePrepare();
   const {ids:allIds,depths:dm}=preOrderDisplayWithDepth(state.rootIds,state.nodes);
   const statusIds=allIds.filter(id=>{ const n=state.nodes[id]; return n&&(n.status==='existing'||n.status==='new'); });
   const ids=applyGridFilters(statusIds,state.nodes);
@@ -4173,6 +4266,408 @@ function collectEfRefs() {
   return result;
 }
 
+// ── PHASE TABS IN THE EDIT DIALOG (Revision 74, Phase B) ─────────────────────
+// Opening Edit on any phase-mate edits the whole group (like the TRU dialog edits its whole
+// conversion group): the shared fields — type, status, description, ref des, capacity — appear
+// once and belong to the group's primary; a tab strip switches the per-phase fields (label,
+// Existing Load, Net Change Override or Load Value, Notes & References). Each tab keeps its own
+// draft (a snapshot of those form fields) while you switch; Save commits every tab, Cancel
+// discards all of it. The shared fields reach the other phase-mates through syncPhaseGroup, which
+// runs inside every recalc.
+//   efPhase = { mode:'group'|'enable', primaryId, active, order:[tabIds], drafts:{tabId:draft},
+//               originLevel, enabled, nextTmp }
+//   draft   = { vals:{formFieldId:string}, notes, refs, label, pending, parentId, nodeId }
+// A "pending" tab is a phase-mate added in this session that doesn't exist until Save.
+let efPhase=null;
+let efGroupSaving=false,efPrimarySaved=false;
+const PHASE_MAX_MATES=3;
+const EF_PER_PHASE_IDS=['ef-exld-a','ef-exld-w','ef-exld-ac-a','ef-exld-ac-va','ef-exld-ac-w','ef-exld-ac-var','ef-exld-ac-pf',
+  'ef-ov-a','ef-ov-w','ef-ov-ac-w','ef-ov-ac-var',
+  'ef-load-a','ef-load-w','ef-load-ac-a','ef-load-ac-va','ef-load-ac-w','ef-load-ac-var','ef-load-ac-pf'];
+const efEl=id=>document.getElementById(id);
+
+function phaseShareBlocked(n) { return subtree(n.id,state.nodes).some(id=>state.nodes[id]&&state.nodes[id].sharedPeerId); }
+// Whether an unlabeled item can become a split origin under the given parent: AC, not top-level,
+// not Total Aircraft Load / a Load / a conversion type, and its parent is itself unsplit.
+function phaseEligibleUnder(n,parentId) {
+  if (!n||n.phase||n.convRole||!parentId) return false;
+  if (n.acDc!=='ac'||n.type==='Root'||isLoad(n.type)||isConv(n.type)) return false;
+  const p=state.nodes[parentId];
+  return !!p&&!p.phase;
+}
+function phaseEligible(n) { return phaseEligibleUnder(n,n&&n.parentId); }
+// New phase-mates of an origin sit right after the existing ones, in order, under the shared parent.
+function phasePlaceAfterMates(id,gid) {
+  const n=state.nodes[id]; const arr=n&&siblingArray(n); if (!arr) return;
+  const mates=phaseGroupMembers(gid).filter(m=>m.id!==id&&m.parentId===n.parentId);
+  arr.splice(arr.lastIndexOf(id),1);
+  const idxs=mates.map(m=>arr.indexOf(m.id)).filter(i=>i>=0);
+  arr.splice(idxs.length?Math.max(...idxs)+1:arr.length,0,id);
+}
+// The per-phase form fields of one node, as strings keyed by form-field id.
+function efPerPhaseVals(n) {
+  const vals={};
+  if (hasCap(n.type)&&!n.convRole) {
+    const ex=n.existingLoad||mkPow(0,0,0,0,1);
+    vals['ef-exld-a']=fmtPField(ex.a); vals['ef-exld-w']=fmtPField(ex.w);
+    vals['ef-exld-ac-a']=fmtPField(ex.a); vals['ef-exld-ac-va']=fmtPField(ex.va); vals['ef-exld-ac-w']=fmtPField(ex.w);
+    vals['ef-exld-ac-var']=fmtPField(ex.var); vals['ef-exld-ac-pf']=fmtPField(ex.pf);
+    const ov=n.netChangeOverride;
+    const ovW=ov!==null&&ov!==undefined?(typeof ov==='object'?ov.w:ov):null;
+    const ovVAR=ov!==null&&ov!==undefined&&typeof ov==='object'?ov.var:null;
+    const vv=n.voltage||0;
+    const ovA=ov!==null&&ov!==undefined&&typeof ov==='object'&&ov.a!==null&&ov.a!==undefined?ov.a
+             :(vv>0&&ovW!==null?ovW/vv:null);
+    vals['ef-ov-a']=fmtPField(ovA); vals['ef-ov-w']=fmtPField(ovW);
+    vals['ef-ov-ac-w']=fmtPField(ovW); vals['ef-ov-ac-var']=fmtPField(ovVAR);
+  }
+  if (isLoad(n.type)) {
+    const lv=n.loadValue||mkPow();
+    vals['ef-load-a']=fmtPField(lv.a); vals['ef-load-w']=fmtPField(lv.w);
+    vals['ef-load-ac-a']=fmtPField(lv.a); vals['ef-load-ac-va']=fmtPField(lv.va); vals['ef-load-ac-w']=fmtPField(lv.w);
+    vals['ef-load-ac-var']=fmtPField(lv.var); vals['ef-load-ac-pf']=fmtPField(lv.pf);
+  }
+  return vals;
+}
+function efFillPerPhaseDom(vals) { Object.keys(vals).forEach(id=>{ const e=efEl(id); if (e) e.value=vals[id]; }); }
+// Existing Load / Net Change Override / Load Value derivation from the form (or a draft, via pF).
+// Shared by the primary's save (reads the form) and every other phase-mate's (reads its draft).
+function efPerPhaseData(pF,type,acDc,v,voltage) {
+  const data={};
+  if (hasCap(type)) {
+    if (acDc==='ac') {
+      const ovW=pF('ef-ov-ac-w');const ovVAR=pF('ef-ov-ac-var');
+      data.netChangeOverride=ovW!==null?{w:ovW,var:ovVAR??0}:null;
+      data.existingLoad=calcAcPowerGroup({a:pF('ef-exld-ac-a'),va:pF('ef-exld-ac-va'),w:pF('ef-exld-ac-w'),var:pF('ef-exld-ac-var'),pf:pF('ef-exld-ac-pf')},v);
+    } else {
+      const ovA=pF('ef-ov-a'),ovW=pF('ef-ov-w');
+      if (ovA!==null||ovW!==null) {
+        const vv=voltage||0;
+        const a=ovA!==null?ovA:(vv>0&&ovW!==null?ovW/vv:null);
+        const w=a!==null&&vv>0?a*vv:ovW;
+        data.netChangeOverride={w,a};
+      } else {data.netChangeOverride=null;}
+      const exA=pF('ef-exld-a'),exW=pF('ef-exld-w');
+      data.existingLoad=autoDc(exA,exW,v);
+    }
+  }
+  if (isLoad(type)) {
+    if (acDc==='ac') {
+      data.loadValue=calcAcPowerGroup({a:pF('ef-load-ac-a'),va:pF('ef-load-ac-va'),w:pF('ef-load-ac-w'),var:pF('ef-load-ac-var'),pf:pF('ef-load-ac-pf')},v);
+    } else {
+      data.loadValue=autoDc(pF('ef-load-a'),pF('ef-load-w'),v);
+    }
+  }
+  return data;
+}
+function efPhaseDraftOf(node) {
+  return {vals:efPerPhaseVals(node),notes:(node.rowNotes||[]).map(o=>({...o})),refs:(node.rowRefs||[]).map(o=>({...o})),
+    label:node.phase||'',pending:false,parentId:node.parentId,nodeId:node.id};
+}
+function efPhaseActiveNode() {
+  const P=efPhase; if (!P||!P.enabled) return null;
+  const d=P.drafts[P.active];
+  return d&&!d.pending?state.nodes[P.active]:null;
+}
+function efPhaseActiveRealId() { const n=efPhaseActiveNode(); return n?n.id:null; }
+function efPhaseSetup(n,openedId) {
+  efPhase=null;
+  efEl('ef-phase-box').classList.add('hidden');
+  efEl('ef-parent').disabled=false;
+  if (n.convRole) return;
+  if (n.phase) {
+    const members=phaseGroupMembers(n.phaseGroupId);
+    const prim=members[0]||n;
+    efPhase={mode:'group',primaryId:prim.id,active:members.some(m=>m.id===openedId)?openedId:prim.id,
+      order:members.map(m=>m.id),drafts:{},originLevel:isPhaseOrigin(prim),enabled:true,nextTmp:1};
+    members.forEach(m=>{ efPhase.drafts[m.id]=efPhaseDraftOf(m); });
+  } else if (phaseEligible(n)) {
+    efPhase={mode:'enable',primaryId:n.id,active:n.id,order:[n.id],drafts:{[n.id]:efPhaseDraftOf(n)},
+      originLevel:true,enabled:false,nextTmp:1};
+    efPhase.drafts[n.id].label=PHASE_DEFAULT_LABELS[0];
+  } else return;
+  efEl('ef-phase-box').classList.remove('hidden');
+  efEl('ef-phase-enable').onchange=e=>{
+    efPhase.enabled=e.target.checked;
+    efPhaseStash();
+    efPhaseApplyActive();
+    efPhaseFilterTypes();
+  };
+  efEl('ef-phase-label').oninput=e=>{
+    efPhase.drafts[efPhase.active].label=e.target.value;
+    efPhaseRenderTabs(); efPhaseHeadings();
+  };
+  efEl('ef-phase-parent').onchange=e=>{
+    const d=efPhase.drafts[efPhase.active];
+    d.parentId=e.target.value||null;
+    d.label=d.parentId?(state.nodes[d.parentId].phase||''):'';
+    efPhaseRender(); efPhaseHeadings();
+  };
+  efPhasePlaceBox();
+  efPhaseFilterTypes();
+}
+// Moves the Phases box between the shared Capacity fields and the per-phase fields — for a Load,
+// to the top of its Load Value section instead.
+function efPhasePlaceBox() {
+  const box=efEl('ef-phase-box');
+  if (isLoad(efEl('ef-type').value)) { const sec=efEl('ef-sec-load'); if (box.parentNode!==sec) sec.insertBefore(box,sec.firstChild); }
+  else { const ex=efEl('ef-sec-exload'); if (box.nextSibling!==ex) ex.parentNode.insertBefore(box,ex); }
+}
+// A labeled item can't switch to Total Aircraft Load or a conversion type, and a split origin
+// can't become a Load (none of those can be phase-mates / origins).
+function efPhaseFilterTypes() {
+  const P=efPhase; if (!P||!P.enabled) return;
+  const sel=efEl('ef-type');
+  Array.from(sel.querySelectorAll('option')).forEach(o=>{
+    if (o.value==='Root'||isConv(o.value)||(P.originLevel&&isLoad(o.value))) o.remove();
+  });
+  Array.from(sel.querySelectorAll('optgroup')).forEach(g=>{ if (!g.children.length) g.remove(); });
+}
+function efPhaseNextLabel() {
+  const used=new Set(Object.values(efPhase.drafts).map(d=>String(d.label||'').trim()));
+  return PHASE_DEFAULT_LABELS.find(l=>!used.has(l))||'';
+}
+// Unused phase-mates of the primary's parent group — the only parents a new deeper phase-mate may take.
+function efPhaseFreeParents(excludeTabId) {
+  const P=efPhase; const prim=state.nodes[P.primaryId];
+  const pp=prim.parentId?state.nodes[prim.parentId]:null;
+  if (!pp||!pp.phaseGroupId) return [];
+  const used=new Set();
+  P.order.forEach(id=>{
+    if (id===excludeTabId) return;
+    const d=P.drafts[id]; const pid=d.pending?d.parentId:state.nodes[id].parentId;
+    if (pid) used.add(pid);
+  });
+  return phaseGroupMembers(pp.phaseGroupId).filter(m=>!used.has(m.id));
+}
+function efPhaseCanAdd() {
+  const P=efPhase;
+  if (!P||!P.enabled||P.order.length>=PHASE_MAX_MATES) return false;
+  return P.originLevel?true:efPhaseFreeParents().length>0;
+}
+function efPhaseTabLabel(id) {
+  const d=efPhase.drafts[id]; const l=String(d.label||'').trim();
+  return l||(d.pending?'New':'?');
+}
+function efPhaseRenderTabs() {
+  const P=efPhase; if (!P) return;
+  const tabs=efEl('ef-phase-tabs'); tabs.innerHTML='';
+  P.order.forEach(id=>{
+    const d=P.drafts[id];
+    const b=document.createElement('button'); b.type='button';
+    b.className='tru-view-btn'+(id===P.active?' active':'')+(d.pending?' phase-tab-new':'');
+    b.textContent=efPhaseTabLabel(id);
+    b.onclick=()=>efPhaseActivate(id);
+    if (d.pending) {
+      const x=document.createElement('span'); x.className='phase-tab-x'; x.textContent='✕'; x.title='Discard this new phase';
+      x.onclick=e=>{ e.stopPropagation(); efPhaseDiscard(id); };
+      b.appendChild(x);
+    }
+    tabs.appendChild(b);
+  });
+  if (efPhaseCanAdd()) {
+    const add=document.createElement('button'); add.type='button'; add.className='phase-add-btn'; add.textContent='+ Phase';
+    add.onclick=efPhaseAdd;
+    tabs.appendChild(add);
+  }
+}
+function efPhaseRender() {
+  const P=efPhase; if (!P) return;
+  const prim=state.nodes[P.primaryId];
+  const wrap=efEl('ef-phase-enable-wrap'),cb=efEl('ef-phase-enable'),hint=efEl('ef-phase-hint');
+  const pending=P.order.some(id=>P.drafts[id].pending);
+  let showEnable=false,locked=false,hintText='';
+  if (P.mode==='enable') {
+    showEnable=true;
+    if (phaseShareBlocked(prim)) { locked=true; hintText='Can\'t split this item into phases while it, or anything under it, is shared with the other analysis.'; }
+    else if (!P.enabled) hintText='Turn on to split this item into phases (A, B, C …). It becomes the first phase, and everything already under it follows.';
+  } else if (P.originLevel&&P.order.length===1) {
+    showEnable=true;
+    if (pending) { locked=true; hintText='Discard the added phases before turning multi-phase off.'; }
+    else if (!P.enabled) hintText='Saving with this off removes the phase label from this item and everything under it.';
+  }
+  wrap.classList.toggle('hidden',!showEnable); wrap.classList.toggle('disabled',locked);
+  cb.checked=P.enabled; cb.disabled=locked;
+  hint.textContent=hintText; hint.classList.toggle('hidden',!hintText);
+  efEl('ef-phase-tabs-wrap').classList.toggle('hidden',!P.enabled);
+  efEl('ef-parent').disabled=P.enabled&&P.order.length>1;
+  if (!P.enabled) return;
+  efPhaseRenderTabs();
+  const d=P.drafts[P.active];
+  const labelEl=efEl('ef-phase-label');
+  labelEl.value=d.label||''; labelEl.disabled=!P.originLevel;
+  labelEl.title=P.originLevel?'Phase label (up to '+PHASE_LABEL_MAX+' characters)':'This phase takes its label from its parent';
+  const pg=efEl('ef-phase-parent-group');
+  const needsParent=d.pending&&!P.originLevel;
+  pg.classList.toggle('hidden',!needsParent);
+  if (needsParent) {
+    const sel=efEl('ef-phase-parent'); sel.innerHTML='';
+    const blank=document.createElement('option'); blank.value=''; blank.textContent='— Select parent —'; sel.appendChild(blank);
+    efPhaseFreeParents(P.active).forEach(m=>{
+      const o=document.createElement('option'); o.value=m.id; o.textContent=dispName(m)+(m.refDes?` [${m.refDes}]`:'');
+      if (m.id===d.parentId) o.selected=true;
+      sel.appendChild(o);
+    });
+  }
+}
+// Section headings for the per-phase fields name the selected phase.
+function efPhaseHeadings() {
+  const P=efPhase;
+  const d=P&&P.enabled?P.drafts[P.active]:null;
+  const lbl=d&&String(d.label||'').trim();
+  const sfx=lbl?` — Ø${lbl}`:'';
+  const set=(sel,txt)=>{ const e=document.querySelector(sel); if (e) e.textContent=txt; };
+  set('#ef-sec-exload .section-label','Existing Load'+sfx);
+  set('#ef-sec-override .section-label','Net Change Override'+sfx);
+  set('#ef-sec-load .section-label','Load Value'+sfx);
+  set('#ef-nr-toggle .nr-toggle-label','Notes & References'+sfx);
+  efEl('ef-cap-heading').textContent='Capacity'+(P&&P.enabled?' (all phases)':'');
+}
+function efPhaseStash() {
+  const P=efPhase; if (!P) return;
+  const d=P.drafts[P.active]; if (!d) return;
+  EF_PER_PHASE_IDS.forEach(id=>{ const e=efEl(id); if (e) d.vals[id]=e.value; });
+  d.notes=collectEfNotes(); d.refs=collectEfRefs();
+}
+// Loads the selected tab's draft into the form and refreshes everything that depends on it.
+function efPhaseApplyActive() {
+  const P=efPhase; if (!P) return;
+  const d=P.drafts[P.active];
+  if (P.enabled) {
+    efFillPerPhaseDom(d.vals);
+    renderEfNotesRefs({id:d.pending?null:P.active,type:efEl('ef-type').value,status:efEl('ef-status').value,rowNotes:d.notes,rowRefs:d.refs});
+  }
+  efReshow();
+  efPhaseHeadings();
+  efPhaseRender();
+  const real=!!efPhaseActiveRealId()||!P.enabled;
+  efEl('btn-del').disabled=!real; efEl('btn-duplicate').disabled=!real;
+}
+function efPhaseActivate(id) {
+  const P=efPhase; if (!P||P.active===id) return;
+  efPhaseStash();
+  P.active=id;
+  efPhaseApplyActive();
+}
+function efPhaseAdd() {
+  const P=efPhase; if (!P||!efPhaseCanAdd()) return;
+  const prim=state.nodes[P.primaryId];
+  if ((efEl('ef-parent').value||null)!==(prim.parentId||null)) { alert('Save the change of parent first, then add phases.'); return; }
+  efPhaseStash();
+  const tmp=makeNode(prim.type,null,{});
+  const d={vals:efPerPhaseVals(tmp),notes:[],refs:[],label:'',pending:true,parentId:null,nodeId:null};
+  if (P.originLevel) d.label=efPhaseNextLabel();
+  else { const free=efPhaseFreeParents(); if (free.length===1) { d.parentId=free[0].id; d.label=free[0].phase||''; } }
+  const id='new'+(P.nextTmp++);
+  P.drafts[id]=d; P.order.push(id); P.active=id;
+  efPhaseApplyActive();
+}
+function efPhaseDiscard(id) {
+  const P=efPhase; if (!P) return;
+  P.order=P.order.filter(x=>x!==id); delete P.drafts[id];
+  if (P.active===id) P.active=P.primaryId;
+  efPhaseApplyActive();
+}
+function efPhaseValidate() {
+  const P=efPhase; const prim=state.nodes[P.primaryId];
+  const newParentId=efEl('ef-parent').value||null;
+  if (P.mode==='enable'&&P.enabled) {
+    if (!phaseEligibleUnder(prim,newParentId)) return 'This item can\'t be split into phases under the selected parent.';
+    if (phaseShareBlocked(prim)) return 'This item can\'t be split into phases while it, or anything under it, is shared with the other analysis.';
+  }
+  if (!P.enabled) return null;
+  if (P.originLevel) {
+    const seen=[];
+    for (const id of P.order) {
+      const l=String(P.drafts[id].label||'').trim();
+      if (!l) return 'Every phase needs a label.';
+      if (l.length>PHASE_LABEL_MAX) return `A phase label can be at most ${PHASE_LABEL_MAX} characters.`;
+      if (seen.includes(l)) return `Two phases share the label "${l}".`;
+      seen.push(l);
+    }
+  } else {
+    const used=new Set();
+    for (const id of P.order) {
+      const d=P.drafts[id]; const pid=d.pending?d.parentId:state.nodes[id].parentId;
+      if (d.pending&&!pid) return 'Choose a parent for each new phase.';
+      if (used.has(pid)) return 'Two phases can\'t share a parent.';
+      used.add(pid);
+    }
+  }
+  return null;
+}
+// Applies a draft's per-phase fields and notes to a phase-mate that isn't the primary. The primary
+// goes through the ordinary save (it reads the form); everything else reads its draft instead.
+function efApplyPhaseDraft(node,d,oldStatus) {
+  const v=node.voltage||0;
+  const pF=id=>parseF(evalFormula(String(d.vals[id]===undefined?'':d.vals[id]).trim()));
+  const data=efPerPhaseData(pF,node.type,node.acDc,v,node.voltage);
+  // The primary's save already cleared whichever of these stopped being meaningful if the group's
+  // status crossed into or out of Installed (see syncPhaseGroup); don't let a stale draft value
+  // bring it back.
+  if (oldStatus!==undefined&&oldStatus!==node.status&&hasCap(node.type)&&!isLoad(node.type)) {
+    const wasTracks=oldStatus==='existing'||oldStatus==='removed';
+    const isTracks=node.status==='existing'||node.status==='removed';
+    if (wasTracks&&node.status==='new') data.existingLoad=mkPow();
+    else if (oldStatus==='new'&&isTracks) data.netChangeOverride=null;
+  }
+  Object.assign(node,data);
+  const allowed=new Set(noteGroupsFor({type:node.type,status:node.status}));
+  node.rowNotes=d.notes.map(o=>allowed.has(o.group)?o:{...o,group:null});
+  node.rowRefs=d.refs.map(r=>allowed.has(r.group)?r:{...r,group:null});
+}
+function doEditSaveGroup() {
+  const P=efPhase;
+  efPhaseStash();
+  const err=efPhaseValidate();
+  if (err) { alert(err); return; }
+  const oldStatus={};
+  P.order.forEach(id=>{ if (!P.drafts[id].pending) oldStatus[id]=state.nodes[id].status; });
+  // The primary saves through the ordinary path, which reads the form — so show its tab first.
+  P.active=P.primaryId;
+  efPhaseApplyActive();
+  efGroupSaving=true; efPrimarySaved=false;
+  try { doEditSave(); } finally { efGroupSaving=false; }
+  if (!efPrimarySaved) return;
+  const primary=state.nodes[P.primaryId];
+  const labelOf=id=>String(P.drafts[id].label||'').trim();
+  if (P.enabled) {
+    // Starting a split: the item becomes the first phase and its existing branch follows.
+    if (P.mode==='enable'&&!primary.phase) { cascadePhase(primary.id,labelOf(P.primaryId)); primary.phaseSeq=0; }
+    // Label edits only apply while the item is still a split origin — a lone item that was moved
+    // under a labeled parent in this same save has already taken that parent's label.
+    if (P.originLevel) {
+      P.order.forEach(id=>{
+        const d=P.drafts[id]; if (d.pending) return;
+        const nn=state.nodes[id];
+        if (isPhaseOrigin(nn)&&nn.phase!==labelOf(id)) cascadePhase(id,labelOf(id));
+      });
+    }
+    P.order.filter(id=>P.drafts[id].pending).forEach(tid=>{
+      const d=P.drafts[tid];
+      const parentId=P.originLevel?primary.parentId:d.parentId;
+      const seq=Math.max(...phaseGroupMembers(primary.phaseGroupId).map(m=>m.phaseSeq||0))+1;
+      const ov={description:primary.description,refDes:primary.refDes,status:primary.status,acDc:primary.acDc,voltage:primary.voltage,
+        phase:labelOf(tid),phaseGroupId:primary.phaseGroupId,phaseSeq:seq};
+      if (hasCap(primary.type)) ov.capacity=primary.capacity?{...primary.capacity}:null;
+      const node=makeNode(primary.type,parentId,ov);
+      node.id=uid(); state.nodes[node.id]=node;
+      attachChild(node.id,parentId);
+      if (P.originLevel) phasePlaceAfterMates(node.id,primary.phaseGroupId);
+      d.nodeId=node.id;
+    });
+    P.order.forEach(id=>{
+      if (id===P.primaryId) return;
+      const d=P.drafts[id];
+      efApplyPhaseDraft(state.nodes[d.nodeId||id],d,oldStatus[id]);
+    });
+  } else if (P.mode==='group'&&P.originLevel&&primary.phase) {
+    clearPhaseSubtree(primary.id);
+  }
+  batchCommit();
+  closeModal();
+}
+
 // ── MODAL SHARED ─────────────────────────────────────────────────────────────
 let mMode=null, mNode=null, mBlocked=false;
 
@@ -4256,6 +4751,11 @@ function closeModal() {
   document.getElementById('modal').style.width='';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
+  efPhase=null;efGroupSaving=false;
+  efEl('ef-phase-box').classList.add('hidden');
+  efEl('ef-parent').disabled=false;
+  efEl('btn-del').disabled=false;efEl('btn-duplicate').disabled=false;
+  efPhaseHeadings();
 }
 
 // Small generic N-choice dialog (separate overlay from #modal-overlay, so it can't collide with
@@ -4333,7 +4833,7 @@ function duplicateBranch(rootId) {
   return idMap[rootId];
 }
 function duplicateNode() {
-  const id=duplicateNodeById(mNode);
+  const id=duplicateNodeById(efPhaseActiveRealId()||mNode);
   if (id) {batchCommit();closeModal();}
 }
 
@@ -4605,7 +5105,9 @@ function efReshow() {
   inhibitLoadExisting('ef-type','ef-status');
   const tp=document.getElementById('ef-type').value;
   const st=document.getElementById('ef-status').value;
-  const hc=n?children(n.id,state.nodes).length>0:false;
+  const phaseTab=efPhase&&efPhase.enabled?efPhase.drafts[efPhase.active]:null;
+  const hc=phaseTab?(!phaseTab.pending&&children(efPhase.active,state.nodes).length>0):(n?children(n.id,state.nodes).length>0:false);
+  if (efPhase) efPhasePlaceBox();
   const pid=document.getElementById('ef-parent').value||null;
   applyVoltageAcdcLock(n,pid);
   const ac=document.getElementById('ef-acdc').value;
@@ -4880,7 +5382,12 @@ function efRenderSiblings(parentId,excludeId) {
 }
 
 function openEdit(nodeId) {
-  const n=state.nodes[nodeId];if (!n) return;
+  let n=state.nodes[nodeId];if (!n) return;
+  const openedId=nodeId;
+  // A phase-mate opens its whole group (see the phase-tabs block): the group's primary supplies the
+  // shared fields, and the tab for the clicked phase-mate is selected.
+  if (n.phase&&!n.convRole) { const prim=phasePrimary(n); if (prim) { n=prim; nodeId=prim.id; } }
+  efPhase=null;
   mMode='edit';mNode=nodeId;mBlocked=false;efClearedSections.clear();
   const isRoot=state.rootIds.includes(nodeId);
 
@@ -4906,6 +5413,7 @@ function openEdit(nodeId) {
     fillTypeSelect(ftype,!pid,n.type);
     if (ftype.querySelector(`option[value="${cur}"]`)) ftype.value=cur;
     else ftype.value=ftype.options[0]?.value||'';
+    efPhaseFilterTypes();
     efReshow();
   };
 
@@ -4925,37 +5433,10 @@ function openEdit(nodeId) {
     document.getElementById('ef-cap-w').value  =fmtPField(cap?.w);
     document.getElementById('ef-cap-a2').value =fmtPField(cap?.a);
     document.getElementById('ef-cap-va').value =fmtPField(cap?.va);
-    const ex=n.existingLoad||mkPow(0,0,0,0,1);
-    document.getElementById('ef-exld-a').value  =fmtPField(ex.a);
-    document.getElementById('ef-exld-w').value  =fmtPField(ex.w);
-    document.getElementById('ef-exld-ac-a').value  =fmtPField(ex.a);
-    document.getElementById('ef-exld-ac-va').value =fmtPField(ex.va);
-    document.getElementById('ef-exld-ac-w').value  =fmtPField(ex.w);
-    document.getElementById('ef-exld-ac-var').value=fmtPField(ex.var);
-    document.getElementById('ef-exld-ac-pf').value =fmtPField(ex.pf);
-    const ov=n.netChangeOverride;
-    const ovW=ov!==null&&ov!==undefined?(typeof ov==='object'?ov.w:ov):null;
-    const ovVAR=ov!==null&&ov!==undefined&&typeof ov==='object'?ov.var:null;
-    const vv=n.voltage||0;
-    const ovA=ov!==null&&ov!==undefined&&typeof ov==='object'&&ov.a!==null&&ov.a!==undefined?ov.a
-             :(vv>0&&ovW!==null?ovW/vv:null);
-    document.getElementById('ef-ov-a').value    =fmtPField(ovA);
-    document.getElementById('ef-ov-w').value    =fmtPField(ovW);
-    document.getElementById('ef-ov-ac-w').value =fmtPField(ovW);
-    document.getElementById('ef-ov-ac-var').value=fmtPField(ovVAR);
   }
 
-  // Load fields
-  if (isLoad(n.type)) {
-    const lv=n.loadValue||mkPow();
-    document.getElementById('ef-load-a').value  =fmtPField(lv.a);
-    document.getElementById('ef-load-w').value  =fmtPField(lv.w);
-    document.getElementById('ef-load-ac-a').value  =fmtPField(lv.a);
-    document.getElementById('ef-load-ac-va').value =fmtPField(lv.va);
-    document.getElementById('ef-load-ac-w').value  =fmtPField(lv.w);
-    document.getElementById('ef-load-ac-var').value=fmtPField(lv.var);
-    document.getElementById('ef-load-ac-pf').value =fmtPField(lv.pf);
-  }
+  // Per-phase fields: Existing Load / Net Change Override (non-loads) or Load Value (loads)
+  efFillPerPhaseDom(efPerPhaseVals(n));
 
   // Old-style conv efficiency
   document.getElementById('ef-eff').value=n.efficiency!==undefined?n.efficiency:0.85;
@@ -5136,6 +5617,9 @@ function openEdit(nodeId) {
     nrArrow.classList.toggle('open',!open);
   };
 
+  efPhaseSetup(n,openedId);
+  if (efPhase) efPhaseApplyActive();
+
   document.getElementById('btn-save').disabled=false;
   document.getElementById('modal-overlay').classList.remove('hidden');
   if (n.convRole&&n.type==='TRU') document.getElementById('ef-tru-desc-0').focus();
@@ -5310,6 +5794,7 @@ function doEditSave() {
   const type=document.getElementById('ef-type').value;
   const n=state.nodes[mNode];
   if (n.convRole&&n.type==='TRU') { doEditSaveTru(n); return; }
+  if (efPhase&&!efGroupSaving) { doEditSaveGroup(); return; }
   if (isConv(type)&&!n.convRole) {
     const eff=+document.getElementById('ef-eff').value;
     if (isNaN(eff)||eff<=0||eff>1){document.getElementById('ef-eff-msg').classList.remove('hidden');return;}
@@ -5457,30 +5942,11 @@ function doEditSave() {
       const capW=pF('ef-cap-w'),capA=pF('ef-cap-a');
       data.capacity=capW!==null?{w:capW,var:null,va:null,a:v>0?capW/v:capA,pf:null}:(capA!==null?deriveDcFromA(capA,v):null);
     }
-    if (acDc==='ac') {
-      const ovW=pF('ef-ov-ac-w');const ovVAR=pF('ef-ov-ac-var');
-      data.netChangeOverride=ovW!==null?{w:ovW,var:ovVAR??0}:null;
-      data.existingLoad=calcAcPowerGroup({a:pF('ef-exld-ac-a'),va:pF('ef-exld-ac-va'),w:pF('ef-exld-ac-w'),var:pF('ef-exld-ac-var'),pf:pF('ef-exld-ac-pf')},v);
-    } else {
-      const ovA=pF('ef-ov-a'),ovW=pF('ef-ov-w');
-      if (ovA!==null||ovW!==null) {
-        const vv=voltage||0;
-        const a=ovA!==null?ovA:(vv>0&&ovW!==null?ovW/vv:null);
-        const w=a!==null&&vv>0?a*vv:ovW;
-        data.netChangeOverride={w,a};
-      } else {data.netChangeOverride=null;}
-      const exA=pF('ef-exld-a'),exW=pF('ef-exld-w');
-      data.existingLoad=autoDc(exA,exW,v);
-    }
   }
   if (isConv(type)&&!n.convRole) data.efficiency=+document.getElementById('ef-eff').value;
-  if (isLoad(type)) {
-    if (acDc==='ac') {
-      data.loadValue=calcAcPowerGroup({a:pF('ef-load-ac-a'),va:pF('ef-load-ac-va'),w:pF('ef-load-ac-w'),var:pF('ef-load-ac-var'),pf:pF('ef-load-ac-pf')},v);
-    } else {
-      data.loadValue=autoDc(pF('ef-load-a'),pF('ef-load-w'),v);
-    }
-  }
+  // Existing Load / Net Change Override / Load Value — shared with the phase-mates' saves (see
+  // efApplyPhaseDraft), which read a draft instead of the form.
+  if (!n.convRole) Object.assign(data,efPerPhaseData(pF,type,acDc,v,voltage));
   data.rowNotes=collectEfNotes();
   data.rowRefs=collectEfRefs();
   // The group picker's options reflect whatever Status/Type the modal had when it was opened —
@@ -5496,8 +5962,9 @@ function doEditSave() {
   }
   if (clearExistingLoadOnSave) data.existingLoad=mkPow();
   if (clearNetChangeOnSave) data.netChangeOverride=null;
+  efPrimarySaved=true;
   updateNode(mNode,data);
-  closeModal();
+  if (!efGroupSaving) closeModal();
 }
 
 // ── ADD MODAL ─────────────────────────────────────────────────────────────────
@@ -7791,10 +8258,11 @@ function initEvents() {
   document.getElementById('btn-save').addEventListener('click',doSave);
   document.getElementById('btn-del').addEventListener('click',()=>{
     if (!mNode) return;
-    const n=state.nodes[mNode];const kids=children(mNode,state.nodes);
+    const tid=efPhaseActiveRealId()||mNode;
+    const n=state.nodes[tid];const kids=children(tid,state.nodes);
     const msg=kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${dispName(n,'this item')}"?`;
     if (!confirm(msg)) return;
-    delNode(mNode);closeModal();
+    delNode(tid);closeModal();
   });
 
   // Edit form: type/status/acDc changes

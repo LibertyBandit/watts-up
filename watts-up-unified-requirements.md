@@ -5165,10 +5165,42 @@ description/ref des/status/capacity while loads stay independent. (10) Old-style
 unlabeled defaults; a tampered file fails import with a clear message; JSON and Word-embedded
 round-trips preserve everything and the generated document parses cleanly. Clean console.
 
-**Phase B (next):** Edit dialog phases section and tabs, synced-field propagation and read-only
-treatment (dialog and grids), Ø column. **Phase C:** Move/Duplicate/Delete group operations.
-**Phase D:** sharing guards and origin ordering. Not in this effort: TRU phase-mates, whole-group
-sharing, reports, imbalance warning, conversion AC-output splits.
+**Phase B (shipped 2026-10-06): Edit dialog phases, synced fields, grid Ø column.**
+- *Edit dialog:* a Phases box sits between the shared Capacity fields and the per-phase fields. For
+  an eligible item it offers a Multi-phase checkbox; once on, a tab strip (reusing the TRU
+  Input/Output toggle styling) shows one tab per phase-mate plus "+ Phase" (up to 3). The dialog
+  edits the whole group: the primary is the dialog's node, and the tab of the clicked mate starts
+  active. Each tab keeps its own draft of Existing Load, Load Value, Net Change Override and Notes
+  & References (headings gain " — Ø<label>"); type, description, ref des, status and capacity are
+  shared and shown once (Capacity headed "(all phases)"). Save commits every tab at once
+  (`doEditSaveGroup`); added tabs are pending until Save and can be discarded with ✕. The label
+  field is editable only at the split origin; deeper phase-mates take their label from their
+  parent and pick a free parent phase-mate when added.
+- *Propagation:* `syncAllPhaseGroups` now runs at the start of every `recalcAnalysis`, so the
+  mates' shared fields always mirror the primary's, including status-transition clearing
+  (leaving New clears the mate's Existing Load; entering New clears its Net Change override).
+- *Guards:* the parent select is disabled for multi-member groups (group moves arrive in Phase C);
+  "+ Phase" is refused while the parent selection is unsaved; the Multi-phase checkbox is disabled
+  with a hint when the item or anything under it is shared; un-checking on a lone origin removes
+  the labels from it and its subtree; Delete and Duplicate in the dialog act on the active tab's
+  phase-mate only (the interim "this phase only" behavior).
+- *Grids:* when any item is labeled, both the Existing/Removed and New grids gain a narrow Ø
+  column. Origin rows hold an editable label input (renames cascade); other rows show it read-only.
+  Non-primary mates have type, description, ref des, status and capacity read-only. Loads can't be
+  switched into an origin type (Load excluded), and labeled items show no Share button.
+
+Verified live: Phase A regression fingerprints (17 outputs incl. both grids and saved state)
+identical for unlabeled projects; split a bus into A/B/C through the dialog; per-tab values
+preserved independently; shared-field propagation and status transitions; Delete/Duplicate on the
+active tab; pending tab discard; re-adding a phase; the unsaved-parent guard; a lone labeled load
+moved through the dialog to an unlabeled parent (label cleared, not re-applied) and back under a
+labeled one (adopts label); enabling/un-splitting a lone origin; the share block; and a JSON
+snapshot/`validateImport` round trip with groups. Clean console.
+
+**Phase C (next):** Move/Duplicate/Delete group operations with "this phase only / all phases"
+dialogs. **Phase D:** sharing guards completion and origin ordering (move as a block). Not in this
+effort: TRU phase-mates, whole-group sharing, reports, imbalance warning, conversion AC-output
+splits.
 
 ## Appendix A: Future Enhancements
 
