@@ -5197,10 +5197,49 @@ moved through the dialog to an unlabeled parent (label cleared, not re-applied) 
 labeled one (adopts label); enabling/un-splitting a lone origin; the share block; and a JSON
 snapshot/`validateImport` round trip with groups. Clean console.
 
-**Phase C (next):** Move/Duplicate/Delete group operations with "this phase only / all phases"
-dialogs. **Phase D:** sharing guards completion and origin ordering (move as a block). Not in this
-effort: TRU phase-mates, whole-group sharing, reports, imbalance warning, conversion AC-output
-splits.
+**Phase C (shipped 2026-10-06): group Move, Duplicate and Delete.**
+- *Scope dialog:* Delete and Duplicate (from the grids' row buttons and from the Edit dialog's
+  footer buttons, acting on the active tab's phase-mate) ask "Ø<label> only / All Phases" when the
+  item has phase-mates; items without phase-mates behave exactly as before (no extra dialog, same
+  messages). Duplicate keeps the Item Only / Entire Branch question, which now counts all the phases'
+  children when "all" is chosen.
+- *Delete:* "all phases" removes every phase-mate with its descendants in one step; the confirmation
+  gives the phase count and the number of items beneath them. "This phase only" removes just that
+  mate's branch, so a group can shrink to any subset of its parent's phases; deleting the primary
+  promotes the next phase-mate automatically. The shared-item refusal and TRU group cascade are
+  unchanged and apply to the combined set.
+- *Duplicate:* "this phase only" is the earlier behavior (a lone copy beside the original). "All
+  phases" copies every mate under its own parent as one new group with the same labels and group
+  order; for a branch, the copied descendants' groups are re-created consistently, so e.g. the
+  copied feeders form one group and the copied loads another.
+- *Move (Edit dialog):* the parent select is now live for an existing group (it is locked only while
+  unsaved phases are pending). The group moves as a whole by `phasePlanGroupMove`: under a
+  phase-split parent each mate goes under the parent phase-mate with the same label (every label
+  must exist there — nothing is created or relabeled); under an unsplit parent all of them go under
+  it and become its split origin. Refused, with a message and no change: the top level, a DC or
+  conversion-output parent, a Load group under an unsplit parent, and any destination inside the
+  group's own subtrees (those aren't offered in the select). Each moved mate takes its new
+  parent's voltage and AC/DC. Lone items keep the Phase A semantics (adopt the destination's label,
+  or clear under an unsplit parent). New rule: an unlabeled item that has a multi-phase group
+  beneath it can't be moved under a phase-split parent (its groups would all be forced onto one
+  label); an unsplit parent is fine.
+- *Related fix:* a lone labeled item moved under a DC parent (which makes it DC through the dialog's
+  parent lock) now loses its label instead of leaving invalid phase data (`syncAllPhaseGroups`
+  drops labels from nodes that can no longer carry one).
+
+Verified live: delete this-phase / all-phases from grid and dialog (counts, confirmation text,
+survivors, no violations), cancelling the scope dialog changes nothing; duplicate item-only and
+entire-branch for all phases (new shared groups at each level, contiguous origin copies, original
+group untouched), one-phase branch duplicate, dialog duplicate; move an origin group to an unsplit
+generator, a deeper group to another split group by label, to an unsplit bus (becomes origin), the
+refusals above (missing label, top level, DC parent, Load group, unlabeled item with a split
+beneath), a lone item under a DC parent, voltage following a 200 V destination, and per-phase
+Existing Load values surviving a move; unlabeled projects keep their original dialogs/messages;
+JSON validation round trip; clean console.
+
+**Phase D (next):** sharing guards completion and origin ordering (up/down arrows move origin
+phase-mates as a block). Not in this effort: TRU phase-mates, whole-group sharing, reports,
+imbalance warning, conversion AC-output splits.
 
 ## Appendix A: Future Enhancements
 

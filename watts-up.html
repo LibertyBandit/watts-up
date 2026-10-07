@@ -1203,6 +1203,9 @@ function syncPhaseGroup(gid,nodes,members) {
   });
 }
 function syncAllPhaseGroups(nodes) {
+  // A label can't outlive the AC-ness it depends on (e.g. a lone origin moved under a DC parent
+  // becomes DC through the Edit dialog's parent lock); drop it rather than leave invalid phase data.
+  Object.values(nodes).forEach(n=>{ if (n.phase&&!phaseInherits(n)) { n.phase=null; n.phaseGroupId=null; n.phaseSeq=0; } });
   const byGroup={};
   Object.values(nodes).forEach(n=>{ if (n.phaseGroupId) (byGroup[n.phaseGroupId]=byGroup[n.phaseGroupId]||[]).push(n); });
   Object.values(byGroup).forEach(ms=>{
@@ -2187,14 +2190,42 @@ function addNode(parentId,data) {
 }
 function batchCommit(){recalc();renderAll();persist();}
 function updateNode(id,data) { if (!state.nodes[id]) return; Object.assign(state.nodes[id],data); syncSharedFields(state.nodes[id]); recalc();renderAll();persist(); }
-function delNode(id) {
+// Phase C: the node(s) a Delete/Duplicate acts on — just `id`, or every phase-mate of its group
+// (in group order, primary first) when the user chose "all phases".
+function phaseScopeIds(id,allPhases) {
+  const n=state.nodes[id];
+  if (allPhases&&n&&n.phase&&n.phaseGroupId) {
+    const ms=phaseGroupMembers(n.phaseGroupId);
+    if (ms.length>1) return ms.map(m=>m.id);
+  }
+  return [id];
+}
+function phaseScopeBranchIds(roots) { return [...new Set(roots.flatMap(r=>subtree(r,state.nodes)))]; }
+// Asks "this phase only / all phases" for an item that has phase-mates; resolves 'one' without
+// asking for everything else, and null if the user closes the dialog.
+async function phaseAskScope(id,verb) {
+  const n=state.nodes[id];
+  if (!n||!n.phase||!n.phaseGroupId) return 'one';
+  const ms=phaseGroupMembers(n.phaseGroupId);
+  if (ms.length<2) return 'one';
+  return showChoiceDialog({
+    title:`${verb} Item`,
+    message:`"${n.description||'This item'}" has ${ms.length} phases (${ms.map(m=>m.phase).join(', ')}). ${verb} just Ø${n.phase}, or all phases?`,
+    options:[
+      {label:`Ø${n.phase} Only`,value:'one'},
+      {label:'All Phases',value:'all',primary:true}
+    ]
+  });
+}
+function delNode(id,allPhases=false) {
   const n=state.nodes[id]; if (!n) return;
-  const isRoot=state.rootIds.includes(id);
+  const roots=phaseScopeIds(id,allPhases);
+  const isRoot=roots.some(r=>state.rootIds.includes(r));
   if (isRoot&&state.rootIds.length<=1) return;
   // Revision 47: refuse to delete a shared item, or a branch containing one — deleting it here
   // would silently orphan its linked peer in the other analysis. Unshare first (no data lost),
   // then delete.
-  const branch=subtree(id,state.nodes);
+  const branch=phaseScopeBranchIds(roots);
   // Revision 57: a TRU's conversion group (additional input phases + output) can span nodes
   // outside this subtree — additional inputs live under their own, separate parent buses — so
   // pull those in too, ensuring deleting the primary input always removes the whole group, never
@@ -2207,13 +2238,13 @@ function delNode(id) {
     alert(`Can't delete — shared with the other analysis: ${names}. Unshare first.`);
     return;
   }
-  const parentId=n.parentId;
+  const rootParents=roots.map(r=>[r,state.nodes[r].parentId]);
   // groupExtra members live under a parent that isn't itself being deleted, so (unlike the rest
   // of `branch`, whose parents are also being removed) they need an explicit detach to avoid
   // leaving a dangling childIds reference on that surviving parent.
   groupExtra.forEach(x=>{ const nd=state.nodes[x]; if (nd) detachChild(x,nd.parentId); });
   toDelete.forEach(x=>delete state.nodes[x]);
-  detachChild(id,parentId);
+  rootParents.forEach(([r,pid])=>detachChild(r,pid));
   recalc();renderAll();persist();
 }
 
@@ -3708,30 +3739,49 @@ function gridFieldChanged(e,renderFn){
     if (newEl) { newEl.focus(); if (newEl.select) newEl.select(); }
   }
 }
-function gridDeleteRow(id,renderFn){
+// Phase C: "all phases" confirmation text, with the number of items that go with the phase-mates.
+function phaseDeleteAllMsg(id) {
+  const n=state.nodes[id];
+  const roots=phaseScopeIds(id,true);
+  const below=phaseScopeBranchIds(roots).length-roots.length;
+  return `Delete all ${roots.length} phases of "${n.description||'this item'}"`+(below?` and the ${below} item(s) beneath them`:'')+'?';
+}
+async function gridDeleteRow(id,renderFn){
   const n=state.nodes[id]; if (!n) return;
-  const kidCount=children(id,state.nodes).length;
-  if (kidCount>0 && !confirm(`Delete "${dispName(n,'this item')}" and its ${kidCount} child item(s)? This can only be undone via Cancel.`)) return;
-  delNode(id);
+  const scope=await phaseAskScope(id,'Delete');
+  if (!scope) return;
+  const all=scope==='all';
+  if (all) { if (!confirm(phaseDeleteAllMsg(id)+' This can only be undone via Cancel.')) return; }
+  else {
+    const kidCount=children(id,state.nodes).length;
+    if (kidCount>0 && !confirm(`Delete "${dispName(n,'this item')}" and its ${kidCount} child item(s)? This can only be undone via Cancel.`)) return;
+  }
+  delNode(id,all);
   renderAll();
 }
 async function gridDuplicateRow(id,renderFn){
   const n=state.nodes[id]; if (!n) return;
-  const kidCount=children(id,state.nodes).length;
+  const scope=await phaseAskScope(id,'Duplicate');
+  if (!scope) return;
+  const all=scope==='all';
+  const roots=phaseScopeIds(id,all);
+  const kidCount=roots.reduce((s,r)=>s+children(r,state.nodes).length,0);
   let branch=false;
   if (kidCount>0) {
+    const below=all?phaseScopeBranchIds(roots).length-roots.length:kidCount;
+    const what=all?`These ${roots.length} phases of "${n.description||'this item'}" have`:`"${dispName(n,'This item')}" has`;
     const choice=await showChoiceDialog({
       title:'Duplicate Item',
-      message:`"${dispName(n,'This item')}" has ${kidCount} child item(s). Duplicate this item only, or the entire branch (including its ${kidCount} descendant(s))?`,
+      message:`${what} ${kidCount} child item(s). Duplicate ${all?'the items':'this item'} only, or the entire ${all?'branches':'branch'} (including ${below} descendant(s))?`,
       options:[
         {label:'Item Only',value:'item'},
-        {label:'Entire Branch',value:'branch',primary:true}
+        {label:all?'Entire Branches':'Entire Branch',value:'branch',primary:true}
       ]
     });
     if (!choice) return;
     branch=choice==='branch';
   }
-  const newId=branch?duplicateBranch(id):duplicateNodeById(id);
+  const newId=branch?duplicateBranch(id,all):duplicateNodeById(id,all);
   batchCommit();
   renderAll();
   // Revision 36: match +Child's cursor-focus behavior — the description still defaults to
@@ -4280,6 +4330,7 @@ function collectEfRefs() {
 // A "pending" tab is a phase-mate added in this session that doesn't exist until Save.
 let efPhase=null;
 let efGroupSaving=false,efPrimarySaved=false;
+let efGroupPlan=null;   // phasePlanGroupMove() result while a group move is being saved
 const PHASE_MAX_MATES=3;
 const EF_PER_PHASE_IDS=['ef-exld-a','ef-exld-w','ef-exld-ac-a','ef-exld-ac-va','ef-exld-ac-w','ef-exld-ac-var','ef-exld-ac-pf',
   'ef-ov-a','ef-ov-w','ef-ov-ac-w','ef-ov-ac-var',
@@ -4296,6 +4347,45 @@ function phaseEligibleUnder(n,parentId) {
   return !!p&&!p.phase;
 }
 function phaseEligible(n) { return phaseEligibleUnder(n,n&&n.parentId); }
+// Phase C — moving. A group of phase-mates always moves as a whole and keeps its labels:
+//  • under a phase-split parent, each mate goes under the parent phase-mate with the same label
+//    (every label must exist there — nothing is created or relabeled), becoming subservient;
+//  • under an unsplit parent, all of them go under it and become its split origin (so no Loads, and
+//    the parent must be AC and not a conversion output);
+//  • never to the top level.
+// Returns {error} or {parents:{mateId:newParentId}} for the mates in `members` (node objects).
+function phasePlanGroupMove(members,selectedParentId) {
+  const nm=m=>`"${(members[0].description||'this item')}"`;
+  const dest=selectedParentId?state.nodes[selectedParentId]:null;
+  if (!dest) return {error:`${nm()} has phases and can't be moved to the top level.`};
+  const inside=new Set(members.flatMap(m=>subtree(m.id,state.nodes)));
+  if (inside.has(dest.id)) return {error:`Can't move ${nm()} under one of its own phases or something beneath them.`};
+  const parents={};
+  if (dest.phase) {
+    const q=phaseGroupMembers(dest.phaseGroupId);
+    for (const m of members) {
+      const t=q.find(x=>x.phase===m.phase);
+      if (!t) return {error:`Can't move ${nm()} here — "${dest.description||'the new parent'}" has no phase "${m.phase}". Add that phase to the new parent first, or choose a parent that has all of ${members.map(x=>x.phase).join(', ')}.`};
+      parents[m.id]=t.id;
+    }
+  } else {
+    if (dest.acDc!=='ac') return {error:`Can't move ${nm()} under "${dest.description||'the new parent'}" — phases only exist on AC items.`};
+    if (dest.convRole==='out') return {error:`Can't move ${nm()} under "${dest.description||'the new parent'}" — the outputs of conversion items can't be split into phases yet.`};
+    if (members.some(m=>isLoad(m.type))) return {error:`Can't move ${nm()} under an unsplit item — a Load can't start a phase split. Move it under a phase-split parent instead.`};
+    members.forEach(m=>{ parents[m.id]=dest.id; });
+  }
+  return {parents};
+}
+// A single (non-group) item can't be moved under a phase-split parent if it carries phase groups of
+// its own beneath it — those would all be forced onto the parent's one label. Returns a message or null.
+function phaseSingleMoveError(id,newParentId) {
+  const p=newParentId?state.nodes[newParentId]:null;
+  if (!(p&&p.phase)) return null;
+  const n=state.nodes[id]; if (!n) return null;
+  const clash=subtree(id,state.nodes).map(x=>state.nodes[x]).find(x=>x&&x.phase&&x.phaseGroupId&&phaseGroupMembers(x.phaseGroupId).length>1);
+  if (clash) return `Can't move "${n.description||'this item'}" under a phase-split item — "${clash.description||'an item'}" beneath it has several phases. Move those phases separately, or choose an unsplit parent.`;
+  return null;
+}
 // New phase-mates of an origin sit right after the existing ones, in order, under the shared parent.
 function phasePlaceAfterMates(id,gid) {
   const n=state.nodes[id]; const arr=n&&siblingArray(n); if (!arr) return;
@@ -4490,7 +4580,9 @@ function efPhaseRender() {
   cb.checked=P.enabled; cb.disabled=locked;
   hint.textContent=hintText; hint.classList.toggle('hidden',!hintText);
   efEl('ef-phase-tabs-wrap').classList.toggle('hidden',!P.enabled);
-  efEl('ef-parent').disabled=P.enabled&&P.order.length>1;
+  // The parent select is locked only while phases are pending (they're created under the saved
+  // parent); an existing group moves as a whole through phasePlanGroupMove.
+  efEl('ef-parent').disabled=P.enabled&&P.order.some(id=>P.drafts[id].pending);
   if (!P.enabled) return;
   efPhaseRenderTabs();
   const d=P.drafts[P.active];
@@ -4623,12 +4715,32 @@ function doEditSaveGroup() {
   if (err) { alert(err); return; }
   const oldStatus={};
   P.order.forEach(id=>{ if (!P.drafts[id].pending) oldStatus[id]=state.nodes[id].status; });
+  // A group with several phases moves as a whole: plan it up front so a refused move changes nothing.
+  efGroupPlan=null;
+  const existing=P.order.filter(id=>!P.drafts[id].pending);
+  const selParent=efEl('ef-parent').value||null;
+  if (P.mode==='group'&&P.enabled&&existing.length>1&&selParent!==(state.nodes[P.primaryId].parentId||null)) {
+    const plan=phasePlanGroupMove(existing.map(id=>state.nodes[id]),selParent);
+    if (plan.error) { alert(plan.error); return; }
+    efGroupPlan=plan;
+  }
   // The primary saves through the ordinary path, which reads the form — so show its tab first.
   P.active=P.primaryId;
   efPhaseApplyActive();
   efGroupSaving=true; efPrimarySaved=false;
-  try { doEditSave(); } finally { efGroupSaving=false; }
+  const movePlan=efGroupPlan;
+  try { doEditSave(); } finally { efGroupSaving=false; efGroupPlan=null; }
   if (!efPrimarySaved) return;
+  if (movePlan) {
+    // The other mates follow the primary: reparent each under its planned parent and take that
+    // parent's voltage/AC-DC (the primary got both through the form).
+    existing.forEach(id=>{
+      if (id===P.primaryId) return;
+      const nn=state.nodes[id]; const np=movePlan.parents[id];
+      if (nn.parentId!==np) { detachChild(id,nn.parentId); attachChild(id,np); nn.parentId=np; }
+      const par=state.nodes[np]; nn.voltage=par.voltage; nn.acDc=par.acDc;
+    });
+  }
   const primary=state.nodes[P.primaryId];
   const labelOf=id=>String(P.drafts[id].label||'').trim();
   if (P.enabled) {
@@ -4698,7 +4810,9 @@ function fillParentSelect(selId,excludeId,selectedId) {
   const noP=document.createElement('option');noP.value='';noP.textContent='— No Parent (New Root) —';
   if (!selectedId) noP.selected=true;
   sel.appendChild(noP);
-  const excluded=new Set(excludeId?subtree(excludeId,state.nodes):[]);
+  // excludeId may be a list (every phase-mate of a group moves together, so none of their
+  // subtrees is a legal destination).
+  const excluded=new Set([].concat(excludeId||[]).flatMap(x=>subtree(x,state.nodes)));
   preOrder(state.rootIds,state.nodes).forEach(id=>{
     if (excluded.has(id)) return;
     const n=state.nodes[id];if (!n) return;
@@ -4751,7 +4865,7 @@ function closeModal() {
   document.getElementById('modal').style.width='';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
-  efPhase=null;efGroupSaving=false;
+  efPhase=null;efGroupSaving=false;efGroupPlan=null;
   efEl('ef-phase-box').classList.add('hidden');
   efEl('ef-parent').disabled=false;
   efEl('btn-del').disabled=false;efEl('btn-duplicate').disabled=false;
@@ -4786,8 +4900,23 @@ function showChoiceDialog({title,message,options,allowClose=true}) {
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
-function duplicateNodeById(id) {
+function duplicateNodeById(id,allPhases=false) {
   const n=state.nodes[id];if (!n) return null;
+  // Phase C "all phases": one copy of every phase-mate, each under its own parent, tied together
+  // as a new group (same labels and group order). Returns the copy of the primary.
+  const roots=phaseScopeIds(id,allPhases);
+  if (roots.length>1) {
+    const gid=uid();
+    const copies=roots.map(r=>{
+      const o=state.nodes[r];
+      const c=cloneNodeShallow(o);
+      c.phaseGroupId=gid; c.phaseSeq=o.phaseSeq||0;
+      state.nodes[c.id]=c;
+      attachChild(c.id,c.parentId);
+      return c.id;
+    });
+    return copies[0];
+  }
   // Revision 52: a duplicate is a brand-new, independent item — never sharing the source's link.
   // cloneNodeShallow strips sharedPeerId for exactly this reason (the JSON deep-clone it starts
   // from would otherwise copy it verbatim, leaving the copy "linked" to the original's peer,
@@ -4801,17 +4930,23 @@ function duplicateNodeById(id) {
   if (n.convRole) reconcileConvGroups({[id]:copy.id});
   return copy.id;
 }
-function duplicateBranch(rootId) {
-  const ids=subtree(rootId,state.nodes);
+function duplicateBranch(rootId,allPhases=false) {
+  // Phase C: with allPhases every phase-mate's branch is copied and the copies keep their phase
+  // structure (groups are re-created consistently across the copied branches); a single branch
+  // gets fresh groups of one, as before.
+  const roots=phaseScopeIds(rootId,allPhases);
+  const rootSet=new Set(roots);
+  const regroup=roots.length>1;
+  const groupMap={};
+  const ids=phaseScopeBranchIds(roots);
   const idMap={};
   ids.forEach(id=>idMap[id]=uid());
-  const rootN=state.nodes[rootId];
-  const originalParentId=rootN.parentId;
+  const originalParents={}; roots.forEach(r=>{ originalParents[r]=state.nodes[r].parentId; });
   ids.forEach(id=>{
     const orig=state.nodes[id];
     const copy=JSON.parse(JSON.stringify(orig));
     copy.id=idMap[id];
-    copy.parentId=id===rootId?originalParentId:idMap[orig.parentId];
+    copy.parentId=rootSet.has(id)?originalParents[id]:idMap[orig.parentId];
     copy.childIds=(orig.childIds||[]).filter(cid=>idMap[cid]).map(cid=>idMap[cid]);
     // Revision 52: same as duplicateNodeById — every node in a duplicated branch is independent,
     // never inheriting the source's shared link.
@@ -4821,19 +4956,23 @@ function duplicateBranch(rootId) {
     // make these still-uncorrected copies transiently look like extra members of the *original*
     // group.
     copy.convGroupId=null;
-    copy.phaseGroupId=copy.phase?uid():null; copy.phaseSeq=0;
+    if (copy.phase&&regroup&&orig.phaseGroupId) { copy.phaseGroupId=groupMap[orig.phaseGroupId]||(groupMap[orig.phaseGroupId]=uid()); copy.phaseSeq=orig.phaseSeq||0; }
+    else { copy.phaseGroupId=copy.phase?uid():null; copy.phaseSeq=0; }
     copy.description=(copy.description||'')+' (copy)';
     state.nodes[copy.id]=copy;
   });
-  attachChild(idMap[rootId],originalParentId);
+  roots.forEach(r=>attachChild(idMap[r],originalParents[r]));
   // Revision 57: complete/relink any TRU conversion group touched by this branch — an additional
   // input phase living outside the duplicated subtree (a separate, un-duplicated ancestor bus)
   // gets cloned here too, and every group member touched gets a fresh, shared convGroupId.
   reconcileConvGroups(idMap);
   return idMap[rootId];
 }
-function duplicateNode() {
-  const id=duplicateNodeById(efPhaseActiveRealId()||mNode);
+async function duplicateNode() {
+  const src=efPhaseActiveRealId()||mNode;
+  const scope=await phaseAskScope(src,'Duplicate');
+  if (!scope) return;
+  const id=duplicateNodeById(src,scope==='all');
   if (id) {batchCommit();closeModal();}
 }
 
@@ -5399,7 +5538,7 @@ function openEdit(nodeId) {
 
   // Parent dropdown: always shown; roots show "No Parent" selected
   document.getElementById('ef-parent-group').classList.remove('hidden');
-  fillParentSelect('ef-parent',nodeId,n.parentId);
+  fillParentSelect('ef-parent',(n.phase&&!n.convRole)?phaseGroupMembers(n.phaseGroupId).map(m=>m.id):nodeId,n.parentId);
 
   // Type: include Root option only when no parent (req 4); extraType keeps this node's own
   // current type selectable even if it's a non-TRU conversion type no longer offered for
@@ -5845,9 +5984,12 @@ function doEditSave() {
   data.refDes=document.getElementById('ef-refdes').value.trim();
 
   // parent/sibling-order management
-  const newParentId=document.getElementById('ef-parent').value||null;
+  // A group of phase-mates moves by its plan (each mate under the parent phase-mate with its own
+  // label, or all under one unsplit parent), not simply under whatever the select shows.
+  const newParentId=efGroupPlan?efGroupPlan.parents[mNode]:(document.getElementById('ef-parent').value||null);
   const oldParentId=n.parentId;
   if (newParentId!==oldParentId) {
+    if (!efGroupPlan) { const pe=phaseSingleMoveError(mNode,newParentId); if (pe) { alert(pe); return; } }
     // Revision 47 (Phase 2b): a shared item's parent must stay the same physical item on both
     // sides (spec §3.3.1's "Parent Item"). If the new parent is also shared (or this item is
     // becoming a new top-level root), mirror the same move onto its peer in the other analysis;
@@ -5875,7 +6017,7 @@ function doEditSave() {
     }
     detachChild(mNode,oldParentId);
     attachChild(mNode,newParentId);
-    phaseAfterReparent(mNode,newParentId);
+    if (!efGroupPlan) phaseAfterReparent(mNode,newParentId);
   }
   data.parentId=newParentId;
 
@@ -8256,13 +8398,16 @@ function initEvents() {
   document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
   document.getElementById('btn-save').addEventListener('click',doSave);
-  document.getElementById('btn-del').addEventListener('click',()=>{
+  document.getElementById('btn-del').addEventListener('click',async()=>{
     if (!mNode) return;
     const tid=efPhaseActiveRealId()||mNode;
     const n=state.nodes[tid];const kids=children(tid,state.nodes);
-    const msg=kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${dispName(n,'this item')}"?`;
+    const scope=await phaseAskScope(tid,'Delete');
+    if (!scope||!state.nodes[tid]) return;
+    const all=scope==='all';
+    const msg=all?phaseDeleteAllMsg(tid):kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${dispName(n,'this item')}"?`;
     if (!confirm(msg)) return;
-    delNode(tid);closeModal();
+    delNode(tid,all);closeModal();
   });
 
   // Edit form: type/status/acDc changes
