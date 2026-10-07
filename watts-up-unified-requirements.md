@@ -5237,9 +5237,31 @@ beneath), a lone item under a DC parent, voltage following a 200 V destination, 
 Existing Load values surviving a move; unlabeled projects keep their original dialogs/messages;
 JSON validation round trip; clean console.
 
-**Phase D (next):** sharing guards completion and origin ordering (up/down arrows move origin
-phase-mates as a block). Not in this effort: TRU phase-mates, whole-group sharing, reports,
-imbalance warning, conversion AC-output splits.
+**Phase D (shipped 2026-10-06): origin ordering and sharing guards completed.**
+- *Ordering:* the up/down arrows (tree and both grids) now move sibling "units" — a plain sibling,
+  or a split origin's whole block of phase-mates, kept together in group order. A phase-mate's
+  arrows move all its phases together (the tooltip says so); a plain sibling jumps over a whole
+  block, so a block can never be split apart by reordering. Siblings of other statuses keep their
+  slots, and projects without phases reorder exactly as before (`siblingUnits`, `siblingMoveInfo`,
+  `moveSibling`).
+- *Sharing (mutual exclusion):* in addition to the Phase B rules (no Share button on labeled items;
+  no split on an item with anything shared beneath it), sharing now also refuses any item whose
+  not-yet-shared ancestor chain contains a labeled item — e.g. a DC load under a TRU fed from a
+  phase-labeled bus, since sharing it would drag that bus into the share (a TRU checks every
+  input's chain). The Share button is hidden for such items and `shareWithOther` refuses with a
+  message as a backstop (`phaseShareBlocker`). `phaseViolations` (import validation) also rejects a
+  file in which a shared item is labeled or sits under a labeled item.
+
+Verified live: a plain sibling jumping over a block in both directions; a mate's arrows moving the
+block; arrow enable/disable states and tooltip; DOM click on a mate's arrow; mixed-status siblings
+and an unlabeled project reordering identically to the old algorithm; Share hidden/refused for a DC
+load under a TRU under a labeled bus and for a labeled bus, while an unrelated load still shares
+(with its ancestor confirmation); split still blocked above a shared item and allowed elsewhere;
+validator rejections of a shared labeled item and a shared item under a labeled one, and a clean
+snapshot (with a shared generator above a split) still importing. Clean console.
+
+All four phases of the three-phase effort are now complete. Not in this effort: TRU phase-mates,
+whole-group sharing, report layout, the phase-imbalance warning, and splits on conversion AC outputs.
 
 ## Appendix A: Future Enhancements
 

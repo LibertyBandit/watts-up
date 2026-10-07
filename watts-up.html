@@ -1222,6 +1222,12 @@ function phaseViolations(ns) {
   const nm=n=>`"${dispName(n)}"`;
   Object.values(ns).forEach(n=>{
     const par=n.parentId?ns[n.parentId]:null;
+    if (n.sharedPeerId) {
+      // Mutual exclusion with sharing: a shared item can't be phase-labeled or sit under a labeled item.
+      for (let c=n; c; c=c.parentId?ns[c.parentId]:null) {
+        if (c.phase) { out.push(`${nm(n)} is shared with the other analysis but is inside a phase split`); break; }
+      }
+    }
     if (!n.phase) {
       if (n.phaseGroupId) out.push(`${nm(n)} has a phase group but no phase label`);
       if (par&&par.phase&&phaseInherits(n)) out.push(`${nm(n)} sits under the phase-labeled item ${nm(par)} but has no phase label`);
@@ -1262,15 +1268,42 @@ function detachChild(id,parentId) {
   const p=state.nodes[parentId]; if (!p||!Array.isArray(p.childIds)) return;
   p.childIds=p.childIds.filter(c=>c!==id);
 }
+// Phase D: the same-status siblings of a node as ordered "units" — a single node, or the whole
+// block of a split origin's phase-mates (which always sit together, in group order). The up/down
+// arrows move one unit past its neighbor, so a plain sibling jumps over a whole phase block and a
+// phase-mate's arrows move all of its phases together; a project with no phases is all
+// one-node units, i.e. exactly the old behavior.
+function siblingUnits(arr,nodes,status) {
+  const ids=arr.filter(cid=>nodes[cid]&&nodes[cid].status===status);
+  const units=[]; const seen=new Set();
+  ids.forEach(id=>{
+    if (seen.has(id)) return;
+    const n=nodes[id]; let unit=[id];
+    if (n.phase&&n.phaseGroupId&&isPhaseOrigin(n,nodes)) {
+      unit=ids.filter(x=>nodes[x].phaseGroupId===n.phaseGroupId&&isPhaseOrigin(nodes[x],nodes))
+              .sort((a,b)=>(nodes[a].phaseSeq||0)-(nodes[b].phaseSeq||0));
+    }
+    unit.forEach(x=>seen.add(x)); units.push(unit);
+  });
+  return units;
+}
+function siblingMoveInfo(node,nodes) {
+  const arr=node.parentId?(nodes[node.parentId]?.childIds||[]):(state.rootIds||[]);
+  const units=siblingUnits(arr,nodes,node.status);
+  const ui=units.findIndex(u=>u.includes(node.id));
+  return {canUp:ui>0,canDown:ui>=0&&ui<units.length-1,block:ui>=0&&units[ui].length>1};
+}
 function moveSibling(id,dir) {
   const n=state.nodes[id]; if (!n) return;
   const arr=siblingArray(n); if (!arr) return;
-  const sameStatus=arr.filter(cid=>state.nodes[cid]?.status===n.status);
-  const pos=sameStatus.indexOf(id);
-  const swapId=sameStatus[pos+dir];
-  if (swapId===undefined) return;
-  const i1=arr.indexOf(id),i2=arr.indexOf(swapId);
-  [arr[i1],arr[i2]]=[arr[i2],arr[i1]];
+  const units=siblingUnits(arr,state.nodes,n.status);
+  const ui=units.findIndex(u=>u.includes(id)), sj=ui+dir;
+  if (ui<0||sj<0||sj>=units.length) return;
+  [units[ui],units[sj]]=[units[sj],units[ui]];
+  // Write the new order back into the slots the same-status siblings occupied, so siblings of
+  // other statuses keep their own positions.
+  const order=units.flat(); let k=0;
+  arr.forEach((cid,i)=>{ if (state.nodes[cid]&&state.nodes[cid].status===n.status) arr[i]=order[k++]; });
   renderAll();persist();
 }
 function postOrder(rootIds, nodes) {
@@ -1436,6 +1469,22 @@ function switchAnalysis(id) {
 // completely different parent bus (that's the reason the sibling constraint on additional inputs
 // was removed), so each one needs its own independent ancestor walk up to a shared ancestor —
 // unlike the single-chain walk this function used before multi-input TRUs existed.
+// Phase D: items inside a phase split can't be shared (whole-group sharing is a later addition).
+// Sharing an item also shares the chain of not-yet-shared ancestors above it, so the rule covers
+// those too — e.g. a DC load under a TRU fed from a phase-labeled bus would drag that bus (and its
+// phase) into the share. For a TRU, every input's chain counts. Returns the labeled item that
+// blocks the share, or null.
+function phaseShareBlocker(n,nodes) {
+  nodes=nodes||state.nodes;
+  const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n,nodes):null;
+  const targets=group?group.inputs:[n];
+  for (const t of targets) {
+    for (let cur=t; cur&&!cur.sharedPeerId; cur=cur.parentId?nodes[cur.parentId]:null) {
+      if (cur.phase) return cur;
+    }
+  }
+  return null;
+}
 function shareWithOther(nodeId) {
   if (!state) return;
   const curId=state.currentAnalysis, otherId=curId==='ap'?'pcm':'ap';
@@ -1443,6 +1492,8 @@ function shareWithOther(nodeId) {
   const n=cur.nodes[nodeId];
   if (!n||n.sharedPeerId) return;
   if (!state.analyses[otherId]) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
+  const phaseBlock=phaseShareBlocker(n,cur.nodes);
+  if (phaseBlock) { alert(`Can't share "${dispName(n)}" — it is, or sits under, "${dispName(phaseBlock)}", which is part of a phase split. Items inside a phase split can't be shared with the other analysis yet.`); return; }
 
   const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n,cur.nodes):null;
   const shareTargets=group?group.inputs.filter(inp=>!inp.sharedPeerId):[n];
@@ -2327,10 +2378,8 @@ function buildTreeLi(node,nodes) {
   // out of column alignment for every terminal row (Load/Removed/conversion-IN) versus every
   // other row.
   const addBtn=`<button class="btn-node btn-add" data-pid="${node.id}"${isTerminal?' style="visibility:hidden;pointer-events:none"':''}>+ Child</button>`;
-  const sibArr=node.parentId?(nodes[node.parentId]?.childIds||[]):(state.rootIds||[]);
-  const sameStatusSibs=sibArr.filter(cid=>nodes[cid]?.status===node.status);
-  const sibPos=sameStatusSibs.indexOf(node.id);
-  const canUp=sibPos>0, canDown=sibPos>=0&&sibPos<sameStatusSibs.length-1;
+  const {canUp,canDown,block}=siblingMoveInfo(node,nodes);
+  const blockNote=block?' — moves all phases together':'';
   const row=document.createElement('div');
   row.className='tree-node-row'+(node.acDc==='ac'?'':' row-dc');
   row.innerHTML=`<button class="${toggleCls}" data-id="${node.id}">▼</button>
@@ -2339,8 +2388,8 @@ function buildTreeLi(node,nodes) {
     <span class="status-badge s-${node.status}">${statusLabel(node.status)}</span>
     ${ncDisplay}
     <div class="node-actions">
-      <button class="btn-node btn-up" data-id="${node.id}" title="Move up within ${statusLabel(node.status).toLowerCase()} siblings" ${canUp?'':'disabled'}>&uarr;</button>
-      <button class="btn-node btn-down" data-id="${node.id}" title="Move down within ${statusLabel(node.status).toLowerCase()} siblings" ${canDown?'':'disabled'}>&darr;</button>
+      <button class="btn-node btn-up" data-id="${node.id}" title="Move up within ${statusLabel(node.status).toLowerCase()} siblings${blockNote}" ${canUp?'':'disabled'}>&uarr;</button>
+      <button class="btn-node btn-down" data-id="${node.id}" title="Move down within ${statusLabel(node.status).toLowerCase()} siblings${blockNote}" ${canDown?'':'disabled'}>&darr;</button>
       <button class="btn-node btn-edit" data-id="${node.id}">Edit</button>
       ${addBtn}
     </div>`;
@@ -3347,10 +3396,8 @@ function gridAddChildRow(parentId,defaultStatus,renderFn){
   }
 }
 function siblingOrderInfoForNode(n){
-  const arr=n.parentId?(state.nodes[n.parentId]?.childIds||[]):(state.rootIds||[]);
-  const sameStatus=arr.filter(cid=>state.nodes[cid]?.status===n.status);
-  const idx=sameStatus.indexOf(n.id);
-  return {canUp:idx>0,canDown:idx>=0&&idx<sameStatus.length-1};
+  const {canUp,canDown}=siblingMoveInfo(n,state.nodes);
+  return {canUp,canDown};
 }
 
 // Item Type, Description, and Ref Des are three separate columns (not one flex-row cell) — a
@@ -3482,6 +3529,7 @@ function gridShareInfo(n,gridKey){
   if (!state) return {show:false};
   // Items inside a phase split can't be shared with the other analysis yet (whole-phase-group
   // sharing is a later addition), so no Share button is offered for them.
+  if (!n.sharedPeerId&&phaseShareBlocker(n)) return {show:false};
   if (n.phase) return {show:false};
   // Revision 52 (items 6/7): a conversion-output row is managed via its IN row's Share/Unshare,
   // same as Dup/Del already are (canDelDup) — sharing/unsharing always handles the IN/OUT pair
