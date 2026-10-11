@@ -5273,8 +5273,66 @@ snapshot (with a shared generator above a split) still importing. Clean console.
 - *Edit dialog, parent list:* while an item is multi-phase — even a single phase, and as soon as
   the Multi-phase box is ticked — DC items aren't offered as parents (`efParentSync`).
 
-All four phases of the three-phase effort are now complete. Not in this effort: TRU phase-mates,
-whole-group sharing, report layout, the phase-imbalance warning, and splits on conversion AC outputs.
+All four phases of the three-phase effort are now complete. Not in this effort: whole-group sharing,
+report layout, the phase-imbalance warning, and splits on conversion AC outputs. (TRU phase-mates
+are now being built — see §75.)
+
+## 75. TRU Phase-Mates (extension of §74)
+
+Designed 2026-10-10 in a design interview, building on Revision 57's multi-input TRU (§57–60) and
+the §74 phase model.
+
+### 75.1 Agreed design
+
+- **One group, derived link.** A TRU's input phases that sit under *distinct phase-mates of one
+  phase-split parent group* (Bus A / Bus B / Bus C feeding inputs A / B / C) are phase-mates of each
+  other: one phase group, with `phaseSeq` following the TRU's own `phaseOrder` so the primary is the
+  same node in both models. The link is derived in `syncAllPhaseGroups` (`phaseLinkTruGroups`), never
+  stored on its own, so it self-heals on load and after every edit. The TRU group (`convGroupId`)
+  still owns the output and the calculation. The DC output and all DC-side items stay unlabeled and
+  the output stays parented to the primary input.
+- **Only under phase-labeled buses.** A TRU under unlabeled buses behaves exactly as before. Legacy
+  or mixed data (some inputs under labeled buses, some not, or parents that aren't phase-mates of
+  one group) stays valid and unlinked — each input a lone phase group; only the Edit dialog stops new
+  mixed combinations from being created.
+- **Equal-share loads.** Inputs keep mirroring the same capacity / Existing Load and the total is
+  divided equally across the inputs (no per-phase values).
+- **Names.** Linked additional inputs mirror the primary's description and ref des and are told apart
+  by the "(ØB)" tag; the editable " B" / " C" suffix applies only to TRUs that aren't phase-aware.
+- **Edit dialog.** With the primary on a labeled bus, each "+ Parent" row offers only the unused
+  phases of that bus; with an unlabeled primary parent only unlabeled buses are offered (no mixing).
+  Linked rows show their Ø label and a read-only description/ref des.
+- **Move.** Moving a multi-input phase-aware TRU (changing the primary's parent) works like a Phase C
+  group move: every input goes under the phase of the new bus with its own label (the primary's
+  pick snaps to its same-label phase); refused, restoring the old parent, if a label is missing, if
+  the new parent is unlabeled, or if it would label only some inputs. A single-input TRU moves as
+  before (adopts / clears the label).
+- **Delete / Duplicate.** The TRU stays one indivisible unit: no "this phase only / all phases"
+  dialog for TRU inputs; one input phase is removed only with the ✕ in the Edit dialog.
+  Duplicating one phase of a bus that feeds a TRU input produces a *single-input* TRU (the copied
+  input under the copied bus, plus a copy of the output); duplicating all phases of the bus group
+  re-links the copied inputs into one group.
+- **Splitting / deleting buses that feed TRU inputs.** Enabling Multi-phase on a bus that feeds an
+  input of a TRU with other inputs under other buses is refused with a message naming the TRU.
+  Deleting one phase of a bus that feeds a TRU input drops only that input phase: the TRU shrinks,
+  the next input is promoted to primary and the output re-parents to it if the primary went; the TRU
+  is deleted only when its last input goes, and the confirmation names the TRU phase.
+- **Out of scope:** sharing of phase-aware TRUs (stays unavailable until whole-group sharing),
+  reports, the imbalance warning.
+
+### 75.2 Implementation status
+
+**Phase 1 (shipped 2026-10-10): model, validation, Edit dialog, Move.**
+- `phaseLinkTruGroups` (links/unlinks TRU inputs as described; runs inside every recalc);
+  `phaseViolations` rejects a phase group that mixes TRU inputs with other items or whose group order
+  contradicts the TRU input order; `phaseAskScope`/`phaseScopeIds` leave TRU inputs out of the scope
+  dialog.
+- Dialog: `fillAdditionalParentSelect` filters candidates by phase; `efTruPhaseAware`,
+  `efTruSyncMirrored`, `efTruPrimaryParentChanged` (label-mapped move with refusals); `doEditSaveTru`
+  re-checks the final configuration and mirrors description/ref des.
+
+**Phase 2 (next):** Delete shrink / Duplicate narrowing / bus-split guard. **Phase 3:** grids, docs,
+final tests.
 
 ## Appendix A: Future Enhancements
 

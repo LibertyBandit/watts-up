@@ -1205,10 +1205,34 @@ function syncPhaseGroup(gid,nodes,members) {
     if (hasCap(prim.type)&&!isLoad(prim.type)) m.capacity=prim.capacity?{...prim.capacity}:null;
   });
 }
+// TRU phase-mates: the input phases of one TRU that sit under distinct phase-mates of one split
+// parent group (Bus A / Bus B / Bus C feeding inputs A / B / C) are phase-mates of each other, with
+// phaseSeq following the TRU's own phaseOrder so the primary is the same node in both models.
+// The link is derived here, never stored on its own: any TRU whose inputs don't meet that condition
+// (unlabeled buses, a legacy mix) is left as plain unlinked inputs, each its own lone phase group.
+function phaseLinkTruGroups(nodes) {
+  const byConv={};
+  Object.values(nodes).forEach(n=>{ if (n.convRole==='in'&&n.convGroupId) (byConv[n.convGroupId]=byConv[n.convGroupId]||[]).push(n); });
+  Object.values(byConv).forEach(ins=>{
+    if (ins.length<2) return;
+    ins.sort((a,b)=>(a.phaseOrder||0)-(b.phaseOrder||0));
+    const parents=ins.map(i=>i.parentId?nodes[i.parentId]:null);
+    const linkable=parents.every(p=>p&&p.phase&&p.phaseGroupId)&&ins.every(i=>i.phase)&&
+      new Set(parents.map(p=>p.phaseGroupId)).size===1&&new Set(parents.map(p=>p.id)).size===ins.length;
+    if (linkable) {
+      const gid=ins[0].phaseGroupId||uid();
+      ins.forEach((i,k)=>{ i.phaseGroupId=gid; i.phaseSeq=k; });
+    } else {
+      const seen=new Set();
+      ins.forEach(i=>{ if (i.phaseGroupId&&seen.has(i.phaseGroupId)) { i.phaseGroupId=uid(); i.phaseSeq=0; } seen.add(i.phaseGroupId); });
+    }
+  });
+}
 function syncAllPhaseGroups(nodes) {
   // A label can't outlive the AC-ness it depends on (e.g. a lone origin moved under a DC parent
   // becomes DC through the Edit dialog's parent lock); drop it rather than leave invalid phase data.
   Object.values(nodes).forEach(n=>{ if (n.phase&&!phaseInherits(n)) { n.phase=null; n.phaseGroupId=null; n.phaseSeq=0; } });
+  phaseLinkTruGroups(nodes);
   const byGroup={};
   Object.values(nodes).forEach(n=>{ if (n.phaseGroupId) (byGroup[n.phaseGroupId]=byGroup[n.phaseGroupId]||[]).push(n); });
   Object.values(byGroup).forEach(ms=>{
@@ -1248,6 +1272,13 @@ function phaseViolations(ns) {
   });
   Object.values(groups).forEach(ms=>{
     if (ms.length<2) return;
+    // TRU input phases can be phase-mates of each other, but only of each other, within one TRU,
+    // and their group order has to follow the TRU's own input order.
+    if (ms.some(m=>m.convRole)) {
+      if (ms.some(m=>m.convRole!=='in')||new Set(ms.map(m=>m.convGroupId)).size!==1) { out.push(`the phases of ${nm(ms[0])} mix TRU inputs with other items`); return; }
+      const bySeq=[...ms].sort((a,b)=>(a.phaseSeq||0)-(b.phaseSeq||0));
+      if (bySeq.some((m,i)=>i>0&&(m.phaseOrder||0)<(bySeq[i-1].phaseOrder||0))) out.push(`the phase order of ${nm(ms[0])} doesn't match its TRU input order`);
+    }
     const labels=new Set(),seqs=new Set();
     ms.forEach(m=>{
       if (labels.has(m.phase)) out.push(`two phases of ${nm(m)} share the label "${m.phase}"`);
@@ -2248,7 +2279,8 @@ function updateNode(id,data) { if (!state.nodes[id]) return; Object.assign(state
 // (in group order, primary first) when the user chose "all phases".
 function phaseScopeIds(id,allPhases) {
   const n=state.nodes[id];
-  if (allPhases&&n&&n.phase&&n.phaseGroupId) {
+  // A TRU's input phases are never split off on their own: the TRU is always one unit.
+  if (allPhases&&n&&n.phase&&n.phaseGroupId&&!n.convRole) {
     const ms=phaseGroupMembers(n.phaseGroupId);
     if (ms.length>1) return ms.map(m=>m.id);
   }
@@ -2259,7 +2291,7 @@ function phaseScopeBranchIds(roots) { return [...new Set(roots.flatMap(r=>subtre
 // asking for everything else, and null if the user closes the dialog.
 async function phaseAskScope(id,verb) {
   const n=state.nodes[id];
-  if (!n||!n.phase||!n.phaseGroupId) return 'one';
+  if (!n||!n.phase||!n.phaseGroupId||n.convRole) return 'one';
   const ms=phaseGroupMembers(n.phaseGroupId);
   if (ms.length<2) return 'one';
   return showChoiceDialog({
@@ -5101,6 +5133,7 @@ function updateAfAcdcLock(parentId) {
 // this slot is new)} — nothing here touches state.nodes until Save; Cancel just discards it.
 let efConvView='in';
 let efTruAdditionalParents=[];
+let efTruPrimaryParentId=null; // the primary input's last accepted parent in the dialog (see efTruPrimaryParentChanged)
 // Revision 57 (correction, 2026-08-19): the TRU's own group member ids (primary + output + any
 // already-existing additional inputs), excluded from every additional-parent dropdown's
 // candidate list — set once when the dialog opens (see openEdit's TRU population block).
@@ -5135,6 +5168,12 @@ function fillAdditionalParentSelect(selId,primaryParentId,excludeIds,selectedId,
     if (isLoad(sn.type)||sn.status==='removed') return;
     if (sn.acDc!=='ac'||sn.voltage!==primaryParent.voltage) return;
     if (excluded.has(sn.id)&&sn.id!==selectedId) return;
+    // Phase-aware TRU: with the primary fed from a phase-labeled bus, the other inputs can only come
+    // from the other phases of that same bus; with an unlabeled primary parent, only unlabeled buses
+    // (no mixed combinations). A slot's already-saved parent stays visible regardless.
+    if (sn.id!==selectedId) {
+      if (primaryParent.phase?sn.phaseGroupId!==primaryParent.phaseGroupId:sn.phase) return;
+    }
     const o=document.createElement('option');o.value=sn.id;
     const d=nodeDepth(sn.id,state.nodes);
     o.textContent=' '.repeat(d*2)+dispName(sn)+(sn.refDes?` [${sn.refDes}]`:'');
@@ -5149,20 +5188,73 @@ function efTruNInputs() { return 1+efTruAdditionalParents.length; }
 // button's own visibility (hidden once 2 additional parents exist — 3 inputs total, the spec's
 // cap). Called after every add/remove/parent-selection so the constraint dropdowns always reflect
 // the other slots' current picks.
+// Phase-aware TRU (the primary input sits under a phase-labeled bus): the other inputs are phases of
+// the same TRU under the other phases of that bus, so their description/ref des mirror the primary's
+// and the Ø label shown comes from their parent.
+function efTruPhaseAware() {
+  const pid=document.getElementById('ef-tru-parent-0').value||null;
+  const p=pid?state.nodes[pid]:null;
+  return !!(p&&p.phase);
+}
+function efTruSyncMirrored() {
+  if (!efTruPhaseAware()) return;
+  const d=document.getElementById('ef-tru-desc-0').value, r=document.getElementById('ef-tru-refdes-0').value;
+  efTruAdditionalParents.forEach((s,i)=>{
+    s.description=d; s.refDes=r;
+    const de=document.getElementById(`ef-tru-desc-${i+1}`), re=document.getElementById(`ef-tru-refdes-${i+1}`);
+    if (de) de.value=d; if (re) re.value=r;
+  });
+}
+// The primary input's parent changed. A phase-aware TRU with other input phases moves as a whole:
+// every input goes under the phase of the new bus that carries its own label (nothing is created or
+// relabeled), the primary's own pick snaps to its same-label phase, and the move is refused —
+// restoring the previous parent — if a label is missing, if the new parent is unlabeled, or if it
+// would label only some of the inputs.
+function efTruPrimaryParentChanged() {
+  const sel=document.getElementById('ef-tru-parent-0');
+  const prevId=efTruPrimaryParentId, newId=sel.value||null;
+  const prev=prevId?state.nodes[prevId]:null, dest=newId?state.nodes[newId]:null;
+  const slots=efTruAdditionalParents.filter(s=>s.parentId);
+  if (slots.length&&newId!==prevId) {
+    let err=null; const mapped=[];
+    if (prev&&prev.phase) {
+      if (!dest||!dest.phase) err='This TRU has several phase inputs, so it can only move to another phase-split bus that has all of its phases. Remove the extra input phases first to move it elsewhere.';
+      else {
+        const q=phaseGroupMembers(dest.phaseGroupId);
+        const find=lab=>q.find(x=>x.phase===lab);
+        const pm=find(prev.phase);
+        if (!pm) err=`"${dest.description||'The new parent'}" has no phase "${prev.phase}".`;
+        mapped.push(pm);
+        slots.forEach(s=>{ const cur=state.nodes[s.parentId]; const t=cur&&find(cur.phase); if (!t&&!err) err=`"${dest.description||'The new parent'}" has no phase "${cur&&cur.phase}".`; mapped.push(t); });
+      }
+    } else if (dest&&dest.phase) err='This TRU has several input phases on unlabeled buses, so it can\'t move under a phase-split bus. Remove the extra input phases first, or put every input on a phase of the new bus.';
+    if (err) { alert(err); sel.value=prevId||''; return; }
+    if (mapped.length) {
+      sel.value=mapped[0].id;
+      slots.forEach((s,i)=>{ s.parentId=mapped[i+1].id; });
+    }
+  }
+  efTruPrimaryParentId=sel.value||null;
+  efTruRenderAdditionalParents();
+}
 function efTruRenderAdditionalParents() {
   const wrap=document.getElementById('ef-tru-additional');
   const primaryParentId=document.getElementById('ef-tru-parent-0').value||null;
+  const aware=efTruPhaseAware();
+  if (aware) { const d=document.getElementById('ef-tru-desc-0').value, r=document.getElementById('ef-tru-refdes-0').value; efTruAdditionalParents.forEach(s=>{ s.description=d; s.refDes=r; }); }
   wrap.innerHTML=efTruAdditionalParents.map((slot,i)=>{
     const idx=i+1;
-    const label=idx===1?'Input Phase 2':'Input Phase 3';
+    const sp=slot.parentId?state.nodes[slot.parentId]:null;
+    const label=(idx===1?'Input Phase 2':'Input Phase 3')+(aware&&sp&&sp.phase?` — Ø${esc(sp.phase)}`:'');
+    const ro=aware?' readonly title="Same as the first input — phases are told apart by the Ø label"':'';
     return `<div class="section-label-row" style="margin-top:.3rem">
         <div class="section-label" style="font-size:.65rem">${label}</div>
       </div>
       <div class="form-row tru-parent-row" data-idx="${idx}">
         <button type="button" class="tru-parent-remove" data-idx="${idx}" title="Remove this input phase">✕</button>
         <div class="form-group" style="flex:1.5"><label>Parent Item</label><select id="ef-tru-parent-${idx}"></select></div>
-        <div class="form-group" style="flex:1.3"><label>Description</label><input id="ef-tru-desc-${idx}" type="text" value="${esc(slot.description||'')}"></div>
-        <div class="form-group" style="flex:0 0 85px"><label>Ref Des</label><input id="ef-tru-refdes-${idx}" type="text" placeholder="optional" value="${esc(slot.refDes||'')}"></div>
+        <div class="form-group" style="flex:1.3"><label>Description</label><input id="ef-tru-desc-${idx}" type="text" value="${esc(slot.description||'')}"${ro}></div>
+        <div class="form-group" style="flex:0 0 85px"><label>Ref Des</label><input id="ef-tru-refdes-${idx}" type="text" placeholder="optional" value="${esc(slot.refDes||'')}"${ro}></div>
       </div>`;
   }).join('');
   efTruAdditionalParents.forEach((slot,i)=>{
@@ -5184,7 +5276,8 @@ function efTruRenderAdditionalParents() {
 
 function efTruAddParent() {
   if (efTruAdditionalParents.length>=2) return;
-  const suffix=efTruAdditionalParents.length===0?' B':' C';
+  // Phase-aware TRUs mirror the primary's description exactly; the Ø label tells the phases apart.
+  const suffix=efTruPhaseAware()?'':(efTruAdditionalParents.length===0?' B':' C');
   const primaryDesc=document.getElementById('ef-tru-desc-0').value||'';
   const primaryRefDes=document.getElementById('ef-tru-refdes-0').value||'';
   efTruAdditionalParents.push({parentId:null,description:primaryDesc+suffix,refDes:primaryRefDes,nodeId:null});
@@ -5735,9 +5828,12 @@ function openEdit(nodeId) {
     efTruOwnGroupIds=[primary.id,outNode?.id,...additional.map(a=>a.id)].filter(Boolean);
 
     fillParentSelect('ef-tru-parent-0',primary.id,primary.parentId);
-    document.getElementById('ef-tru-parent-0').onchange=()=>efTruRenderAdditionalParents();
+    efTruPrimaryParentId=primary.parentId||null;
+    document.getElementById('ef-tru-parent-0').onchange=efTruPrimaryParentChanged;
     document.getElementById('ef-tru-desc-0').value=primary.description||'';
     document.getElementById('ef-tru-refdes-0').value=primary.refDes||'';
+    document.getElementById('ef-tru-desc-0').oninput=efTruSyncMirrored;
+    document.getElementById('ef-tru-refdes-0').oninput=efTruSyncMirrored;
 
     efTruAdditionalParents=additional.map(inp=>(
       {parentId:inp.parentId,description:inp.description||'',refDes:inp.refDes||'',nodeId:inp.id}));
@@ -5877,6 +5973,16 @@ function doEditSaveTru(n) {
   const newPrimaryParentId=document.getElementById('ef-tru-parent-0').value||null;
   const primaryDesc=document.getElementById('ef-tru-desc-0').value.trim();
   const primaryRefDes=document.getElementById('ef-tru-refdes-0').value.trim();
+  // Input phases are either all on unlabeled buses, or all on distinct phases of one split bus.
+  const aware=!!(newPrimaryParentId&&state.nodes[newPrimaryParentId]&&state.nodes[newPrimaryParentId].phase);
+  {
+    const pp=newPrimaryParentId?state.nodes[newPrimaryParentId]:null;
+    const badSlot=efTruAdditionalParents.filter(s=>s.parentId).find(s=>{
+      const sp=state.nodes[s.parentId];
+      return aware?!(sp&&sp.phaseGroupId===pp.phaseGroupId&&sp.id!==pp.id):!!(sp&&sp.phase);
+    });
+    if (badSlot) { alert(aware?'Every input phase of this TRU must be fed from a different phase of the same bus.':'This TRU\'s first input is on an unlabeled bus, so its other input phases must be too.'); return; }
+  }
 
   // Reparent primary if changed — mirrors the generic path's shared-peer guard/mirror (scoped to
   // primary only; additional inputs/output don't participate in cross-analysis reparent
@@ -5930,8 +6036,8 @@ function doEditSaveTru(n) {
         acDc:CONV_IN_ACDC.TRU,voltage:inV,netChangeOverride:null});
       node=state.nodes[newId];
     }
-    node.description=slot.description||'';
-    node.refDes=slot.refDes||'';
+    node.description=aware?primaryDesc:(slot.description||'');
+    node.refDes=aware?primaryRefDes:(slot.refDes||'');
     node.phaseOrder=i+1;
     keptNodeIds.add(node.id);
     activeInputNodes.push(node);
