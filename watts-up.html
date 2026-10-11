@@ -2311,12 +2311,24 @@ function delNode(id,allPhases=false) {
   // Revision 47: refuse to delete a shared item, or a branch containing one — deleting it here
   // would silently orphan its linked peer in the other analysis. Unshare first (no data lost),
   // then delete.
-  const branch=phaseScopeBranchIds(roots);
+  let branch=phaseScopeBranchIds(roots);
+  // TRU phase-mates: deleting a bus phase that feeds one input of a phase-aware TRU removes just
+  // that input phase — the TRU shrinks (see truShrinkPlans). If the primary input goes, its output
+  // (and the DC branch under it) is rescued out of the deleted set and re-parented to the next input.
+  const shrink=truShrinkPlans(roots,branch);
+  const leaving=new Set(shrink.flatMap(p=>p.leaving.map(i=>i.id)));
+  shrink.forEach(p=>{
+    if (p.group.output&&branch.includes(p.group.output.id)) {
+      const keep=new Set(subtree(p.group.output.id,state.nodes));
+      branch=branch.filter(x=>!keep.has(x));
+      p.rescue=true;
+    }
+  });
   // Revision 57: a TRU's conversion group (additional input phases + output) can span nodes
   // outside this subtree — additional inputs live under their own, separate parent buses — so
   // pull those in too, ensuring deleting the primary input always removes the whole group, never
   // half of it.
-  const groupExtra=convGroupExtraIds(branch);
+  const groupExtra=convGroupExtraIds(branch.filter(x=>!leaving.has(x)));
   const toDelete=[...branch,...groupExtra];
   const sharedIds=toDelete.filter(x=>state.nodes[x].sharedPeerId);
   if (sharedIds.length) {
@@ -2329,9 +2341,41 @@ function delNode(id,allPhases=false) {
   // of `branch`, whose parents are also being removed) they need an explicit detach to avoid
   // leaving a dangling childIds reference on that surviving parent.
   groupExtra.forEach(x=>{ const nd=state.nodes[x]; if (nd) detachChild(x,nd.parentId); });
+  shrink.forEach(p=>{
+    const out=p.group.output;
+    if (p.rescue&&out) { detachChild(out.id,out.parentId); out.parentId=p.staying[0].id; attachChild(out.id,out.parentId); }
+  });
   toDelete.forEach(x=>delete state.nodes[x]);
   rootParents.forEach(([r,pid])=>detachChild(r,pid));
+  // Surviving inputs keep their relative order; the first becomes (or stays) the primary.
+  shrink.forEach(p=>p.staying.forEach((i,k)=>{ i.phaseOrder=k; }));
   recalc();renderAll();persist();
+}
+// TRU input phases that a branch deletion would take with it while leaving the rest of the TRU
+// standing. Applies only to a phase-aware TRU (inputs linked as phase-mates), and only when the
+// deletion isn't started from one of the TRU's own members (deleting a TRU, or its output, always
+// removes the whole TRU). Returns [{group,leaving:[inputs],staying:[inputs]}].
+function truShrinkPlans(roots,branch) {
+  const inBranch=new Set(branch), rootSet=new Set(roots), seen=new Set(), plans=[];
+  branch.forEach(id=>{
+    const n=state.nodes[id];
+    if (!n||n.convRole!=='in'||!n.convGroupId||seen.has(n.convGroupId)) return;
+    seen.add(n.convGroupId);
+    const g=findConversionGroup(n);
+    if (!g||g.inputs.length<2) return;
+    if (!g.inputs.every(i=>i.phaseGroupId&&i.phaseGroupId===g.inputs[0].phaseGroupId)) return;
+    if ([...g.inputs,...(g.output?[g.output]:[])].some(m=>rootSet.has(m.id))) return;
+    const leaving=g.inputs.filter(i=>inBranch.has(i.id)), staying=g.inputs.filter(i=>!inBranch.has(i.id));
+    if (!leaving.length||!staying.length) return;
+    plans.push({group:g,leaving,staying});
+  });
+  return plans;
+}
+// Confirmation-text addendum for the plans above ('' when the deletion shrinks no TRU).
+function truShrinkNote(roots) {
+  const plans=truShrinkPlans(roots,phaseScopeBranchIds(roots));
+  if (!plans.length) return '';
+  return ' '+plans.map(p=>`This also removes input phase ${p.leaving.map(i=>'Ø'+i.phase).join(', ')} of TRU "${p.group.inputs[0].description||'TRU'}", which keeps its other phase${p.staying.length>1?'s':''}.`).join(' ');
 }
 
 // ── RENDERING ─────────────────────────────────────────────────────────────────
@@ -3838,10 +3882,11 @@ async function gridDeleteRow(id,renderFn){
   const scope=await phaseAskScope(id,'Delete');
   if (!scope) return;
   const all=scope==='all';
-  if (all) { if (!confirm(phaseDeleteAllMsg(id)+' This can only be undone via Cancel.')) return; }
+  const note=truShrinkNote(phaseScopeIds(id,all));
+  if (all) { if (!confirm(phaseDeleteAllMsg(id)+note+' This can only be undone via Cancel.')) return; }
   else {
     const kidCount=children(id,state.nodes).length;
-    if (kidCount>0 && !confirm(`Delete "${dispName(n,'this item')}" and its ${kidCount} child item(s)? This can only be undone via Cancel.`)) return;
+    if (kidCount>0 && !confirm(`Delete "${dispName(n,'this item')}" and its ${kidCount} child item(s)?${note} This can only be undone via Cancel.`)) return;
   }
   delNode(id,all);
   renderAll();
@@ -4438,6 +4483,19 @@ const EF_PER_PHASE_IDS=['ef-exld-a','ef-exld-w','ef-exld-ac-a','ef-exld-ac-va','
   'ef-load-a','ef-load-w','ef-load-ac-a','ef-load-ac-va','ef-load-ac-w','ef-load-ac-var','ef-load-ac-pf'];
 const efEl=id=>document.getElementById(id);
 
+// A branch can't be labeled (a split, or a move under a phase-split parent) while it holds one input
+// of a TRU whose other inputs sit elsewhere — only some of that TRU's inputs would end up labeled.
+// Returns that TRU's primary input (for naming it), or null.
+function phaseTruSplitBlocker(rootId) {
+  const ids=new Set(subtree(rootId,state.nodes));
+  for (const id of ids) {
+    const n=state.nodes[id];
+    if (!n||n.convRole!=='in'||!n.convGroupId) continue;
+    const g=findConversionGroup(n);
+    if (g&&g.inputs.some(i=>!ids.has(i.id))) return g.inputs[0];
+  }
+  return null;
+}
 function phaseShareBlocked(n) { return subtree(n.id,state.nodes).some(id=>state.nodes[id]&&state.nodes[id].sharedPeerId); }
 // Whether an unlabeled item can become a split origin under the given parent: AC, not top-level,
 // not Total Aircraft Load / a Load / a conversion type, and its parent is itself unsplit.
@@ -4483,6 +4541,8 @@ function phaseSingleMoveError(id,newParentId) {
   const p=newParentId?state.nodes[newParentId]:null;
   if (!(p&&p.phase)) return null;
   const n=state.nodes[id]; if (!n) return null;
+  const truBlock=phaseTruSplitBlocker(id);
+  if (truBlock) return `Can't move "${n.description||'this item'}" under a phase-split item — it feeds one input of TRU "${truBlock.description||'TRU'}", whose other inputs are on other buses.`;
   const clash=subtree(id,state.nodes).map(x=>state.nodes[x]).find(x=>x&&x.phase&&x.phaseGroupId&&phaseGroupMembers(x.phaseGroupId).length>1);
   if (clash) return `Can't move "${n.description||'this item'}" under a phase-split item — "${clash.description||'an item'}" beneath it has several phases. Move those phases separately, or choose an unsplit parent.`;
   return null;
@@ -4686,7 +4746,9 @@ function efPhaseRender() {
   let showEnable=false,locked=false,hintText='';
   if (P.mode==='enable') {
     showEnable=true;
+    const truBlock=phaseTruSplitBlocker(prim.id);
     if (phaseShareBlocked(prim)) { locked=true; hintText='Can\'t split this item into phases while it, or anything under it, is shared with the other analysis.'; }
+    else if (truBlock) { locked=true; hintText=`Can't split this item into phases: it feeds one input of TRU "${truBlock.description||'TRU'}", whose other inputs are on other buses. Put every input on this item first, or remove the extra input phases.`; }
     else if (!P.enabled) hintText='Turn on to split this item into phases (A, B, C …). It becomes the first phase, and everything already under it follows.';
   } else if (P.originLevel&&P.order.length===1) {
     showEnable=true;
@@ -4786,6 +4848,8 @@ function efPhaseValidate() {
   if (P.mode==='enable'&&P.enabled) {
     if (!phaseEligibleUnder(prim,newParentId)) return 'This item can\'t be split into phases under the selected parent.';
     if (phaseShareBlocked(prim)) return 'This item can\'t be split into phases while it, or anything under it, is shared with the other analysis.';
+    const truBlock=phaseTruSplitBlocker(prim.id);
+    if (truBlock) return `This item can't be split into phases: it feeds one input of TRU "${truBlock.description||'TRU'}", whose other inputs are on other buses.`;
   }
   if (!P.enabled) return null;
   if (P.originLevel) {
@@ -5048,7 +5112,7 @@ function duplicateNodeById(id,allPhases=false) {
   // Revision 57: a TRU's conversion group (up to 3 input phases + 1 output) is duplicated as a
   // whole — reconcileConvGroups clones whatever group members this single-node copy didn't reach
   // (in practice, always all of them) and relinks the full set under a fresh convGroupId.
-  if (n.convRole) reconcileConvGroups({[id]:copy.id});
+  if (n.convRole) reconcileConvGroups({[id]:copy.id},[id]);
   return copy.id;
 }
 function duplicateBranch(rootId,allPhases=false) {
@@ -5086,7 +5150,7 @@ function duplicateBranch(rootId,allPhases=false) {
   // Revision 57: complete/relink any TRU conversion group touched by this branch — an additional
   // input phase living outside the duplicated subtree (a separate, un-duplicated ancestor bus)
   // gets cloned here too, and every group member touched gets a fresh, shared convGroupId.
-  reconcileConvGroups(idMap);
+  reconcileConvGroups(idMap,roots);
   return idMap[rootId];
 }
 async function duplicateNode() {
@@ -5508,8 +5572,9 @@ function cloneNodeShallow(orig,overrides={}) {
 // input phase living under a separate, un-duplicated ancestor bus) and re-parenting it the same
 // way the caller already reparents anything else: via idMap when the original parent was cloned
 // too, otherwise unchanged.
-function reconcileConvGroups(idMap) {
+function reconcileConvGroups(idMap,rootIds) {
   const seenGroupIds=new Set();
+  const rootSet=new Set(rootIds||[]);
   Object.keys(idMap).forEach(origId=>{
     const orig=state.nodes[origId];
     const gid=orig&&orig.convGroupId;
@@ -5518,6 +5583,31 @@ function reconcileConvGroups(idMap) {
     const group=findConversionGroup(orig);
     if (!group) return;
     const newGid=uid();
+    // TRU phase-mates: copying a branch that holds only some input phases of a phase-aware TRU (e.g.
+    // one phase of a bus) yields a TRU with just the copied input phase(s) — the other inputs aren't
+    // cloned — and a copy of the output if the copied set didn't already include it. Duplicating a
+    // TRU member itself (a root of the copy) still clones the whole TRU.
+    const phaseAware=group.inputs.length>1&&group.inputs.every(i=>i.phaseGroupId&&i.phaseGroupId===group.inputs[0].phaseGroupId);
+    const isRootMember=[...group.inputs,...(group.output?[group.output]:[])].some(m=>rootSet.has(m.id));
+    if (phaseAware&&!isRootMember&&group.inputs.some(i=>!idMap[i.id])) {
+      const copiedIns=group.inputs.filter(i=>idMap[i.id]);
+      if (copiedIns.length) {
+        copiedIns.forEach((i,k)=>{ const c=state.nodes[idMap[i.id]]; c.convGroupId=newGid; c.phaseOrder=k; });
+        const out=group.output;
+        if (out) {
+          let outCopyId=idMap[out.id];
+          if (!outCopyId) {
+            const oc=cloneNodeShallow(out);
+            oc.parentId=idMap[copiedIns[0].id];
+            state.nodes[oc.id]=oc;
+            attachChild(oc.id,oc.parentId);
+            idMap[out.id]=oc.id; outCopyId=oc.id;
+          }
+          state.nodes[outCopyId].convGroupId=newGid;
+        }
+        return;
+      }
+    }
     [...group.inputs,...(group.output?[group.output]:[])].forEach(origMember=>{
       let copyId=idMap[origMember.id];
       if (!copyId) {
@@ -8602,7 +8692,8 @@ function initEvents() {
     const scope=await phaseAskScope(tid,'Delete');
     if (!scope||!state.nodes[tid]) return;
     const all=scope==='all';
-    const msg=all?phaseDeleteAllMsg(tid):kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${dispName(n,'this item')}"?`;
+    const note=truShrinkNote(phaseScopeIds(tid,all));
+    const msg=all?phaseDeleteAllMsg(tid)+note:kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches.${note} Continue?`:`Delete "${dispName(n,'this item')}"?`;
     if (!confirm(msg)) return;
     // Deleting one phase of several from the Edit dialog keeps the dialog open, so the edits already
     // made on the other phases aren't lost.

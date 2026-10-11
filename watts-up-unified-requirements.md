@@ -5331,8 +5331,31 @@ the §74 phase model.
   `efTruSyncMirrored`, `efTruPrimaryParentChanged` (label-mapped move with refusals); `doEditSaveTru`
   re-checks the final configuration and mirrors description/ref des.
 
-**Phase 2 (next):** Delete shrink / Duplicate narrowing / bus-split guard. **Phase 3:** grids, docs,
-final tests.
+**Phase 2 (shipped 2026-10-10): Delete shrink, Duplicate narrowing, bus-split guard.**
+- *Delete:* `delNode` now shrinks a phase-aware TRU instead of deleting it when the deleted branch
+  holds only some of its inputs (`truShrinkPlans`) — e.g. "Delete just ØB" on the bus feeding input B.
+  If the primary input goes, the output and the DC branch under it are rescued out of the deleted
+  set and re-parented to the next input; the surviving inputs are renumbered (`phaseOrder` 0, 1 …) so
+  the first is the primary. Deleting the last input's bus, all phases of the bus group, or a TRU member
+  itself still removes the whole TRU. The grid and dialog confirmations name the TRU phase that goes
+  with the bus (`truShrinkNote`).
+- *Duplicate:* copying a branch that holds only some input phases of a phase-aware TRU
+  (`reconcileConvGroups(idMap,rootIds)`) produces a single-input TRU: the copied input(s) and an
+  output copy (shallow when the output wasn't in the copied branch, with its DC subtree when it was).
+  Duplicating a TRU member itself still clones the whole TRU; all phases of the bus group still
+  re-link the copied inputs into one group.
+- *Guards:* `phaseTruSplitBlocker` refuses Multi-phase on a bus (checkbox locked with a hint naming
+  the TRU, and re-checked at save) and refuses moving such a bus under a phase-split parent when it
+  feeds one input of a TRU whose other inputs sit elsewhere. A bus holding every input of a TRU is
+  unaffected.
+
+Verified live: delete one phase of a bus (grid and dialog), the primary's bus (output + DC bus + load
+rescued, re-parented, order renumbered), the last input's bus, all phases, the TRU input itself (no
+scope dialog); duplicate one bus phase (non-primary → single-input TRU with a shallow output copy;
+primary → single-input TRU with DC branch copied), all phases, and the TRU itself; the split and move
+guards (blocked, allowed, whole-TRU-in-one-bus allowed); JSON round trip; clean console.
+
+**Phase 3 (next):** grids, docs, final tests.
 
 ## Appendix A: Future Enhancements
 
