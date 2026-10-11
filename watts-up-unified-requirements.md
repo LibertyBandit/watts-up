@@ -5260,6 +5260,19 @@ load under a TRU under a labeled bus and for a labeled bus, while an unrelated l
 validator rejections of a shared labeled item and a shared item under a labeled one, and a clean
 snapshot (with a shared generator above a split) still importing. Clean console.
 
+**Follow-ups after Phase D (2026-10-10).**
+- *Grid description:* a labeled item's editable description cell now shows its "(ØA)" tag right after
+  the input (read-only rows already showed it), so the Existing/Removed and Installed grids name
+  phase-mates the way the tree and reports do. The input itself still holds only the bare description.
+- *Edit dialog, "+ Phase":* a new phase starts with the previous phase's values (Existing Load, and
+  Net Change Override / Load Value for those item types) instead of blanks; notes/references stay empty.
+- *Edit dialog, Delete (this phase only):* the phase is deleted and the dialog stays open on the
+  remaining phases with every unsaved edit intact (if the primary was deleted, the next phase-mate
+  becomes the dialog's item and its parent is shown). "All phases", and Delete on a lone item, still
+  close the dialog.
+- *Edit dialog, parent list:* while an item is multi-phase — even a single phase, and as soon as
+  the Multi-phase box is ticked — DC items aren't offered as parents (`efParentSync`).
+
 All four phases of the three-phase effort are now complete. Not in this effort: TRU phase-mates,
 whole-group sharing, report layout, the phase-imbalance warning, and splits on conversion AC outputs.
 

@@ -285,6 +285,9 @@
        fallback. Type/Description/Ref Des are now separate columns, not one flex-row cell. */
     .data-grid .grid-type-cell{display:flex;align-items:center;gap:.3rem;overflow:hidden;height:100%}
     .data-grid .grid-col-desc input{width:100%}
+    .data-grid .grid-desc-phased{display:flex;align-items:center}
+    .data-grid .grid-desc-phased input{flex:1 1 auto;width:auto;min-width:0}
+    .data-grid .grid-desc-phase{flex:none;white-space:nowrap;padding:0 .27rem 0 .1rem;font-size:.67rem;opacity:.8}
     .data-grid .grid-desc-readonly,.data-grid .grid-refdes-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;padding:.14rem .27rem;font-size:.67rem}
     .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.61rem;color:var(--text-muted)}
     .data-grid .grid-col-refdes input{font-family:monospace;font-size:.61rem}
@@ -3442,7 +3445,11 @@ function gridTypeCell(n,depth,editable=true){
 }
 function gridDescInputCell(n,editable=true){
   if (!editable) return `<td class="grid-col-desc"><span class="grid-desc-readonly" title="${esc(dispName(n))}">${esc(dispName(n))}</span></td>`;
-  return `<td class="grid-col-desc"><input data-field="description" value="${esc(n.description||'')}" placeholder="Description"></td>`;
+  const inp=`<input data-field="description" value="${esc(n.description||'')}" placeholder="Description">`;
+  // The editable text is the bare description; a phase-labeled item shows its "(ØA)" tag right
+  // after the input so the grid names it the same way the tree and reports do.
+  if (!n.phase) return `<td class="grid-col-desc">${inp}</td>`;
+  return `<td class="grid-col-desc"><div class="grid-desc-phased">${inp}<span class="grid-desc-phase" title="Phase — edit the label in the Ø column">${esc(phaseSuffix(n).trim())}</span></div></td>`;
 }
 function gridRefDesCell(n,editable=true){
   if (!editable) return `<td class="grid-col-refdes"><span class="grid-refdes-readonly">${esc(n.refDes||'')}</span></td>`;
@@ -4379,6 +4386,20 @@ function collectEfRefs() {
 let efPhase=null;
 let efGroupSaving=false,efPrimarySaved=false;
 let efGroupPlan=null;   // phasePlanGroupMove() result while a group move is being saved
+let efParentAcOnly=false; // whether the Edit dialog's parent select currently hides DC items
+// Keeps the parent select in step with the Multi-phase state: while the item is multi-phase (even a
+// single phase) DC items aren't offered as parents. Rebuilds the list only when that changes (or
+// when forced), keeping the current choice unless `selectedId` says otherwise.
+function efParentSync(force,selectedId) {
+  const want=!!(efPhase&&efPhase.enabled);
+  if (!force&&want===efParentAcOnly) return;
+  efParentAcOnly=want;
+  const sel=efEl('ef-parent');
+  const cur=selectedId!==undefined?selectedId:(sel.value||null);
+  const n=state.nodes[mNode];
+  const group=n&&n.phase&&!n.convRole;
+  fillParentSelect('ef-parent',group?phaseGroupMembers(n.phaseGroupId).map(m=>m.id):mNode,cur,want);
+}
 const PHASE_MAX_MATES=3;
 const EF_PER_PHASE_IDS=['ef-exld-a','ef-exld-w','ef-exld-ac-a','ef-exld-ac-va','ef-exld-ac-w','ef-exld-ac-var','ef-exld-ac-pf',
   'ef-ov-a','ef-ov-w','ef-ov-ac-w','ef-ov-ac-var',
@@ -4609,8 +4630,24 @@ function efPhaseRenderTabs() {
     tabs.appendChild(add);
   }
 }
+// After "this phase only" Delete in the Edit dialog: the phase is already gone from the project, so
+// drop its tab and carry on editing the rest (their unsaved drafts stay untouched). If it was the
+// primary, the next phase-mate takes over as the dialog's node and parent.
+function efPhaseDropDeleted(id) {
+  const P=efPhase;
+  P.order=P.order.filter(x=>x!==id); delete P.drafts[id];
+  if (id===P.primaryId) {
+    const np=P.order.find(x=>!P.drafts[x].pending);
+    P.primaryId=np; mNode=np;
+    efParentSync(true,state.nodes[np].parentId||null);
+    applyVoltageAcdcLock(state.nodes[np],state.nodes[np].parentId);
+  }
+  P.active=P.primaryId;
+  efPhaseApplyActive();
+}
 function efPhaseRender() {
   const P=efPhase; if (!P) return;
+  efParentSync();
   const prim=state.nodes[P.primaryId];
   const wrap=efEl('ef-phase-enable-wrap'),cb=efEl('ef-phase-enable'),hint=efEl('ef-phase-hint');
   const pending=P.order.some(id=>P.drafts[id].pending);
@@ -4695,7 +4732,10 @@ function efPhaseAdd() {
   if ((efEl('ef-parent').value||null)!==(prim.parentId||null)) { alert('Save the change of parent first, then add phases.'); return; }
   efPhaseStash();
   const tmp=makeNode(prim.type,null,{});
-  const d={vals:efPerPhaseVals(tmp),notes:[],refs:[],label:'',pending:true,parentId:null,nodeId:null};
+  // A new phase starts with the previous phase's values (Existing Load, Net Change Override /
+  // Load Value) — phases of one item are usually near-identical — but not its notes/references.
+  const prevVals=P.drafts[P.order[P.order.length-1]].vals;
+  const d={vals:{...efPerPhaseVals(tmp),...prevVals},notes:[],refs:[],label:'',pending:true,parentId:null,nodeId:null};
   if (P.originLevel) d.label=efPhaseNextLabel();
   else { const free=efPhaseFreeParents(); if (free.length===1) { d.parentId=free[0].id; d.label=free[0].phase||''; } }
   const id='new'+(P.nextTmp++);
@@ -4853,7 +4893,7 @@ function fillTypeSelect(sel,includeRoot,extraType) {
   });
 }
 
-function fillParentSelect(selId,excludeId,selectedId) {
+function fillParentSelect(selId,excludeId,selectedId,acOnly=false) {
   const sel=document.getElementById(selId);sel.innerHTML='';
   const noP=document.createElement('option');noP.value='';noP.textContent='— No Parent (New Root) —';
   if (!selectedId) noP.selected=true;
@@ -4865,6 +4905,7 @@ function fillParentSelect(selId,excludeId,selectedId) {
     if (excluded.has(id)) return;
     const n=state.nodes[id];if (!n) return;
     if (isLoad(n.type)||n.status==='removed') return;
+    if (acOnly&&n.acDc!=='ac'&&id!==selectedId) return;
     const o=document.createElement('option');o.value=id;
     const d=nodeDepth(id,state.nodes);
     const typeLbl=n.type==='Root'?'':` (${displayType(n)})`;
@@ -4913,7 +4954,7 @@ function closeModal() {
   document.getElementById('modal').style.width='';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
-  efPhase=null;efGroupSaving=false;efGroupPlan=null;
+  efPhase=null;efGroupSaving=false;efGroupPlan=null;efParentAcOnly=false;
   efEl('ef-phase-box').classList.add('hidden');
   efEl('ef-parent').disabled=false;
   efEl('btn-del').disabled=false;efEl('btn-duplicate').disabled=false;
@@ -5586,7 +5627,9 @@ function openEdit(nodeId) {
 
   // Parent dropdown: always shown; roots show "No Parent" selected
   document.getElementById('ef-parent-group').classList.remove('hidden');
-  fillParentSelect('ef-parent',(n.phase&&!n.convRole)?phaseGroupMembers(n.phaseGroupId).map(m=>m.id):nodeId,n.parentId);
+  // Multi-phase items (even a lone phase) can only sit under AC parents, so DC items aren't offered.
+  efParentAcOnly=!!(n.phase&&!n.convRole);
+  fillParentSelect('ef-parent',(n.phase&&!n.convRole)?phaseGroupMembers(n.phaseGroupId).map(m=>m.id):nodeId,n.parentId,efParentAcOnly);
 
   // Type: include Root option only when no parent (req 4); extraType keeps this node's own
   // current type selectable even if it's a non-TRU conversion type no longer offered for
@@ -8455,7 +8498,14 @@ function initEvents() {
     const all=scope==='all';
     const msg=all?phaseDeleteAllMsg(tid):kids.length?`"${dispName(n,'This item')}" has ${kids.length} child item(s). Deleting will also delete all its branches. Continue?`:`Delete "${dispName(n,'this item')}"?`;
     if (!confirm(msg)) return;
-    delNode(tid,all);closeModal();
+    // Deleting one phase of several from the Edit dialog keeps the dialog open, so the edits already
+    // made on the other phases aren't lost.
+    const keepOpen=!all&&efPhase&&efPhase.enabled&&efPhase.mode==='group'&&
+      efPhase.order.some(x=>x!==tid&&!efPhase.drafts[x].pending);
+    if (keepOpen) efPhaseStash();
+    delNode(tid,all);
+    if (keepOpen&&!state.nodes[tid]) { efPhaseDropDeleted(tid); return; }
+    closeModal();
   });
 
   // Edit form: type/status/acDc changes
