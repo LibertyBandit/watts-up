@@ -5336,7 +5336,10 @@ the §74 phase model.
   holds only some of its inputs (`truShrinkPlans`) — e.g. "Delete just ØB" on the bus feeding input B.
   If the primary input goes, the output and the DC branch under it are rescued out of the deleted
   set and re-parented to the next input; the surviving inputs are renumbered (`phaseOrder` 0, 1 …) so
-  the first is the primary. Deleting the last input's bus, all phases of the bus group, or a TRU member
+  the first is the primary. The TRU keeps its Total Capacity and Total Load (the input load follows
+  the output load; the input capacity follows the TRU's output capacity unless deliberately
+  constrained): each remaining input's per-phase values are scaled up by (inputs before ÷ inputs
+  after), the same result the Edit dialog's ✕ gives (2026-10-11). Deleting the last input's bus, all phases of the bus group, or a TRU member
   itself still removes the whole TRU. The grid and dialog confirmations name the TRU phase that goes
   with the bus (`truShrinkNote`).
 - *Duplicate:* copying a branch that holds only some input phases of a phase-aware TRU

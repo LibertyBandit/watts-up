@@ -2348,7 +2348,14 @@ function delNode(id,allPhases=false) {
   toDelete.forEach(x=>delete state.nodes[x]);
   rootParents.forEach(([r,pid])=>detachChild(r,pid));
   // Surviving inputs keep their relative order; the first becomes (or stays) the primary.
-  shrink.forEach(p=>p.staying.forEach((i,k)=>{ i.phaseOrder=k; }));
+  // The TRU's Total Capacity / Total Load carry on (the input load follows the output load, and the
+  // input capacity follows the TRU's output capacity), so each remaining input's per-phase share
+  // grows by (inputs before ÷ inputs after) — as the Edit dialog already does when a phase is removed there.
+  shrink.forEach(p=>{
+    const scale=p.group.inputs.length/p.staying.length;
+    const scalePow=q=>{ if (!q) return q; const r={...q}; ['a','va','w','var'].forEach(k=>{ if (typeof r[k]==='number') r[k]*=scale; }); return r; };
+    p.staying.forEach((i,k)=>{ i.phaseOrder=k; i.capacity=scalePow(i.capacity); i.existingLoad=scalePow(i.existingLoad); });
+  });
   recalc();renderAll();persist();
 }
 // TRU input phases that a branch deletion would take with it while leaving the rest of the TRU
