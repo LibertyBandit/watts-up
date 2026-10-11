@@ -5594,7 +5594,14 @@ function reconcileConvGroups(idMap,rootIds) {
     if (phaseAware&&!isRootMember&&group.inputs.some(i=>!idMap[i.id])) {
       const copiedIns=group.inputs.filter(i=>idMap[i.id]);
       if (copiedIns.length) {
-        copiedIns.forEach((i,k)=>{ const c=state.nodes[idMap[i.id]]; c.convGroupId=newGid; c.phaseOrder=k; });
+        // The TRU's Total Capacity / Total Load carry over: each input stores a per-phase share
+        // (total ÷ number of inputs), so with fewer inputs the share per remaining input grows.
+        const scale=group.inputs.length/copiedIns.length;
+        const scalePow=p=>{ if (!p) return p; const q={...p}; ['a','va','w','var'].forEach(k=>{ if (typeof q[k]==='number') q[k]*=scale; }); return q; };
+        copiedIns.forEach((i,k)=>{
+          const c=state.nodes[idMap[i.id]]; c.convGroupId=newGid; c.phaseOrder=k;
+          c.capacity=scalePow(c.capacity); c.existingLoad=scalePow(c.existingLoad);
+        });
         const out=group.output;
         if (out) {
           let outCopyId=idMap[out.id];

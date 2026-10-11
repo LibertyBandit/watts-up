@@ -5343,7 +5343,10 @@ the §74 phase model.
   (`reconcileConvGroups(idMap,rootIds)`) produces a single-input TRU: the copied input(s) and an
   output copy (shallow when the output wasn't in the copied branch, with its DC subtree when it was).
   Duplicating a TRU member itself still clones the whole TRU; all phases of the bus group still
-  re-link the copied inputs into one group.
+  re-link the copied inputs into one group. The narrowed copy keeps the original TRU's *Total*
+  Capacity and Total Load: the copied input's per-phase values are scaled up by
+  (original inputs ÷ copied inputs), so the copy's Phase values equal the original's Totals (fix
+  2026-10-11; the first version carried the per-phase values over unchanged and so shrank the totals).
 - *Guards:* `phaseTruSplitBlocker` refuses Multi-phase on a bus (checkbox locked with a hint naming
   the TRU, and re-checked at save) and refuses moving such a bus under a phase-split parent when it
   feeds one input of a TRU whose other inputs sit elsewhere. A bus holding every input of a TRU is
