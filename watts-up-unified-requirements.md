@@ -5275,7 +5275,7 @@ snapshot (with a shared generator above a split) still importing. Clean console.
 
 All four phases of the three-phase effort are now complete. Not in this effort: whole-group sharing,
 report layout, the phase-imbalance warning, and splits on conversion AC outputs. (TRU phase-mates
-are now being built — see §75.)
+were added afterward — see §75.)
 
 ## 75. TRU Phase-Mates (extension of §74)
 
@@ -5355,11 +5355,24 @@ scope dialog); duplicate one bus phase (non-primary → single-input TRU with a 
 primary → single-input TRU with DC branch copied), all phases, and the TRU itself; the split and move
 guards (blocked, allowed, whole-TRU-in-one-bus allowed); JSON round trip; clean console.
 
-**Phase 3 (next):** grids, docs, final tests.
+**Phase 3 (shipped 2026-10-10): grids and final verification.**
+- *Grids:* linked TRU input phases are treated like any other non-primary phase-mate in both the
+  Existing/Removed and Installed grids (`gridPhasePrepare` no longer skips conversion inputs): the
+  extra rows show a read-only "TRU 1 (ØB)", and their type and ref des are read-only; the primary row
+  keeps its editable description with the "(ØA)" tag and an editable ref des, and editing either in
+  the grid reaches the other phases. Status, capacity and value cells were already locked for
+  additional inputs. A TRU on unlabeled buses has the same editable grid rows as before.
+- *Reports:* the Word Power Distribution Summary and both Load Analysis Detail layouts carry the
+  "(ØB)" tags for TRU phases (the Power Distribution Summary lists only the TRU's output row, as before).
+
+Verified live: three-phase TRU on a split bus in both grids (existing and installed status), the
+description edit mirroring to all phases, a legacy two-input TRU's rows unchanged, the three Word
+builders on a phased TRU project, and a clean console. With the Phase 1 and 2 checks (dialog, Move,
+delete shrink, duplicate narrowing, guards, JSON round trip) this completes TRU phase-mates.
 
 ## Appendix A: Future Enhancements
 
-- Three-phase AC circuit support — in progress, see §74 (remaining: TRU phase-mates, whole-group
+- Three-phase AC circuit support — see §74 and §75 (TRU phase-mates done; remaining: whole-group
   sharing, report layout, phase-imbalance warning, splits on conversion AC outputs)
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)

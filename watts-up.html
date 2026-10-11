@@ -3495,7 +3495,9 @@ function gridPhasePrepare() {
   gridPhaseSecondary=new Set();
   if (!gridPhaseCol) return;
   const byGroup={};
-  nodes.forEach(n=>{ if (n.phaseGroupId&&!n.convRole) (byGroup[n.phaseGroupId]=byGroup[n.phaseGroupId]||[]).push(n); });
+  // (TRU input phases that are linked as phase-mates are included: their type, description and ref des
+  // mirror the primary's, like any other phase-mate's, so those cells are read-only on the extra rows.)
+  nodes.forEach(n=>{ if (n.phaseGroupId) (byGroup[n.phaseGroupId]=byGroup[n.phaseGroupId]||[]).push(n); });
   Object.values(byGroup).forEach(ms=>{
     if (ms.length<2) return;
     ms.sort((a,b)=>(a.phaseSeq||0)-(b.phaseSeq||0));
