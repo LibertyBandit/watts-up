@@ -5475,9 +5475,40 @@ replaced by "the phases of a group are all shared or none").
   would leave the pair out of step) are refused with a message; deleting a shared phase and splitting a
   shared item stay refused as before.
 
-**Next:** Phase 4 group lifecycle across the pair (add phase auto-shares, delete both sides when clean,
-split/un-split mirrored, shared group moves mirrored; look-alike matching per phase by label), Phase 5
-verification.
+**Phase 4 (shipped 2026-10-11): group lifecycle across the pair.** The temporary Phase 3 guards are
+replaced:
+- *Add a phase to a shared group:* the dialog first confirms that the new phase(s) will also be
+  created in the other analysis; after Save a twin phase is created as a phase-mate of the primary's
+  twin group (same label and order; under the twin of the shared parent, or of the chosen parent
+  phase), with the new phase's final values (`phaseShareNewMate`).
+- *Delete phases of a shared group* (`deletionSet` / `applyDeletion` / `sharedDeletePlan`): "this
+  phase only" or "all phases" deletes the phase(s) on both sides after a confirmation that says how
+  many items go in the other analysis; TRU shrink and rescue are applied on both sides. Refused
+  (nothing changes) when the matching branch in the other analysis holds items that exist only there,
+  naming them. Every other shared item/branch is still refused until unshared.
+- *Split / un-split a shared item:* splitting labels the item and its branch on both sides (including
+  items that exist only in the other analysis beneath the twin); added phases are shared as above;
+  un-splitting a shared lone phase clears both sides. Refused when the twin can't be split too (not AC,
+  not under an unsplit parent, or it feeds one input of a multi-input TRU), or the twin's group has
+  several phases when un-splitting (`phaseSharedSplitError`). The old "can't split while anything
+  beneath is shared" rule (`phaseShareBlocked`) is gone.
+- *Move a shared group:* every new parent must be shared; each twin is moved under the twin of its
+  mate's new parent (the primary through the existing shared-move mirror).
+- *Look-alike matching per phase:* a labeled item matches an unlinked item with the same type,
+  description and label under the matching parent twin, all matches of a group coming from one group of
+  look-alikes. Linked phases keep the look-alikes' group (order taken from the source); new twins for
+  unmatched phases join it; look-alikes of that group that weren't linked leave it as lone items.
+
+Verified live: add a phase (origin level and deeper); delete one phase and all phases of a shared
+group, both sides; the refusal when the other analysis has its own item under the twin phase; split a
+shared bus whose descendants include shared and other-analysis-only items, add a phase, delete it,
+un-split; move a shared group to an unshared (refused) and a shared parent; unshare then re-share with
+"Link to Existing" (nothing created, orphan status kept), source with fewer phases than the look-alike
+group, and more; a shared 3-input TRU under a shared bus group losing a bus phase (both TRUs shrink)
+and then the primary's bus (output rescued on both sides); ordinary shared items still refuse
+deletion; JSON round trip; clean console.
+
+**Next:** Phase 5 final verification and clean-up.
 
 ## Appendix A: Future Enhancements
 
