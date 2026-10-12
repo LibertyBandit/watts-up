@@ -1582,12 +1582,50 @@ async function shareWithOther(nodeId) {
       allNewAncestorNames.push(dispName(a));
     });
   });
+  const otherLabel=state.analyses[otherId].label;
+  const label=group?`this TRU's items`:`"${dispName(n)}"`;
+  const ancMsg=allNewAncestorNames.length?`Sharing ${label} with ${otherLabel} will also share its ancestor(s): ${allNewAncestorNames.join(', ')}. `:`Sharing ${label} with ${otherLabel}. `;
+  // Look-alikes: an unlinked item already in the other analysis, under the twin of the item's parent,
+  // with the same type and description — typically what an earlier Unshare left behind. Offered as a
+  // link target instead of creating a second copy. (Conversion items are left out: their groups
+  // carry structure of their own.) `planned` maps each chain item to its look-alike, or null when a
+  // new twin will be made; a new twin has no children yet, so nothing below one can match.
+  const otherAn=state.analyses[otherId];
+  const normD=s=>String(s||'').trim().toLowerCase();
+  const planned=new Map(), taken=new Set(), matches=[];
+  previewChains.forEach(({chain,root})=>{
+    let parentTwin=root.sharedPeerId;
+    chain.forEach(node=>{
+      if (planned.has(node.id)) { const pm=planned.get(node.id); parentTwin=pm?pm.id:null; return; }
+      let m=null;
+      if (parentTwin&&!node.convRole) {
+        const p=otherAn.nodes[parentTwin];
+        m=((p&&p.childIds)||[]).map(i=>otherAn.nodes[i]).find(c=>c&&!c.sharedPeerId&&!taken.has(c.id)&&c.type===node.type&&!c.convRole&&normD(c.description)===normD(node.description))||null;
+      }
+      if (m) { taken.add(m.id); matches.push({src:node,cand:m}); }
+      planned.set(node.id,m); parentTwin=m?m.id:null;
+    });
+  });
+  let linkExisting=false, askedAncestors=false;
+  if (matches.length) {
+    const names=matches.slice(0,8).map(m=>`"${dispName(m.src)}"`).join(', ')+(matches.length>8?`, and ${matches.length-8} more`:'');
+    const choice=await showChoiceDialog({
+      title:'Share Item',
+      message:`${ancMsg}${otherLabel} already has unlinked ${matches.length>1?'items':'an item'} that look${matches.length>1?'':'s'} the same: ${names}. Link to ${matches.length>1?'them':'it'}, or create new ${matches.length>1?'copies':'copy'}? Linking keeps the existing item's status and loads and copies this item's description, ref des and capacity (or load value) onto it.`,
+      options:[
+        {label:'Link to Existing',value:'link',primary:true},
+        {label:'Create New Copies',value:'new'}
+      ]
+    });
+    if (!choice) return;
+    linkExisting=choice==='link'; askedAncestors=true;
+  }
   // Sharing Active Project -> PCM: each new twin's Existing Load can start as a copy of the source's
   // or at zero (the user's choice, asked only when some item being twinned has a non-zero value).
   // PCM -> Active Project needs no choice: the Active Project's Existing Load is computed from the
   // PCM twin's New Load either way.
   const toTwin=new Map();
-  previewChains.forEach(({chain})=>chain.forEach(x=>toTwin.set(x.id,x)));
+  previewChains.forEach(({chain})=>chain.forEach(x=>{ if (!(linkExisting&&planned.get(x.id))) toTwin.set(x.id,x); }));
   if (group) {
     const o=group.output; if (o&&!o.sharedPeerId) toTwin.set(o.id,o);
   } else if (n.convRole==='in') {
@@ -1595,13 +1633,10 @@ async function shareWithOther(nodeId) {
   }
   const loadsToCopy=curId==='ap'&&[...toTwin.values()].some(x=>hasCap(x.type)&&!isLoad(x.type)&&powNonZero(x.existingLoad));
   let copyLoads=true;
-  const otherLabel=state.analyses[otherId].label;
-  const label=group?`this TRU's items`:`"${dispName(n)}"`;
-  const ancMsg=allNewAncestorNames.length?`Sharing ${label} with ${otherLabel} will also share its ancestor(s): ${allNewAncestorNames.join(', ')}. `:`Sharing ${label} with ${otherLabel}. `;
   if (loadsToCopy) {
     const choice=await showChoiceDialog({
       title:'Share Item',
-      message:`${ancMsg}Capacity is shared. Should the existing loads of the new ${otherLabel} items start as a copy of the Active Project's, or at zero? (Once shared, the Active Project's Existing Load comes from the ${otherLabel} New Load.)`,
+      message:`${askedAncestors?'':ancMsg}Capacity is shared. Should the existing loads of the new ${otherLabel} items start as a copy of the Active Project's, or at zero? (Once shared, the Active Project's Existing Load comes from the ${otherLabel} New Load.)`,
       options:[
         {label:'Copy Existing Loads',value:'copy',primary:true},
         {label:'Start at Zero',value:'zero'}
@@ -1609,7 +1644,7 @@ async function shareWithOther(nodeId) {
     });
     if (!choice) return;
     copyLoads=choice==='copy';
-  } else if (allNewAncestorNames.length) {
+  } else if (allNewAncestorNames.length&&!askedAncestors) {
     if (!confirm(`${ancMsg}Continue?`)) return;
   }
   // The dialog above was asynchronous — make sure nothing changed underneath it.
@@ -1621,6 +1656,16 @@ async function shareWithOther(nodeId) {
   // parallel "other analysis" version of every node-creation helper.
   state.currentAnalysis=otherId;
   const makeTwin=(node,parentId)=>{
+    // Linking to a look-alike: no new item — the existing one takes this item's description, ref des
+    // and capacity/load value (the synced fields); its status, loads and overrides stay its own.
+    const lm=linkExisting?planned.get(node.id):null;
+    if (lm&&otherAn.nodes[lm.id]&&!lm.sharedPeerId) {
+      lm.description=node.description; lm.refDes=node.refDes;
+      if (hasCap(node.type)&&hasCap(lm.type)) lm.capacity=node.capacity?{...node.capacity}:null;
+      if (isLoad(node.type)&&isLoad(lm.type)) lm.loadValue=node.loadValue?{...node.loadValue}:mkPow();
+      lm.sharedPeerId=node.id; node.sharedPeerId=lm.id;
+      return lm.id;
+    }
     const overrides={description:node.description,refDes:node.refDes,status:'existing',
       acDc:node.acDc,voltage:node.voltage,sharedPeerId:node.id,convRole:node.convRole};
     if (hasCap(node.type)) {

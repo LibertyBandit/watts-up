@@ -5440,8 +5440,20 @@ split can't be shared").
 - *`unshareNode`:* new confirmation text (copies remain, re-sharing would create a new copy), and
   every shared item beneath the unshared one is unshared with it (count and names listed).
 
-**Next:** Phase 2 look-alike linking (ordinary items), Phase 3 whole-group sharing of phase-mates,
-Phase 4 group lifecycle across the pair, Phase 5 verification.
+**Phase 2 (shipped 2026-10-11): look-alike linking for ordinary items.** `shareWithOther` looks, top
+down along the chain it is about to twin, for an unlinked item in the other analysis under the twin
+of the item's parent with the same type and (case-insensitive) description, and asks "Link to
+Existing / Create New Copies" (closing cancels), listing the matches; the ancestor message is folded
+into that prompt. Linking creates nothing: the existing item takes the shared item's description,
+ref des and capacity (or load value) and keeps its own status, existing load and net-change override.
+Items under a freshly created twin can't match (it has no children), and conversion (TRU) items are
+left out of matching for now. When linking is chosen, the Existing Load copy/zero question covers
+only items that will really be created. Sharing from PCM into the Active Project works the same; the
+linked Active Project item's Existing Load then comes from the PCM item's New Load.
+
+**Next:** Phase 3 whole-group sharing of phase-mates, Phase 4 group lifecycle across the pair
+(add/delete/split mirrored, label sync, moves; look-alike matching per phase by label), Phase 5
+verification.
 
 ## Appendix A: Future Enhancements
 
