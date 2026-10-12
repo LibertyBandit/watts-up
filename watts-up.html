@@ -2348,6 +2348,14 @@ function validateImport(p) {
     const pv=phaseViolations(ns);
     if (pv.length) throw new Error(`"${an.label||id}" analysis has a phase problem — ${pv[0]}.`);
   });
+  // Shared twins carry the same phase label (labels are kept in step across a shared pair).
+  if (p.analyses.pcm) {
+    const apN=p.analyses.ap.nodes, pcN=p.analyses.pcm.nodes;
+    Object.values(apN).forEach(n=>{
+      const q=n.sharedPeerId?pcN[n.sharedPeerId]:null;
+      if (q&&(n.phase||null)!==(q.phase||null)) throw new Error(`"${n.description}" and its shared twin have different phase labels.`);
+    });
+  }
 }
 
 // Revision 68 (Phase 2), item 2.3: a real "Save As" — user-chosen location, native overwrite

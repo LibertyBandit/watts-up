@@ -5108,6 +5108,7 @@ order; the up/down arrows move them as a block.
 - *Sharing with the other analysis (Phase D):* mutual exclusion for this pass — an item inside a
   split branch can't be shared, and a split can't be enabled on a node whose subtree contains a
   shared item. Later: whole-group sharing, controlled from the primary, as TRUs do.
+  **Superseded 2026-10-11 by §76 (whole-group sharing), which removed this restriction.**
 - *TRU / conversion:* a conversion input under a labeled bus inherits that bus's label; the TRU
   group logic is untouched and the inputs aren't linked as phase-mates; DC outputs carry no label;
   AC outputs of conversions start unlabeled and can't be split yet. Later: TRU inputs become
@@ -5508,12 +5509,30 @@ group, and more; a shared 3-input TRU under a shared bus group losing a bus phas
 and then the primary's bus (output rescued on both sides); ordinary shared items still refuse
 deletion; JSON round trip; clean console.
 
-**Next:** Phase 5 final verification and clean-up.
+**Phase 5 (shipped 2026-10-11): final verification and clean-up.**
+- *Import validation:* shared twins must carry the same phase label (a file where they differ is
+  rejected with a message naming the item); sharing-link reciprocity is deliberately not checked, so
+  older files with imperfect links still open.
+- *Verified end to end:* a shared bus/feeder group with different PCM new loads under each twin phase —
+  the Active Project's Existing Load for each shared phase (and the bus and generator above) equals the
+  matching PCM New Load (1000/2000/3000 VA, generator 6000), shown read-only; a real JSON export →
+  import round trip through `doImport` restores both analyses, links and loads and validates; the Word
+  Power Distribution Summary and both Load Analysis Detail builders run in both analyses with the Ø tags;
+  Share appears only on the primary phase row (Unshare when shared) and not on the other phases;
+  unsharing returns the Existing Loads to editable and keeps their last values; no references to the
+  removed mutual-exclusion helpers remain. Clean console.
+- *Known limits / not in this effort:* sharing of look-alike TRU items (their groups carry structure of
+  their own) isn't offered as a link target; the copy-or-zero Existing Load choice applies at PCM
+  creation and when sharing from the Active Project, but a phase added later to a shared group copies
+  the Active Project's values without asking; reports are unchanged apart from the Ø tags;
+  phase-imbalance warning and splits on conversion AC outputs remain deferred.
+
+Whole-group sharing is complete; further changes are expected from live testing.
 
 ## Appendix A: Future Enhancements
 
-- Three-phase AC circuit support — see §74 and §75 (TRU phase-mates done; remaining: whole-group
-  sharing, report layout, phase-imbalance warning, splits on conversion AC outputs)
+- Three-phase AC circuit support — see §74, §75 and §76 (TRU phase-mates and whole-group sharing
+  done; remaining: report layout, phase-imbalance warning, splits on conversion AC outputs)
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)
