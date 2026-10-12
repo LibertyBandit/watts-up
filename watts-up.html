@@ -1464,7 +1464,27 @@ function installAnalysisView(st) {
 }
 // Creates the Previous & Concurrent Modifications analysis (a no-op if it already exists) and
 // switches to it so the user lands directly in their new, empty analysis.
-function createPcmAnalysis() {
+function powNonZero(p) { return !!p&&['a','va','w','var'].some(k=>typeof p[k]==='number'&&p[k]!==0); }
+async function createPcmAnalysis() {
+  if (!state||state.analyses.pcm) return;
+  // The Total Aircraft Load is shared the moment PCM exists, and from then on the Active Project's
+  // Existing Load for it comes from PCM's New Load — so PCM's root has to start from something:
+  // capacity is always shared across, and the user chooses whether PCM's existing load starts as a
+  // copy of the Active Project's or at zero (only asked when there is a non-zero value to copy).
+  const apRoot0=state.analyses.ap.nodes[state.analyses.ap.rootIds[0]];
+  let copyLoads=true;
+  if (apRoot0&&hasCap(apRoot0.type)&&powNonZero(apRoot0.existingLoad)) {
+    const choice=await showChoiceDialog({
+      title:'New Previous & Concurrent Modifications Analysis',
+      message:`The Total Aircraft Load is shared between the two analyses, and its capacity is carried over. Once shared, the Active Project's Existing Load is computed from this analysis's New Load. Start this analysis with a copy of the Active Project's existing load, or at zero?`,
+      options:[
+        {label:'Copy Existing Loads',value:'copy',primary:true},
+        {label:'Start at Zero',value:'zero'}
+      ]
+    });
+    if (!choice) return;
+    copyLoads=choice==='copy';
+  }
   if (!state||state.analyses.pcm) return;
   state.analyses.pcm=freshAnalysis('Previous and Concurrent Modifications');
   // The two analyses' root items are definitionally the same aircraft — link them as shared
@@ -1475,7 +1495,16 @@ function createPcmAnalysis() {
   // simplification, not a general multi-root sharing mechanism.
   const apRootId=state.analyses.ap.rootIds[0], pcmRootId=state.analyses.pcm.rootIds[0];
   const apRoot=state.analyses.ap.nodes[apRootId], pcmRoot=state.analyses.pcm.nodes[pcmRootId];
-  if (apRoot&&pcmRoot) { apRoot.sharedPeerId=pcmRootId; pcmRoot.sharedPeerId=apRootId; }
+  if (apRoot&&pcmRoot) {
+    apRoot.sharedPeerId=pcmRootId; pcmRoot.sharedPeerId=apRootId;
+    // Shared fields start out matching (description/ref des/capacity), so the first sync from either
+    // side can't blank the other; the existing load starts per the user's choice above.
+    pcmRoot.description=apRoot.description; pcmRoot.refDes=apRoot.refDes;
+    if (hasCap(apRoot.type)) {
+      pcmRoot.capacity=apRoot.capacity?{...apRoot.capacity}:null;
+      pcmRoot.existingLoad=(copyLoads&&apRoot.existingLoad)?{...apRoot.existingLoad}:mkPow(0,0,0,0,1);
+    }
+  }
   state.currentAnalysis='pcm';
   recalc();persist();renderAll();
 }
@@ -1519,7 +1548,7 @@ function phaseShareBlocker(n,nodes) {
   }
   return null;
 }
-function shareWithOther(nodeId) {
+async function shareWithOther(nodeId) {
   if (!state) return;
   const curId=state.currentAnalysis, otherId=curId==='ap'?'pcm':'ap';
   const cur=curAn();
@@ -1553,11 +1582,38 @@ function shareWithOther(nodeId) {
       allNewAncestorNames.push(dispName(a));
     });
   });
-  if (allNewAncestorNames.length) {
-    const otherLabel=state.analyses[otherId].label;
-    const label=group?`this TRU's items`:`"${dispName(n)}"`;
-    if (!confirm(`Sharing ${label} with ${otherLabel} will also share its ancestor(s): ${allNewAncestorNames.join(', ')}. Continue?`)) return;
+  // Sharing Active Project -> PCM: each new twin's Existing Load can start as a copy of the source's
+  // or at zero (the user's choice, asked only when some item being twinned has a non-zero value).
+  // PCM -> Active Project needs no choice: the Active Project's Existing Load is computed from the
+  // PCM twin's New Load either way.
+  const toTwin=new Map();
+  previewChains.forEach(({chain})=>chain.forEach(x=>toTwin.set(x.id,x)));
+  if (group) {
+    const o=group.output; if (o&&!o.sharedPeerId) toTwin.set(o.id,o);
+  } else if (n.convRole==='in') {
+    const o=children(n.id,cur.nodes).find(c=>c.convRole==='out'); if (o&&!o.sharedPeerId) toTwin.set(o.id,o);
   }
+  const loadsToCopy=curId==='ap'&&[...toTwin.values()].some(x=>hasCap(x.type)&&!isLoad(x.type)&&powNonZero(x.existingLoad));
+  let copyLoads=true;
+  const otherLabel=state.analyses[otherId].label;
+  const label=group?`this TRU's items`:`"${dispName(n)}"`;
+  const ancMsg=allNewAncestorNames.length?`Sharing ${label} with ${otherLabel} will also share its ancestor(s): ${allNewAncestorNames.join(', ')}. `:`Sharing ${label} with ${otherLabel}. `;
+  if (loadsToCopy) {
+    const choice=await showChoiceDialog({
+      title:'Share Item',
+      message:`${ancMsg}Capacity is shared. Should the existing loads of the new ${otherLabel} items start as a copy of the Active Project's, or at zero? (Once shared, the Active Project's Existing Load comes from the ${otherLabel} New Load.)`,
+      options:[
+        {label:'Copy Existing Loads',value:'copy',primary:true},
+        {label:'Start at Zero',value:'zero'}
+      ]
+    });
+    if (!choice) return;
+    copyLoads=choice==='copy';
+  } else if (allNewAncestorNames.length) {
+    if (!confirm(`${ancMsg}Continue?`)) return;
+  }
+  // The dialog above was asynchronous — make sure nothing changed underneath it.
+  if (!state||state.currentAnalysis!==curId||!cur.nodes[nodeId]||cur.nodes[nodeId].sharedPeerId) return;
 
   // Create the twin chains top-down in the other analysis. Temporarily flipping
   // state.currentAnalysis lets addNode/attachChild (which always operate on the currently
@@ -1574,7 +1630,7 @@ function shareWithOther(nodeId) {
       // starting point when sharing Active Project -> PCM. Sharing PCM -> Active Project makes
       // this moot (the recalc() below immediately overrides it per §3.3.2 anyway, since the new
       // Active Project twin is now shared and non-load), so no direction check is needed.
-      overrides.existingLoad=node.existingLoad?{...node.existingLoad}:mkPow(0,0,0,0,1);
+      overrides.existingLoad=(copyLoads&&node.existingLoad)?{...node.existingLoad}:mkPow(0,0,0,0,1);
     }
     if (isConv(node.type)) { overrides.efficiency=node.efficiency; overrides.convPf=node.convPf; overrides.phaseOrder=node.phaseOrder; }
     if (isLoad(node.type)) overrides.loadValue=node.loadValue?{...node.loadValue}:mkPow();
@@ -1635,7 +1691,20 @@ function unshareNode(id) {
   // inconsistent, half-shared state.
   const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n):null;
   const label=group?`this TRU's items`:`"${dispName(n)}"`;
-  if (!confirm(`Stop sharing ${label}? Both items remain — they just won't stay linked anymore.`)) return;
+  const nodes=curAn().nodes;
+  // Everything this Unshare un-links directly...
+  const direct=group?[...group.inputs,...(group.output?[group.output]:[])].filter(m=>m.sharedPeerId)
+    :[n,...(n.convRole==='in'?children(n.id,nodes).filter(c=>c.convRole==='out'&&c.sharedPeerId):[])];
+  // ...and every shared item beneath it, which can't stay shared once its ancestors aren't.
+  const directIds=new Set(direct.map(m=>m.id));
+  const below=[]; const seenBelow=new Set();
+  direct.forEach(m=>subtree(m.id,nodes).forEach(x=>{
+    const nd=nodes[x];
+    if (nd&&nd.sharedPeerId&&!directIds.has(x)&&!seenBelow.has(x)) { seenBelow.add(x); below.push(nd); }
+  }));
+  const names=below.slice(0,8).map(b=>`"${dispName(b)}"`).join(', ')+(below.length>8?`, and ${below.length-8} more`:'');
+  const belowMsg=below.length?` ${below.length} shared item${below.length>1?'s':''} under it will stop being shared too: ${names}.`:'';
+  if (!confirm(`Stop sharing ${label}? Both copies remain, no longer linked.${belowMsg} Sharing it again later would create a new copy in the other analysis, so delete one of the two copies first if you want to share it again. Continue?`)) return;
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   const other=state.analyses[otherId];
   const unlinkOne=node=>{
@@ -1643,16 +1712,8 @@ function unshareNode(id) {
     if (peer) peer.sharedPeerId=null;
     node.sharedPeerId=null;
   };
-  if (group) {
-    group.inputs.forEach(inp=>{ if (inp.sharedPeerId) unlinkOne(inp); });
-    if (group.output&&group.output.sharedPeerId) unlinkOne(group.output);
-  } else {
-    unlinkOne(n);
-    if (n.convRole==='in') {
-      const outNode=children(n.id,curAn().nodes).find(c=>c.convRole==='out');
-      if (outNode&&outNode.sharedPeerId) unlinkOne(outNode);
-    }
-  }
+  direct.forEach(unlinkOne);
+  below.forEach(unlinkOne);
   persist();renderAll();
 }
 // Revision 47 (Phase 2b): keeps a shared item's twin in sync for the fields spec §3.3.1 requires

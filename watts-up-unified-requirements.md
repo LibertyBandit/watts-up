@@ -5376,6 +5376,73 @@ description edit mirroring to all phases, a legacy two-input TRU's rows unchange
 builders on a phased TRU project, and a clean console. With the Phase 1 and 2 checks (dialog, Move,
 delete shrink, duplicate narrowing, guards, JSON round trip) this completes TRU phase-mates.
 
+## 76. Whole-Group Sharing of Phase-Mates, and Sharing Clean-ups
+
+Designed 2026-10-11 in a design interview; extends §47–§53 (item sharing), §65 (TRU whole-group
+sharing) and §74/§75 (phases). Replaces the Phase B/D mutual-exclusion rule ("items inside a phase
+split can't be shared").
+
+### 76.1 Agreed design
+
+- **Group-wide, controlled from the primary.** Share/Unshare appears only on the primary
+  phase-mate's row (status of the primary in each analysis decides which grid shows it, as for any
+  item), like a TRU. Sharing shares every phase-mate; the twins are created as phase-mates of one new
+  group in the other analysis with the same labels and group order (so the primary is the same node
+  on both sides). Every not-yet-shared ancestor is shared too; an ancestor that is itself a phase
+  group is shared as a whole group (a DC load under a TRU fed from a phase-labeled bus becomes
+  shareable this way). Import validation rejects a group that is only partly shared.
+- **Unshare (every Unshare, not just groups).** Confirmation always says both copies remain,
+  unlinked, and that sharing again later would create a new copy in the other analysis (so delete one
+  of the two first). Shared items beneath the unshared item stop being shared too, with their
+  count/names in the confirmation (a shared item can't sit under an unshared parent).
+- **Look-alike check when sharing.** Before creating twins, look in the other analysis for unshared
+  items that look like them (same parent twin, same type and description, and the same label for a
+  phase). Prompt: link to the existing item / create a new twin anyway / cancel. Phase groups match
+  per phase by label: matched phases are linked, the rest get new twins, and the prompt lists which
+  is which. Linking copies the synced fields (description, ref des, capacity or load value) from the
+  shared item onto the existing one; its status, Existing Load and Net Change stay (and when sharing
+  from PCM into the Active Project, the Active Project's Existing Load then comes from the PCM
+  twin's New Load as always).
+- **Labels sync across the pair.** Renaming a label at the origin renames the twins' labels too
+  (another synced field, also set when twins are created).
+- **Adding a phase to a shared group** shares the new phase automatically (twin phase plus any
+  unshared ancestor), naming what will be created in the other analysis.
+- **Deleting one phase of a shared group** deletes the phase on both sides in one confirmed step
+  (naming what goes in each analysis), but only when the twin phase's branch holds nothing unique to
+  the other analysis; otherwise it is refused, naming those items. "All phases" works the same way.
+- **Splitting / un-splitting a shared item** is mirrored onto its twin (the twin and its subtree get
+  the label, added phases are shared automatically; un-splitting removes both sides' labels). The TRU
+  rule "can't split a bus feeding one input of a multi-input TRU" applies on both sides.
+- **Moves** of a shared group need a shared destination and are mirrored onto the twins (by label for
+  deeper groups).
+- **Existing load when sharing Active Project → PCM** (Q8; also fixes the PCM-creation problem
+  below): capacity is always shared; the user chooses whether the new PCM items' Existing Loads start as
+  a copy of the Active Project's or at zero. Asked when the PCM analysis is created (for the Total
+  Aircraft Load) and on each Share from the Active Project that has non-zero existing loads to copy,
+  folded into the "this will also share…" confirmation; items with nothing to copy skip the question.
+  Sharing PCM → Active Project needs no choice (the Active Project's Existing Load is computed from the
+  PCM twin's New Load).
+
+### 76.2 Implementation status
+
+**Phase 1 (shipped 2026-10-11): PCM creation fix, existing-load choice, Unshare warning/cascade.**
+- *Problem found:* creating the PCM analysis linked the two Total Aircraft Load roots but left the
+  new PCM root empty, so the Active Project root's Existing Load was immediately recomputed from PCM's
+  (empty) New Load — zero — and PCM's blank capacity would overwrite the Active Project's at the
+  first sync from the PCM side.
+- *`createPcmAnalysis`* (now async): the PCM root starts with the Active Project root's description,
+  ref des and capacity; when the Active Project root has a non-zero Existing Load the user chooses
+  "Copy Existing Loads" (default) or "Start at Zero" (closing the dialog cancels creating PCM).
+- *`shareWithOther`* (now async): for Active Project → PCM shares, the same choice is offered when
+  any item being twinned has a non-zero Existing Load, merged with the ancestor confirmation
+  (otherwise the old confirmation only appears when ancestors are being shared, and a share with
+  nothing to confirm stays silent).
+- *`unshareNode`:* new confirmation text (copies remain, re-sharing would create a new copy), and
+  every shared item beneath the unshared one is unshared with it (count and names listed).
+
+**Next:** Phase 2 look-alike linking (ordinary items), Phase 3 whole-group sharing of phase-mates,
+Phase 4 group lifecycle across the pair, Phase 5 verification.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74 and §75 (TRU phase-mates done; remaining: whole-group
