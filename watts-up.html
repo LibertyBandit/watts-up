@@ -1178,8 +1178,20 @@ function setPhaseLabel(id,label) {
   if (!label) return 'A phase label can\'t be blank.';
   if (label.length>PHASE_LABEL_MAX) return `A phase label can be at most ${PHASE_LABEL_MAX} characters.`;
   if (phaseGroupMembers(n.phaseGroupId).some(m=>m.id!==id&&m.phase===label)) return `Another phase of this item already uses "${label}".`;
-  cascadePhase(id,label);
+  phaseApplyLabel(id,label);
   return null;
+}
+// Stamps a label on a phase-mate's branch and, if the item is shared, on its twin's branch in the
+// other analysis (labels are one of the fields kept in step across a shared pair).
+function phaseApplyLabel(id,label) {
+  cascadePhase(id,label);
+  const n=state.nodes[id];
+  if (!n||!n.sharedPeerId) return;
+  const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
+  if (!state.analyses[otherId]||!state.analyses[otherId].nodes[n.sharedPeerId]) return;
+  const curId=state.currentAnalysis;
+  state.currentAnalysis=otherId;
+  try { cascadePhase(n.sharedPeerId,label); } finally { state.currentAnalysis=curId; }
 }
 // Copies the primary's synced fields onto every other member of the group. Runs inside every
 // recalc (see recalcAnalysis), so an edit to the primary from any path — Edit dialog, either grid,
@@ -1249,12 +1261,6 @@ function phaseViolations(ns) {
   const nm=n=>`"${dispName(n)}"`;
   Object.values(ns).forEach(n=>{
     const par=n.parentId?ns[n.parentId]:null;
-    if (n.sharedPeerId) {
-      // Mutual exclusion with sharing: a shared item can't be phase-labeled or sit under a labeled item.
-      for (let c=n; c; c=c.parentId?ns[c.parentId]:null) {
-        if (c.phase) { out.push(`${nm(n)} is shared with the other analysis but is inside a phase split`); break; }
-      }
-    }
     if (!n.phase) {
       if (n.phaseGroupId) out.push(`${nm(n)} has a phase group but no phase label`);
       if (par&&par.phase&&phaseInherits(n)) out.push(`${nm(n)} sits under the phase-labeled item ${nm(par)} but has no phase label`);
@@ -1272,6 +1278,8 @@ function phaseViolations(ns) {
   });
   Object.values(groups).forEach(ms=>{
     if (ms.length<2) return;
+    // Phase-mates are shared as a group: all of them are shared with the other analysis, or none.
+    if (ms.some(m=>m.sharedPeerId)&&ms.some(m=>!m.sharedPeerId)) out.push(`the phases of ${nm(ms[0])} are only partly shared with the other analysis`);
     // TRU input phases can be phase-mates of each other, but only of each other, within one TRU,
     // and their group order has to follow the TRU's own input order.
     if (ms.some(m=>m.convRole)) {
@@ -1532,22 +1540,10 @@ function switchAnalysis(id) {
 // completely different parent bus (that's the reason the sibling constraint on additional inputs
 // was removed), so each one needs its own independent ancestor walk up to a shared ancestor —
 // unlike the single-chain walk this function used before multi-input TRUs existed.
-// Phase D: items inside a phase split can't be shared (whole-group sharing is a later addition).
-// Sharing an item also shares the chain of not-yet-shared ancestors above it, so the rule covers
-// those too — e.g. a DC load under a TRU fed from a phase-labeled bus would drag that bus (and its
-// phase) into the share. For a TRU, every input's chain counts. Returns the labeled item that
-// blocks the share, or null.
-function phaseShareBlocker(n,nodes) {
-  nodes=nodes||state.nodes;
-  const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n,nodes):null;
-  const targets=group?group.inputs:[n];
-  for (const t of targets) {
-    for (let cur=t; cur&&!cur.sharedPeerId; cur=cur.parentId?nodes[cur.parentId]:null) {
-      if (cur.phase) return cur;
-    }
-  }
-  return null;
-}
+// Whole-group sharing of phase-mates (§76): phase-mates are shared and unshared as a group — sharing
+// any one shares all of them (the twins are created as phase-mates of one new group with the same
+// labels and order) — and so is every not-yet-shared ancestor, an ancestor that is itself a phase
+// group being shared as a whole group. The grids offer Share/Unshare on the group's primary row only.
 async function shareWithOther(nodeId) {
   if (!state) return;
   const curId=state.currentAnalysis, otherId=curId==='ap'?'pcm':'ap';
@@ -1555,11 +1551,28 @@ async function shareWithOther(nodeId) {
   const n=cur.nodes[nodeId];
   if (!n||n.sharedPeerId) return;
   if (!state.analyses[otherId]) { alert('Create the Previous & Concurrent Modifications analysis first.'); return; }
-  const phaseBlock=phaseShareBlocker(n,cur.nodes);
-  if (phaseBlock) { alert(`Can't share "${dispName(n)}" — it is, or sits under, "${dispName(phaseBlock)}", which is part of a phase split. Items inside a phase split can't be shared with the other analysis yet.`); return; }
 
   const group=(n.convRole==='in'&&n.type==='TRU')?findConversionGroup(n,cur.nodes):null;
-  const shareTargets=group?group.inputs.filter(inp=>!inp.sharedPeerId):[n];
+  // Targets whose chains get twinned: the item (or a TRU's inputs), widened to every phase-mate of
+  // any phase group among them or among their not-yet-shared ancestors.
+  // (A TRU input found among the ancestors brings its whole conversion group with it.)
+  const matesOf=x=>{
+    if (x.convRole==='in'&&x.type==='TRU') { const g=findConversionGroup(x,cur.nodes); return g?g.inputs:[x]; }
+    return (x.phase&&!x.convRole&&x.phaseGroupId)?phaseGroupMembers(x.phaseGroupId,cur.nodes):[x];
+  };
+  const targetMap=new Map();
+  {
+    const queue=(group?group.inputs.filter(inp=>!inp.sharedPeerId):[n]).flatMap(matesOf);
+    while (queue.length) {
+      const m=queue.shift();
+      if (m.sharedPeerId||targetMap.has(m.id)) continue;
+      targetMap.set(m.id,m);
+      for (let c=m.parentId?cur.nodes[m.parentId]:null; c&&!c.sharedPeerId; c=c.parentId?cur.nodes[c.parentId]:null) {
+        matesOf(c).forEach(a=>{ if (!a.sharedPeerId&&!targetMap.has(a.id)) queue.push(a); });
+      }
+    }
+  }
+  const shareTargets=[...targetMap.values()].sort((a,b)=>nodeDepth(a.id,cur.nodes)-nodeDepth(b.id,cur.nodes)||(a.phaseSeq||0)-(b.phaseSeq||0));
 
   const buildChain=node=>{
     const chain=[]; let cursor=node;
@@ -1598,9 +1611,10 @@ async function shareWithOther(nodeId) {
     chain.forEach(node=>{
       if (planned.has(node.id)) { const pm=planned.get(node.id); parentTwin=pm?pm.id:null; return; }
       let m=null;
-      if (parentTwin&&!node.convRole) {
+      // (Phase-labeled items aren't matched yet: that needs per-phase matching by label.)
+      if (parentTwin&&!node.convRole&&!node.phase) {
         const p=otherAn.nodes[parentTwin];
-        m=((p&&p.childIds)||[]).map(i=>otherAn.nodes[i]).find(c=>c&&!c.sharedPeerId&&!taken.has(c.id)&&c.type===node.type&&!c.convRole&&normD(c.description)===normD(node.description))||null;
+        m=((p&&p.childIds)||[]).map(i=>otherAn.nodes[i]).find(c=>c&&!c.sharedPeerId&&!taken.has(c.id)&&c.type===node.type&&!c.convRole&&!c.phase&&normD(c.description)===normD(node.description))||null;
       }
       if (m) { taken.add(m.id); matches.push({src:node,cand:m}); }
       planned.set(node.id,m); parentTwin=m?m.id:null;
@@ -1620,17 +1634,22 @@ async function shareWithOther(nodeId) {
     if (!choice) return;
     linkExisting=choice==='link'; askedAncestors=true;
   }
+  // The other phases of a phase group being shared (and phase-mates of shared ancestors) are named too.
+  shareTargets.forEach(t=>{
+    const isGiven=t.id===n.id||(group&&group.inputs.some(i=>i.id===t.id));
+    if (!isGiven&&!seenAncestorIds.has(t.id)) { seenAncestorIds.add(t.id); allNewAncestorNames.push(dispName(t)); }
+  });
   // Sharing Active Project -> PCM: each new twin's Existing Load can start as a copy of the source's
   // or at zero (the user's choice, asked only when some item being twinned has a non-zero value).
   // PCM -> Active Project needs no choice: the Active Project's Existing Load is computed from the
   // PCM twin's New Load either way.
   const toTwin=new Map();
   previewChains.forEach(({chain})=>chain.forEach(x=>{ if (!(linkExisting&&planned.get(x.id))) toTwin.set(x.id,x); }));
-  if (group) {
-    const o=group.output; if (o&&!o.sharedPeerId) toTwin.set(o.id,o);
-  } else if (n.convRole==='in') {
-    const o=children(n.id,cur.nodes).find(c=>c.convRole==='out'); if (o&&!o.sharedPeerId) toTwin.set(o.id,o);
-  }
+  // Each TRU group being twinned also needs its output twinned (under the primary input's twin).
+  const truGroups=new Map();
+  shareTargets.forEach(t=>{ if (t.convRole==='in'&&t.convGroupId&&!truGroups.has(t.convGroupId)) { const g=findConversionGroup(t,cur.nodes); if (g) truGroups.set(t.convGroupId,g); } });
+  if (!group&&n.convRole==='in'&&n.convGroupId&&!truGroups.has(n.convGroupId)) { const g=findConversionGroup(n,cur.nodes); if (g) truGroups.set(n.convGroupId,g); }
+  truGroups.forEach(g=>{ const o=g.output; if (o&&!o.sharedPeerId) toTwin.set(o.id,o); });
   const loadsToCopy=curId==='ap'&&[...toTwin.values()].some(x=>hasCap(x.type)&&!isLoad(x.type)&&powNonZero(x.existingLoad));
   let copyLoads=true;
   if (loadsToCopy) {
@@ -1655,6 +1674,7 @@ async function shareWithOther(nodeId) {
   // aliased state.nodes/state.rootIds) create nodes there unchanged, instead of needing a
   // parallel "other analysis" version of every node-creation helper.
   state.currentAnalysis=otherId;
+  const createdTwins=[];
   const makeTwin=(node,parentId)=>{
     // Linking to a look-alike: no new item — the existing one takes this item's description, ref des
     // and capacity/load value (the synced fields); its status, loads and overrides stay its own.
@@ -1679,8 +1699,10 @@ async function shareWithOther(nodeId) {
     }
     if (isConv(node.type)) { overrides.efficiency=node.efficiency; overrides.convPf=node.convPf; overrides.phaseOrder=node.phaseOrder; }
     if (isLoad(node.type)) overrides.loadValue=node.loadValue?{...node.loadValue}:mkPow();
+    if (node.phase&&!node.convRole) overrides.phase=node.phase;
     const twinId=addNode(parentId,{type:node.type,...overrides});
     node.sharedPeerId=twinId;
+    createdTwins.push(twinId);
     return twinId;
   };
   // Rebuilds each target's chain fresh, immediately before processing it — NOT the previewChains
@@ -1699,11 +1721,10 @@ async function shareWithOther(nodeId) {
   // The output is always shared as a child of the primary's twin — this only needs explicit
   // handling here if it wasn't already covered by one of the ancestor chains above (only possible
   // when the original share target was somewhere *below* the output).
-  const outputSource=group?group.output:(n.convRole==='in'?children(n.id,cur.nodes).find(c=>c.convRole==='out'):null);
-  if (outputSource&&!outputSource.sharedPeerId) {
-    const primarySource=group?group.inputs[0]:n;
-    if (primarySource.sharedPeerId) makeTwin(outputSource,primarySource.sharedPeerId);
-  }
+  truGroups.forEach(g=>{
+    const o=g.output;
+    if (o&&!o.sharedPeerId&&g.inputs[0].sharedPeerId) makeTwin(o,g.inputs[0].sharedPeerId);
+  });
   // Group the newly-created twins on the target side by matching each one back to its *source's*
   // convGroupId — not by structural position, since an additional-input twin isn't a structural
   // child of the primary's twin (it sits under a different bus twin entirely). Only ever touches
@@ -1719,6 +1740,18 @@ async function shareWithOther(nodeId) {
   Object.values(bySourceGid).forEach(members=>{
     const gid=uid();
     members.forEach(tn=>{ tn.convGroupId=gid; });
+  });
+  // Twins of phase-mates become phase-mates of one new group each, with the source's labels and order
+  // (labels came from the explicit label for a split origin, or from the parent twin below it).
+  const byPhaseGroup={};
+  createdTwins.forEach(tid=>{
+    const tn=otherAn.nodes[tid]; const src=tn&&cur.nodes[tn.sharedPeerId];
+    if (!src||!src.phase||!src.phaseGroupId) return;
+    (byPhaseGroup[src.phaseGroupId]=byPhaseGroup[src.phaseGroupId]||[]).push([tn,src]);
+  });
+  Object.values(byPhaseGroup).forEach(list=>{
+    const gid=uid();
+    list.forEach(([tn,src])=>{ tn.phase=src.phase; tn.phaseGroupId=gid; tn.phaseSeq=src.phaseSeq||0; });
   });
   state.currentAnalysis=curId;
   // recalc() always recomputes both analyses in dependency order (Phase 2c), so one call here
@@ -1738,18 +1771,28 @@ function unshareNode(id) {
   const label=group?`this TRU's items`:`"${dispName(n)}"`;
   const nodes=curAn().nodes;
   // Everything this Unshare un-links directly...
+  // Phase-mates are un-shared as a group, whichever one the call starts from.
+  const mates=(!group&&n.phase&&!n.convRole&&n.phaseGroupId)?phaseGroupMembers(n.phaseGroupId,nodes).filter(m=>m.sharedPeerId):[];
   const direct=group?[...group.inputs,...(group.output?[group.output]:[])].filter(m=>m.sharedPeerId)
-    :[n,...(n.convRole==='in'?children(n.id,nodes).filter(c=>c.convRole==='out'&&c.sharedPeerId):[])];
+    :(mates.length?mates:[n,...(n.convRole==='in'?children(n.id,nodes).filter(c=>c.convRole==='out'&&c.sharedPeerId):[])]);
   // ...and every shared item beneath it, which can't stay shared once its ancestors aren't.
   const directIds=new Set(direct.map(m=>m.id));
   const below=[]; const seenBelow=new Set();
-  direct.forEach(m=>subtree(m.id,nodes).forEach(x=>{
-    const nd=nodes[x];
-    if (nd&&nd.sharedPeerId&&!directIds.has(x)&&!seenBelow.has(x)) { seenBelow.add(x); below.push(nd); }
-  }));
+  const addBelow=nd=>{ if (nd&&nd.sharedPeerId&&!directIds.has(nd.id)&&!seenBelow.has(nd.id)) { seenBelow.add(nd.id); below.push(nd); } };
+  direct.forEach(m=>subtree(m.id,nodes).forEach(x=>addBelow(nodes[x])));
+  // A TRU found below is un-shared as a whole group, wherever its other inputs sit.
+  below.slice().forEach(b=>{
+    const g=(b.convRole&&b.convGroupId)?findConversionGroup(b,nodes):null;
+    if (g) [...g.inputs,...(g.output?[g.output]:[])].forEach(addBelow);
+  });
+  // Phase groups found below are un-shared as a whole group too.
+  below.slice().forEach(b=>{
+    if (b.phase&&!b.convRole&&b.phaseGroupId) phaseGroupMembers(b.phaseGroupId,nodes).forEach(addBelow);
+  });
   const names=below.slice(0,8).map(b=>`"${dispName(b)}"`).join(', ')+(below.length>8?`, and ${below.length-8} more`:'');
   const belowMsg=below.length?` ${below.length} shared item${below.length>1?'s':''} under it will stop being shared too: ${names}.`:'';
-  if (!confirm(`Stop sharing ${label}? Both copies remain, no longer linked.${belowMsg} Sharing it again later would create a new copy in the other analysis, so delete one of the two copies first if you want to share it again. Continue?`)) return;
+  const what=mates.length>1?`all ${mates.length} phases of "${n.description||'this item'}"`:label;
+  if (!confirm(`Stop sharing ${what}? Both copies remain, no longer linked.${belowMsg} Sharing it again later would create a new copy in the other analysis, so delete one of the two copies first if you want to share it again. Continue?`)) return;
   const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
   const other=state.analyses[otherId];
   const unlinkOne=node=>{
@@ -3725,10 +3768,8 @@ function truGridRole(n) {
 }
 function gridShareInfo(n,gridKey){
   if (!state) return {show:false};
-  // Items inside a phase split can't be shared with the other analysis yet (whole-phase-group
-  // sharing is a later addition), so no Share button is offered for them.
-  if (!n.sharedPeerId&&phaseShareBlocker(n)) return {show:false};
-  if (n.phase) return {show:false};
+  // Phase-mates are shared as a group, controlled from the primary's row only (like a TRU's inputs).
+  if (n.phase&&!n.convRole&&gridPhaseSecondary.has(n.id)) return {show:false};
   // Revision 52 (items 6/7): a conversion-output row is managed via its IN row's Share/Unshare,
   // same as Dup/Del already are (canDelDup) — sharing/unsharing always handles the IN/OUT pair
   // together, so a separate control on OUT would be redundant at best and confusing at worst.
@@ -4938,6 +4979,7 @@ function efPhaseActivate(id) {
 function efPhaseAdd() {
   const P=efPhase; if (!P||!efPhaseCanAdd()) return;
   const prim=state.nodes[P.primaryId];
+  if (prim.sharedPeerId) { alert('This item is shared with the other analysis, and adding a phase to a shared group isn\'t supported yet.'); return; }
   if ((efEl('ef-parent').value||null)!==(prim.parentId||null)) { alert('Save the change of parent first, then add phases.'); return; }
   efPhaseStash();
   const tmp=makeNode(prim.type,null,{});
@@ -5019,6 +5061,7 @@ function doEditSaveGroup() {
   const existing=P.order.filter(id=>!P.drafts[id].pending);
   const selParent=efEl('ef-parent').value||null;
   if (P.mode==='group'&&P.enabled&&existing.length>1&&selParent!==(state.nodes[P.primaryId].parentId||null)) {
+    if (existing.some(id=>state.nodes[id].sharedPeerId)) { alert('This group is shared with the other analysis, and moving a shared group isn\'t supported yet.'); return; }
     const plan=phasePlanGroupMove(existing.map(id=>state.nodes[id]),selParent);
     if (plan.error) { alert(plan.error); return; }
     efGroupPlan=plan;
@@ -5051,7 +5094,7 @@ function doEditSaveGroup() {
       P.order.forEach(id=>{
         const d=P.drafts[id]; if (d.pending) return;
         const nn=state.nodes[id];
-        if (isPhaseOrigin(nn)&&nn.phase!==labelOf(id)) cascadePhase(id,labelOf(id));
+        if (isPhaseOrigin(nn)&&nn.phase!==labelOf(id)) phaseApplyLabel(id,labelOf(id));
       });
     }
     P.order.filter(id=>P.drafts[id].pending).forEach(tid=>{

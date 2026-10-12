@@ -5451,8 +5451,32 @@ left out of matching for now. When linking is chosen, the Existing Load copy/zer
 only items that will really be created. Sharing from PCM into the Active Project works the same; the
 linked Active Project item's Existing Load then comes from the PCM item's New Load.
 
-**Next:** Phase 3 whole-group sharing of phase-mates, Phase 4 group lifecycle across the pair
-(add/delete/split mirrored, label sync, moves; look-alike matching per phase by label), Phase 5
+**Phase 3 (shipped 2026-10-11): whole-group sharing of phase-mates.** The Phase B/D mutual-exclusion
+rule is gone (`phaseShareBlocker` removed; the import rule "a shared item can't be in a phase split"
+replaced by "the phases of a group are all shared or none").
+- *Share:* `shareWithOther` widens its targets to every phase-mate of any phase group among the item
+  or its not-yet-shared ancestors, so sharing one phase (from any phase-mate, though the grids only
+  offer it on the primary's row) shares the group and every ancestor, an ancestor phase group being
+  shared whole. Twins are created as phase-mates of one new group in the other analysis with the same
+  labels and group order (a split origin's twins get their label explicitly, deeper twins inherit it
+  from their parent twin). The confirmation names the other phases and ancestors being shared.
+  Phase-labeled items are not yet matched as look-alikes (Phase 4: per phase by label).
+- *TRUs:* when a TRU input is among the items being shared (including as an ancestor of the item
+  clicked, e.g. a DC load under the TRU output), its whole conversion group is shared and the output
+  is twinned under the primary input's twin. For a TRU with no phases this also means sharing a
+  descendant of the TRU now shares all its inputs (before, only the primary's chain was shared,
+  leaving the TRU half shared).
+- *Unshare:* from any phase-mate it un-shares the whole group; shared items beneath are un-shared too,
+  and a TRU group or phase group found beneath is un-shared as a whole.
+- *Labels:* renaming a label (grid Ø cell or Edit dialog) also renames the twin's label and its
+  branch (`phaseApplyLabel`).
+- *Grid:* Share/Unshare is hidden on non-primary phase-mate rows.
+- *Temporary guards until Phase 4:* adding a phase to a shared group and moving a shared group (both
+  would leave the pair out of step) are refused with a message; deleting a shared phase and splitting a
+  shared item stay refused as before.
+
+**Next:** Phase 4 group lifecycle across the pair (add phase auto-shares, delete both sides when clean,
+split/un-split mirrored, shared group moves mirrored; look-alike matching per phase by label), Phase 5
 verification.
 
 ## Appendix A: Future Enhancements
