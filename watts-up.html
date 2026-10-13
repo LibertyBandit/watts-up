@@ -8152,184 +8152,127 @@ function ladAltActiveKeySet(groupId,cfgSec){
   const gc=cfgSec[groupId]; if(!gc) return new Set();
   return new Set(Object.keys(gc).filter(k=>gc[k]));
 }
-// Revision 72, item 2.1: TOTAL_W is 5000 (Word's percentage-of-table unit, out of 5000 = 100%)
-// instead of a real dxa measurement — every width here is already a fraction of TOTAL_W, so this
-// table now stretches to fill whatever page/section width it's actually placed on (see wxTc/
-// wxTableOpen), rather than assuming the fixed landscape width it used to be sized for.
-function ladAltWordColWidths(colsCount,hasAnnot){
+// Revision 77 (Phase 3): the Word "Vertical" report is built from the same sibling-table plan as the
+// on-screen report (ladSiblingPlan) — sibling parents as column groups of one table, shared value rows,
+// phase sets side by side — so the two stay identical in structure and numbering.
+// Revision 72, item 2.1: TOTAL_W is 5000 (Word's percentage-of-table unit, out of 5000 = 100%) instead
+// of a real dxa measurement, so the table stretches to fill whatever page/section width it lands on.
+function ladSibWordWidths(valueCols,hasAnnot){
   const TOTAL_W=5000;
-  const labelW=Math.round(TOTAL_W*0.24);
-  // Revision 72 Follow-Up (2): matches the Notes column's own 0.04 fraction (used just below,
-  // conditionally) — the Rating cell only needs room for a parenthesized amperage like "(999 A)"
-  // (7 characters) plus a little padding, comfortably covered at the Notes column's own width; the
-  // previous 0.08 was noticeably wider than that needs. Not written as `=notesW` directly since
-  // notesW is conditionally 0 when there are no notes, but the Rating cell always renders.
+  // The Rating cell only needs room for a parenthesized amperage like "(999 A)" (Revision 72
+  // Follow-Up (2)); the Notes column is only present when there are notes.
   const cbW=Math.round(TOTAL_W*0.04);
   const notesW=hasAnnot?Math.round(TOTAL_W*0.04):0;
-  // Revision 72 Follow-Up: floors numW at the same value-width minimum colMins enforces elsewhere
-  // (7 characters — e.g. the digits in "(45,000)" — against the same portrait-sized 9360 reference;
-  // see pctW's comment), so a value column here can't be squeezed narrower than the numbers it
-  // holds just because many power-unit columns are selected at once.
+  // Floors each value column at the same 7-character minimum used elsewhere (see ladAltWordColWidths'
+  // old comment / pctW) so many sibling groups can't squeeze numbers into wrapping.
   const minNumW=pctW(Math.ceil(7*7.5*9.5)+160,9360);
-  const numW=Math.max(minNumW,Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,colsCount)));
+  const labelWant=Math.round(TOTAL_W*0.20);
+  const numW=Math.max(minNumW,Math.floor((TOTAL_W-labelWant-cbW-notesW)/Math.max(1,valueCols)));
+  // The label column takes whatever the value columns leave (never below 12%).
+  const labelW=Math.max(Math.round(TOTAL_W*0.12),TOTAL_W-cbW-notesW-numW*valueCols);
   return {labelW,cbW,notesW,numW,hasAnnot};
 }
-// Revision 71, items 2.2/2.3: bottomBdr on every header cell (solid rule under the header), and
-// keepNext throughout this whole table shape (this report has no shared header/row builders of
-// its own to fix once, unlike the group-column tables above, so each function below gets the
-// same treatment individually).
-function buildLadAltWordHeader(cols,hasAnnot,{labelW,cbW,notesW,numW},leftCellContentXml){
+function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot){
   const HSZ=7.5;
-  let r=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0,keepNext:true}),{w:labelW,bottomBdr:true});
-  r+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:cbW,bottomBdr:true});
-  if(hasAnnot) r+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true,bottomBdr:true});
-  cols.forEach((c,i)=>{
-    r+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0,bottomBdr:true});
+  const nm=t.members.length, nc=cols.length;
+  const W=ladSibWordWidths(nm*nc,hasAnnot);
+  const {labelW,cbW,notesW,numW}=W;
+  const totalCols=2+(hasAnnot?1:0)+nm*nc;
+  const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*nm*nc;
+  const sets={cap:ladAltActiveKeySet('cap',cfgSide),exload:ladAltActiveKeySet('exload',cfgSide),nc:ladAltActiveKeySet('nc',cfgSide),
+    newload:ladAltActiveKeySet('newload',cfgSide),rem:ladAltActiveKeySet('rem',cfgSide),added:ladAltActiveKeySet('added',cfgSide)};
+  const kp=(inner)=>wxPar(inner,{before:0,after:0,keepNext:true});
+
+  // ── header: two rows — sibling labels over their value columns, then the unit labels repeated
+  const pathXml=t.path?wxRun(t.path.join(' > ')+' >',{b:true,i:true,sz:9}):'';
+  let h1=wxTc(kp(pathXml),{w:labelW,vm:'start'})+wxTc(kp(''),{w:cbW,vm:'start'});
+  if(hasAnnot) h1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
+  t.members.forEach(m=>{
+    const n=m.node;
+    let label=dispName(n)+(n.refDes?` [${n.refDes}]`:'')+(m.rating!=null?` (${fmtRpt(m.rating)} A)`:'');
+    if(n.status==='new') label+=' — Installed';
+    let inner=wxPar(wxRun(label,{b:true,sz:HSZ+1}),{before:20,after:m.marker?0:20,jc:'center',keepNext:true});
+    if(m.marker) inner+=wxPar(wxRun(`(Note: ${m.marker})`,{sz:6.5}),{before:0,after:20,jc:'center',keepNext:true});
+    h1+=wxTc(inner,{w:numW*nc,span:nc,leftBdr:true});
   });
-  return wxTr(r,{h:280,hdr:true});
-}
-function ladAltWordSubjectRow(n,cols,annot,{labelW,cbW,notesW,numW,hasAnnot}){
-  const mainDesc=dispName(n)+(n.refDes?` [${n.refDes}]`:'');
-  const descRun=n.status==='removed'?wxRun(mainDesc,{i:true,sz:8.5}):n.status==='new'?wxRun(mainDesc,{b:true,sz:8.5}):wxRun(mainDesc,{sz:8.5});
-  const labelCell=wxTc(wxPar(descRun,{before:20,after:20,keepNext:true}),{w:labelW});
-  const ratingVal=(NT.PROTECTION.includes(n.type)&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
-  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:8.5}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
-  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
-  const blanks=cols.map((c,i)=>wxTc(wxPar('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:i===0})).join('');
-  return wxTr(labelCell+cbCell+notesCell+blanks);
-}
-function ladAltWordGroupRow(label,src,cols,activeSet,groupId,annot,{labelW,cbW,notesW,numW,hasAnnot}){
-  const labelCell=wxTc(wxPar(wxRun(label,{sz:8.5}),{ind:340,before:20,after:20,keepNext:true}),{w:labelW});
-  const cbCell=wxTc(wxPar('',{before:20,after:20,keepNext:true}),{w:cbW});
-  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
-  const cells=cols.map((c,i)=>{
-    let cellXml='';
-    if(activeSet.has(c.k)){
-      let val=src?src[c.k]:null,isNeg=false;
-      if((groupId==='nc'||groupId==='newload'||groupId==='rem')&&val!=null&&val<0){isNeg=true;val=Math.abs(val);}
-      cellXml=wxRun(rptTxt(val,c.isPf||false,isNeg),{sz:7.5});
-    }
-    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
-  }).join('');
-  return wxTr(labelCell+cbCell+notesCell+cells);
-}
-function ladAltWordChildRow(k,cols,ncSet,addedSet,annot,{labelW,cbW,notesW,numW,hasAnnot}){
-  const isLd=isLoad(k.type);
-  const modifierSuffix=(k.status==='existing'&&!isLd)?' (Net Change)':'';
-  const kDesc=dispName(k)+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
-  const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
-  const labelCell=wxTc(wxPar(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW});
-  const ratingVal=(NT.PROTECTION.includes(k.type)&&k.capacity?.a!=null)?fmtRpt(k.capacity.a):null;
-  const cbCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz:7.5}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
-  const notesCell=hasAnnot?wxTc(wxPar(annot?wxRun(annot.marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
-  const activeSet=isLd?addedSet:ncSet;
-  const cells=cols.map((c,i)=>{
-    let cellXml='';
-    if(activeSet.has(c.k)){
-      let val,isNeg=false;
-      if(isLd){val=k.loadValue?.[c.k]; if(k.status==='removed'&&val!=null)isNeg=true;}
-      else{val=k._netChange?.[c.k]; if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}}
-      cellXml=wxRun(rptTxt(val,c.isPf||false,isNeg),{sz:7.5});
-    }
-    return wxTc(wxPar(cellXml,{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
-  }).join('');
-  return wxTr(labelCell+cbCell+notesCell+cells);
-}
-function buildLadAltWordBlock(n,cols,cfg,cfgSide,annotator,colWidths){
-  const{labelW,cbW,notesW,numW,hasAnnot}=colWidths;
-  const kids=children(n.id,state.nodes);
-  const capSet=ladAltActiveKeySet('cap',cfgSide), exSet=ladAltActiveKeySet('exload',cfgSide),
-        ncSet=ladAltActiveKeySet('nc',cfgSide), nlSet=ladAltActiveKeySet('newload',cfgSide),
-        remSet=ladAltActiveKeySet('rem',cfgSide), addedSet=ladAltActiveKeySet('added',cfgSide);
+  let h2=wxTc(kp(''),{w:labelW,vm:'cont',bottomBdr:true})+wxTc(kp(''),{w:cbW,vm:'cont',bottomBdr:true});
+  if(hasAnnot) h2+=wxTc(kp(''),{w:notesW,vm:'cont',leftBdr:true,bottomBdr:true});
+  t.members.forEach(()=>cols.forEach((c,i)=>{
+    h2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0,bottomBdr:true});
+  }));
+  const header=wxTr(h1,{h:280,hdr:true})+wxTr(h2,{h:280,hdr:true});
 
-  const blockNotes=[]; const seenNums=new Set();
-  const pushEntries=(entries)=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
-  function annotateGroup(node,group){
-    const rn=(node.rowNotes||[]).filter(o=>(o.group||null)===group);
-    const rr=(node.rowRefs||[]).filter(r=>(r.group||null)===group);
-    return annotator.annotate(rn,rr);
-  }
-
-  const totalCols=2+(hasAnnot?1:0)+cols.length;
-  const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*cols.length;
-  // Revision 71, item 4.1: size now matches the row the label precedes — 8.5 for the subject
-  // row's own banner (ladAltWordSubjectRow's own fixed size), 7.5 for a child's (ladAltWordChildRow's) —
-  // instead of a fixed 6.5pt regardless of context. Indentation matches too: the subject-level
-  // banner uses ind:0 (ladAltWordSubjectRow itself has no indent), child-level uses ind:200
-  // (matching ladAltWordChildRow's own indent) — was hardcoded to 200 for both. Also item 2.3:
-  // keepNext added.
-  const bannerRow=(label,bold,sz,ind=200)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz}:{i:true,sz}),{ind,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
-
+  // ── body
+  const blank=(first)=>wxTc(wxPar('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:first});
+  const blanks=()=>cols.map((c,i)=>blank(i===0)).join('');
+  const valCell=(val,c,i,isNeg)=>wxTc(wxPar(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
+  const markerCell=(marker)=>hasAnnot?wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
+  const ratingCell=(n,sz)=>{
+    const a=(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?fmtRpt(n.capacity.a):null;
+    return wxTc(wxPar(a!=null?wxRun(`(${a} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
+  };
+  const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:7.5}:{i:true,sz:7.5}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
   const rows=[];
-  if(n.status==='new') rows.push(bannerRow('Installed',true,8.5,0));
-  const itemAnnot=annotateGroup(n,null); if(itemAnnot)pushEntries(itemAnnot.entries);
-  rows.push(ladAltWordSubjectRow(n,cols,itemAnnot,colWidths));
-
-  { const a=annotateGroup(n,'cap'); if(a)pushEntries(a.entries);
-    rows.push(ladAltWordGroupRow('CAPACITY',n.capacity,cols,capSet,'cap',a,colWidths)); }
-  if(n.status!=='new'){
-    const a=annotateGroup(n,'exload'); if(a)pushEntries(a.entries);
-    rows.push(ladAltWordGroupRow('EXISTING LOAD',n.existingLoad,cols,exSet,'exload',a,colWidths));
-  }
-  let shownRemoved=false, shownAdded=(n.status==='new');
-  kids.forEach(k=>{
-    if(k.status==='removed'&&!shownRemoved){rows.push(bannerRow('Removed',false,7.5));shownRemoved=true;}
-    else if(k.status==='new'&&!shownAdded){rows.push(bannerRow('Installed',true,7.5));shownAdded=true;}
-    const kAnnot=annotator.annotate(k.rowNotes,k.rowRefs); if(kAnnot)pushEntries(kAnnot.entries);
-    rows.push(ladAltWordChildRow(k,cols,ncSet,addedSet,kAnnot,colWidths));
+  t.rows.forEach(r=>{
+    if(r.type==='banner'){ rows.push(bannerRow(r.status==='removed'?'Removed':'Installed',r.status==='new')); return; }
+    if(r.type==='value'){
+      const set=sets[r.group];
+      const cells=r.srcs.map(src=>{
+        if(src===undefined) return blanks();
+        return cols.map((c,i)=>{
+          if(!set.has(c.k)) return blank(i===0);
+          let val=src?src[c.k]:null,isNeg=false;
+          if((r.group==='nc'||r.group==='newload'||r.group==='rem')&&val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+          return valCell(val,c,i,isNeg);
+        }).join('');
+      }).join('');
+      rows.push(wxTr(wxTc(wxPar(wxRun(r.label,{sz:8.5}),{ind:340,before:20,after:20,keepNext:true}),{w:labelW})+
+        wxTc(kp(''),{w:cbW})+markerCell(r.marker)+cells));
+      return;
+    }
+    // child row (one or, for phase-mates of a phase set, several kids sharing the row)
+    const k=r.kids[0].node, shared=r.kids.length>1;
+    const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
+    const kDesc=(shared?(k.description||'unnamed'):dispName(k))+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
+    const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
+    let cells='';
+    for(let m=0;m<nm;m++){
+      const kid=r.kids.find(x=>x.memberIdx===m);
+      if(!kid){ cells+=blanks(); continue; }
+      const kk=kid.node, isLd=isLoad(kk.type), set=isLd?sets.added:sets.nc;
+      cells+=cols.map((c,i)=>{
+        if(!set.has(c.k)) return blank(i===0);
+        let val,isNeg=false;
+        if(isLd){val=kk.loadValue?.[c.k]; if(kk.status==='removed'&&val!=null)isNeg=true;}
+        else{val=kk._netChange?.[c.k]; if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}}
+        return valCell(val,c,i,isNeg);
+      }).join('');
+    }
+    rows.push(wxTr(wxTc(wxPar(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW})+ratingCell(k,7.5)+markerCell(r.marker)+cells));
   });
-  if(n.status!=='new'){
-    const a=annotateGroup(n,'nc'); if(a)pushEntries(a.entries);
-    rows.push(ladAltWordGroupRow('Net Change',n._netChange,cols,ncSet,'nc',a,colWidths));
-  }
-  { const a=annotateGroup(n,'newload'); if(a)pushEntries(a.entries);
-    rows.push(ladAltWordGroupRow('New Load',n._newLoad,cols,nlSet,'newload',a,colWidths)); }
-  { const a=annotateGroup(n,'rem'); if(a)pushEntries(a.entries);
-    rows.push(ladAltWordGroupRow('Reserve',n._remainingCapacity,cols,remSet,'rem',a,colWidths)); }
 
-  blockNotes.sort((a,b)=>a.num-b.num);
-  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
-
-  // Revision 71, item 4.2: bold (was plain) and larger (was 7pt) — italic retained.
-  const path=pathForWord(n);
-  const pathXml=path?wxRun(path,{b:true,i:true,sz:9}):'';
-
-  return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...cols.map(()=>numW)])+
-    buildLadAltWordHeader(cols,hasAnnot,colWidths,pathXml)+
-    rows.join('')+
-    `</w:tbl>`+
-    notesParas+
-    wxPar('',{before:100,after:0});
+  const notesParas=t.notes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
+  return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)])+
+    header+rows.join('')+`</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
 }
 function buildLadVerticalWordContent(){
   const cfg=reportCfg||defaultPrintCfg();
   const annotator=makeAnnotator();
   const hasAnyAnnot=Object.values(state.nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
-
-  const allOrdered=preOrder(state.rootIds,state.nodes);
-  function eligibleIds(acDc){
-    return allOrdered.filter(id=>{
-      const n=state.nodes[id]; if(!n||n.acDc!==acDc||isLoad(n.type)||n.convRole==='in') return false;
-      return children(id,state.nodes).length>0;
-    });
-  }
-
-  const acCols=ladAltUnionCols(AC_GROUPS,cfg.ac), dcCols=ladAltUnionCols(DC_GROUPS,cfg.dc);
-  const acColWidths=ladAltWordColWidths(acCols.length,hasAnyAnnot);
-  const dcColWidths=ladAltWordColWidths(dcCols.length,hasAnyAnnot);
-
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
-  const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
+  const section=(sec,cfgSide,label)=>{
+    const cols=ladAltUnionCols(sec==='ac'?AC_GROUPS:DC_GROUPS,cfgSide);
+    if(!cols.length) return '';
+    const tables=ladSiblingPlan(sec,ladMaxSiblings(cols.length),annotator);
+    return tables.length?wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
+      tables.map(t=>buildLadSiblingWordTable(t,cols,cfgSide,hasAnyAnnot)).join(''):'';
+  };
   const acLbl=acDcVoltageLabel('ac'), dcLbl=acDcVoltageLabel('dc');
-
-  const section=(ids,cols,label,cfgSide,colWidths)=>ids.length?
-    wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
-    ids.map(id=>buildLadAltWordBlock(state.nodes[id],cols,cfg,cfgSide,annotator,colWidths)).join(''):'';
-
-  const acSec=section(acIds,acCols,acLbl?`${acLbl} Detail`:'AC Detail',cfg.ac,acColWidths);
-  const dcSec=section(dcIds,dcCols,dcLbl?`${dcLbl} Detail`:'DC Detail',cfg.dc,dcColWidths);
+  const acSec=section('ac',cfg.ac,acLbl?`${acLbl} Detail`:'AC Detail');
+  const dcSec=section('dc',cfg.dc,dcLbl?`${dcLbl} Detail`:'DC Detail');
   return acFirst?acSec+dcSec:dcSec+acSec;
 }
+
 
 // ── WORD DOCUMENT FILL (shared by the internal-template download and the
 // connected-external-file sync — Word integration Phase 1 adaptation) ─────────

@@ -5588,7 +5588,24 @@ some phases is its own row and keeps its tag. The next level's sets are the grou
 a unit's members (the walk treats a phase set as one logical item), and the path above such tables
 leaves the Ø tags off labeled ancestors. Ordinary and phase siblings can share a table.
 
-**Next:** Phase 3 Word builder, Phase 4 settings control, docs and tests.
+**Phase 3 (shipped 2026-10-13): Word builder.** `buildLadVerticalWordContent` now builds the Word
+Vertical report from the same plan (`ladSiblingPlan`) through `buildLadSiblingWordTable`: a two-row
+header (path / rating / notes cells merged down both rows; each sibling's label — description [ref
+des], rating, " — Installed", and "(Note: x,y)" on a second line — spanning its value columns; unit
+labels repeated under each sibling), the shared Capacity/Existing Load/Net Change/New Load/Reserve
+rows, status-ordered child rows with shared phase-mate rows, banners spanning the table, and the
+numbered note list under each table. Column widths stay percentages of the page (value columns floored
+at the 7-character minimum, the label column taking the remainder and never below 12%; the Rating
+column is the narrow 4% from Revision 72 Follow-Up). The PCM twin section (`wu-lad-vertical-pcm`) uses the
+same builder. Old per-parent Word helpers (`buildLadAltWordBlock` and its row builders) were removed.
+
+Verified: for a tree with an ordinary bus, a breaker with a note, a split bus with phase feeders and a
+DC section the generated XML parses, every row's cell spans match the table grid, the phase tables show
+Bus 1 (ØA/ØB/ØC) and Feeder 1 (ØA/ØB/ØC) groups, notes numbering matches the on-screen report, and the
+PCM section builds after sharing; the full Word document still generates and parses (the built-in
+template has no `wu-lad-vertical` placeholder, so the section appears only in documents that have one).
+
+**Next:** Phase 4 settings control (siblings per table), docs and final tests.
 
 ## Appendix A: Future Enhancements
 
