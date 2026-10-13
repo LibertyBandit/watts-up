@@ -5619,10 +5619,39 @@ config without the key behaves as Auto; Word produces the same table counts; cle
 Revision 77 is complete, apart from changes that live testing may suggest. Not in scope: Print Report
 and the Horizontal layout (unchanged).
 
+## 78. Phase Load Unbalance Warning (W6)
+
+Designed 2026-10-13 in a design interview. Formula from MIL-E-7016F; the permitted unbalance was first
+taken from MIL-STD-704F (table up to 30 kVA, 3.33% above), then simplified by the user to a single
+3.33% limit regardless of total load. References use "unbalance" rather than "imbalance".
+
+- **Rule.** Percent unbalance = (max phase VA − min phase VA) × 100 ÷ adjusted source phase VA rating,
+  and it must not exceed 3.33%. It is compared at the two decimals the message shows, so a value that
+  reads 3.33% passes (1,000 VA on a 30 kVA phase rating is 3.3333…%).
+- **Where/what.** Checked once per generator/alternator (AC), in each analysis separately, on New Load
+  VA: for every phase-split origin beneath it (the split points, wherever they sit below the
+  generator), the New Load VA is added up by phase label — the same label means the same physical phase
+  — and a missing phase counts as 0 VA, up to three phases. Unsplit AC items are treated as balanced
+  three-phase loads, so they never change max − min. A generator with no phase-labeled items beneath it,
+  or with no capacity, is not checked (the overload warning already covers a missing capacity); split
+  items with no generator above them aren't checked.
+- **Source rating.** The generator's capacity VA ÷ 3, taken as already adjusted for operating
+  conditions (the app has no derating field).
+- **Output.** A new W6 warning on the generator item (`phaseUnbalanceWarnings`, run at the end of
+  `recalcAnalysis`): shown in the Warnings banner and as the usual yellow highlight on the generator's
+  row in the reports. Message: `Phase load unbalance 4.2% (1,250 VA) exceeds the 3.33% limit — "Gen 1".`
+  No other display of the computed values.
+
+Verified: balanced and small differences pass; exactly 1,000 VA on a 30 kVA phase rating passes and 1,100 VA
+warns; only two phases present warns (33.33%); two split groups that offset each other pass and two that
+add up badly warn; an unsplit three-phase motor under the generator doesn't change the result; a split
+below an unsplit main bus is found; blank capacity and a split with no generator above are skipped; the
+warning appears in the banner; clean console.
+
 ## Appendix A: Future Enhancements
 
-- Three-phase AC circuit support — see §74, §75 and §76 (TRU phase-mates and whole-group sharing
-  done; remaining: report layout, phase-imbalance warning, splits on conversion AC outputs)
+- Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
+  layout and the phase unbalance warning done; remaining: splits on conversion AC outputs)
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)

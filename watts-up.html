@@ -2262,6 +2262,39 @@ function recalcAnalysis(an) {
     } else {n._newLoad=null;n._remainingCapacity=null;}
     n._warnings=warnNode(n,an.nodes);
   });
+  phaseUnbalanceWarnings(an.nodes);
+}
+// Phase load unbalance at the source (MIL-E-7016F formula, MIL-STD-704F limit — §78): for each
+// generator, the New Load VA of every phase-split origin beneath it is added up by phase label (the
+// same label means the same physical phase; a missing phase counts as 0 VA, up to three phases), and
+// percent unbalance = (max − min phase VA) × 100 ÷ (the generator's capacity VA ÷ 3) must not exceed
+// 3.33%. Unsplit loads are balanced three-phase loads, so they never change max − min. Skipped when
+// the generator has no capacity (the overload warning already covers that).
+const PHASE_UNBALANCE_LIMIT_PCT=3.33;
+function phaseUnbalanceWarnings(nodes) {
+  const byGen={};
+  Object.values(nodes).forEach(n=>{
+    if (!isPhaseOrigin(n,nodes)||n.convRole) return;
+    let g=n.parentId?nodes[n.parentId]:null;
+    while (g&&!(g.acDc==='ac'&&(g.type==='Generator'||g.type==='Alternator'))) g=g.parentId?nodes[g.parentId]:null;
+    if (!g) return;
+    const sums=(byGen[g.id]=byGen[g.id]||{gen:g,sums:{}}).sums;
+    sums[n.phase]=(sums[n.phase]||0)+((n._newLoad&&n._newLoad.va)||0);
+  });
+  Object.values(byGen).forEach(({gen,sums})=>{
+    const cap=gen.capacity&&gen.capacity.va;
+    if (!(cap>0)) return;
+    const vals=Object.values(sums);
+    while (vals.length<3) vals.push(0);
+    const diff=Math.max(...vals)-Math.min(...vals);
+    const pct=diff*100/(cap/3);
+    // Compared at the two decimals the message shows, so a value that reads 3.33% passes (1,000 VA on
+    // a 30 kVA phase rating is 3.3333…%).
+    if (Math.round(pct*100)/100>PHASE_UNBALANCE_LIMIT_PCT) {
+      (gen._warnings=gen._warnings||[]).push({code:'W6',
+        message:`Phase load unbalance ${pct.toFixed(2)}% (${Math.round(diff).toLocaleString('en-US')} VA) exceeds the ${PHASE_UNBALANCE_LIMIT_PCT}% limit — "${esc(dispName(gen,''))}".`});
+    }
+  });
 }
 // Revision 47 (Phase 2c): recomputes BOTH analyses, always in dependency order, regardless of
 // which is currently active (state.currentAnalysis) — Active Project can depend on Previous &
