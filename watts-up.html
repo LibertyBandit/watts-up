@@ -3197,20 +3197,40 @@ function ladMaxSiblings(colCount) {
   if (Number.isInteger(+v)&&+v>=1&&+v<=4) return +v;
   return colCount<=3?4:colCount===4?3:2;     // "Auto": about 12 value columns per table
 }
-// section: 'ac'|'dc'; cols: the active value columns (one set, repeated for every sibling).
-// Returns [{path:[names]|null, members:[node], rows:[...], notes:[{num,text}], hasNotesCol}].
+// section: 'ac'|'dc'; maxSib: siblings (column groups) allowed per table before it continues in a new one.
+// Returns [{path:[names]|null, members:[{node,marker,rating,unit}], rows:[...], notes:[{num,text}]}].
+//
+// Phase-siblings are handled as one logical item (a "unit": the phase-mates of one group that sit among
+// the same siblings or under the phases of one parent): a unit is never split across tables, its members
+// are neighbouring column groups, and their phase-mate children share one row with each phase's values
+// in its own column group.
 function ladSiblingPlan(section,maxSib,annotator) {
   const nodes=state.nodes;
   const isParent=n=>!!n&&n.acDc===section&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&children(n.id,nodes).length>0;
   const parentKids=n=>children(n.id,nodes).filter(isParent);
-  function pathFor(n) {
+  const isPhaseMate=n=>!!n&&!!n.phase&&!n.convRole&&!!n.phaseGroupId;
+  // Groups a list of nodes into units: phase-mates of one group together (in group order, at the place
+  // the first of them appears), everything else on its own.
+  function unitsOf(list) {
+    const units=[], done=new Set();
+    list.forEach(n=>{
+      if (done.has(n.id)) return;
+      if (isPhaseMate(n)) {
+        const unit=list.filter(x=>isPhaseMate(x)&&x.phaseGroupId===n.phaseGroupId).sort((a,b)=>(a.phaseSeq||0)-(b.phaseSeq||0));
+        unit.forEach(x=>done.add(x.id)); units.push(unit);
+      } else { done.add(n.id); units.push([n]); }
+    });
+    return units;
+  }
+  // `strip`: leave the Ø tag off labeled ancestors (the table shows every phase of them).
+  function pathFor(n,strip) {
     if (!n.parentId) return null;
     const parent=nodes[n.parentId];
     // parent is the Aircraft Total Load item (Root type), or n is the entry point of its AC/DC system: no path.
     if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
     const chain=[]; let cur=parent;
     while (cur) {
-      chain.unshift(dispName(cur));
+      chain.unshift(strip&&isPhaseMate(cur)?(cur.description||'unnamed'):dispName(cur));
       const curParent=cur.parentId?nodes[cur.parentId]:null;
       if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
       cur=curParent;
@@ -3220,56 +3240,72 @@ function ladSiblingPlan(section,maxSib,annotator) {
   const annotateGroup=(n,group)=>annotator.annotate((n.rowNotes||[]).filter(o=>(o.group||null)===group),(n.rowRefs||[]).filter(r=>(r.group||null)===group));
   const tables=[];
 
-  function buildTable(members) {
+  function buildTable(units) {
+    const members=[]; units.forEach((u,ui)=>u.forEach(n=>members.push({node:n,unit:ui})));
+    const mnodes=members.map(m=>m.node);
     const blockNotes=[], seen=new Set();
     const push=entries=>entries.forEach(e=>{ if (!seen.has(e.num)) { seen.add(e.num); blockNotes.push(e); } });
-    const infos=members.map(n=>{
-      const a=annotateGroup(n,null); if (a) push(a.entries);
-      return {node:n,marker:a?a.marker:null,
+    const infos=members.map(m=>{
+      const n=m.node, a=annotateGroup(n,null); if (a) push(a.entries);
+      return {node:n,unit:m.unit,marker:a?a.marker:null,
         rating:(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?n.capacity.a:null};
     });
     // A shared row's notes: every sibling's note numbers for that value group, without repeats.
-    const groupMarker=group=>{
-      const toks=[];
-      members.forEach(n=>{ const a=annotateGroup(n,group); if (a) { push(a.entries); a.marker.split(',').forEach(t=>{ if (!toks.includes(t)) toks.push(t); }); } });
+    const mergeMarkers=markers=>{
+      const toks=[]; markers.forEach(mk=>{ if (mk) mk.split(',').forEach(t=>{ if (!toks.includes(t)) toks.push(t); }); });
       return toks.length?toks.join(','):null;
     };
+    const groupMarker=group=>mergeMarkers(mnodes.map(n=>{ const a=annotateGroup(n,group); if (a) push(a.entries); return a?a.marker:null; }));
     const rows=[];
-    const anyNotNew=members.some(m=>m.status!=='new');
-    rows.push({type:'value',group:'cap',label:'CAPACITY',srcs:members.map(m=>m.capacity),marker:groupMarker('cap')});
-    if (anyNotNew) rows.push({type:'value',group:'exload',label:'EXISTING LOAD',srcs:members.map(m=>m.status!=='new'?m.existingLoad:undefined),marker:groupMarker('exload')});
+    const anyNotNew=mnodes.some(m=>m.status!=='new');
+    rows.push({type:'value',group:'cap',label:'CAPACITY',srcs:mnodes.map(m=>m.capacity),marker:groupMarker('cap')});
+    if (anyNotNew) rows.push({type:'value',group:'exload',label:'EXISTING LOAD',srcs:mnodes.map(m=>m.status!=='new'?m.existingLoad:undefined),marker:groupMarker('exload')});
     // Child items: Existing, then Removed, then Installed; within a status by sibling (parent) order,
-    // then each parent's own child order. Each child's values sit under its own parent's column group.
-    const allNew=members.every(m=>m.status==='new');
+    // then each parent's own child order. Each child's values sit under its own parent's column group;
+    // phase-mate children of phase-mate parents share one row.
+    const allNew=mnodes.every(m=>m.status==='new');
     [['existing',null],['removed','removed'],['new','new']].forEach(([st,banner])=>{
-      let shown=false;
-      members.forEach((m,mi)=>{
+      const stRows=[], byGroup=new Map();
+      mnodes.forEach((m,mi)=>{
         children(m.id,nodes).filter(k=>k.status===st).forEach(k=>{
-          if (banner&&!shown) { if (!(banner==='new'&&allNew)) rows.push({type:'banner',status:banner}); shown=true; }
-          const kAnnot=annotator.annotate(k.rowNotes,k.rowRefs); if (kAnnot) push(kAnnot.entries);
-          rows.push({type:'child',node:k,memberIdx:mi,marker:kAnnot?kAnnot.marker:null});
+          const key=(isPhaseMate(k)&&members[mi].unit!==undefined&&units[members[mi].unit].length>1)?'pg:'+k.phaseGroupId:null;
+          if (key&&byGroup.has(key)) { byGroup.get(key).kids.push({node:k,memberIdx:mi}); return; }
+          const row={type:'child',kids:[{node:k,memberIdx:mi}]};
+          if (key) byGroup.set(key,row);
+          stRows.push(row);
         });
       });
+      if (!stRows.length) return;
+      if (banner&&!(banner==='new'&&allNew)) rows.push({type:'banner',status:banner});
+      stRows.forEach(row=>{
+        const ms=row.kids.map(({node:k})=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs); if (a) push(a.entries); return a?a.marker:null; });
+        row.marker=mergeMarkers(ms);
+        rows.push(row);
+      });
     });
-    if (anyNotNew) rows.push({type:'value',group:'nc',label:'Net Change',srcs:members.map(m=>m.status!=='new'?m._netChange:undefined),marker:groupMarker('nc')});
-    rows.push({type:'value',group:'newload',label:'New Load',srcs:members.map(m=>m._newLoad),marker:groupMarker('newload')});
-    rows.push({type:'value',group:'rem',label:'Reserve',srcs:members.map(m=>m._remainingCapacity),marker:groupMarker('rem')});
+    if (anyNotNew) rows.push({type:'value',group:'nc',label:'Net Change',srcs:mnodes.map(m=>m.status!=='new'?m._netChange:undefined),marker:groupMarker('nc')});
+    rows.push({type:'value',group:'newload',label:'New Load',srcs:mnodes.map(m=>m._newLoad),marker:groupMarker('newload')});
+    rows.push({type:'value',group:'rem',label:'Reserve',srcs:mnodes.map(m=>m._remainingCapacity),marker:groupMarker('rem')});
     blockNotes.sort((a,b)=>a.num-b.num);
-    return {path:pathFor(members[0]),members:infos,rows,notes:blockNotes};
+    return {path:pathFor(mnodes[0],units.some(u=>u.length>1)),members:infos,rows,notes:blockNotes};
   }
 
-  // A set of sibling parents: one or more tables (a unit — later, a phase set — is never split),
-  // then each sibling's own parent-children as the next set.
-  function processSet(set) {
+  // A set of sibling units: one or more tables (a unit is never split, so a table may exceed the
+  // siblings-per-table limit when one phase set is larger than it), then each unit's own parent-children
+  // as the next set — for a phase set, the groups of phase-mates under its members.
+  function processSet(units) {
     const maxN=Math.max(1,maxSib);
-    const chunks=[]; let cur=[];
-    set.map(n=>[n]).forEach(unit=>{
-      if (cur.length&&cur.length+unit.length>maxN) { chunks.push(cur); cur=[]; }
-      cur=cur.concat(unit);
+    const chunks=[]; let cur=[], curN=0;
+    units.forEach(unit=>{
+      if (curN&&curN+unit.length>maxN) { chunks.push(cur); cur=[]; curN=0; }
+      cur.push(unit); curN+=unit.length;
     });
     if (cur.length) chunks.push(cur);
     chunks.forEach(c=>tables.push(buildTable(c)));
-    set.forEach(m=>{ const kids=parentKids(m); if (kids.length) processSet(kids); });
+    units.forEach(unit=>{
+      const kids=unitsOf(unit.flatMap(m=>parentKids(m)));
+      if (kids.length) processSet(kids);
+    });
   }
   // Entry sets: eligible parents whose own parent isn't in this section (or that have none); entries
   // with the same parent form one set.
@@ -3282,7 +3318,7 @@ function ladSiblingPlan(section,maxSib,annotator) {
     if (!entryGroups.has(key)) entryGroups.set(key,[]);
     entryGroups.get(key).push(n);
   });
-  entryGroups.forEach(set=>processSet(set));
+  entryGroups.forEach(set=>processSet(unitsOf(set)));
   return tables;
 }
 
@@ -3341,12 +3377,12 @@ function renderLoadAnalysisDetailAlt() {
   }
   // Non-load children use Net Change values; Load children use Load values — applied uniformly
   // regardless of the child's own status. Only the child's own parent's column group is filled.
-  function childRowCells(k,memberIdx,memberCount,cols,ncSet,addedSet) {
-    const isLd=isLoad(k.type);
-    const activeSet=isLd?addedSet:ncSet;
+  function childRowCells(kids,memberCount,cols,ncSet,addedSet) {
     let html='';
     for (let m=0;m<memberCount;m++) {
-      if (m!==memberIdx) { html+=blankCells(cols); continue; }
+      const kid=kids.find(x=>x.memberIdx===m);
+      if (!kid) { html+=blankCells(cols); continue; }
+      const k=kid.node, isLd=isLoad(k.type), activeSet=isLd?addedSet:ncSet;
       html+=cols.map((col,i)=>{
         if (!activeSet.has(col.k)) return `<td class="rpt-num${i===0?' rpt-grp-first':''}"></td>`;
         let val,isNeg=false;
@@ -3391,13 +3427,16 @@ function renderLoadAnalysisDetailAlt() {
       if (r.type==='value') {
         return `<tr style="font-size:${parentFs}"><td style="padding-left:17px">${r.label}</td><td class="rpt-num"></td>${annotCellHtml(r.marker)}${valueRowCells(r,cols,sets[r.group])}</tr>`;
       }
-      const k=r.node, w=warnLevel(k);
+      // A row shared by the phase-mates of a phase set is named once, without a Ø tag (each phase's
+      // values are under its own column group).
+      const k=r.kids[0].node, shared=r.kids.length>1;
+      const lv=r.kids.map(x=>warnLevel(x.node)), w=lv.includes('over')?'over':lv.includes('warn')?'warn':'';
       // Load children don't have a Net Change concept of their own, so "(Net Change)" only applies to
       // non-load existing children.
       const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
-      const kDesc=esc(dispName(k)+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
+      const kDesc=esc((shared?(k.description||'unnamed'):dispName(k))+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
       const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
-      return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker)}${childRowCells(k,r.memberIdx,nm,cols,ncSet,addedSet)}</tr>`;
+      return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker)}${childRowCells(r.kids,nm,cols,ncSet,addedSet)}</tr>`;
     }).join('');
     const notesHtml=t.notes.length?`<ol class="rpt-detail-notes">${t.notes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
     return `<div class="rpt-detail-block"><table class="rpt-table">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;

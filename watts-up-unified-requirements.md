@@ -5577,7 +5577,18 @@ rows with per-parent value placement); `ladMaxSiblings` gives the Auto limit. Th
 still uses the old per-parent layout until Phase 3, and phase sets (Phase 2) and the settings control
 (Phase 4) are not built yet.
 
-**Next:** Phase 2 phase-sibling sets, Phase 3 Word builder, Phase 4 settings control, docs and tests.
+**Phase 2 (shipped 2026-10-13): phase-sibling sets.** `ladSiblingPlan` now works on "units": the
+phase-mates of one group among the same siblings (the split-point group under an unsplit parent) or under
+the phases of one parent form one unit, kept whole when tables are packed (a unit larger than the
+siblings-per-table limit simply makes that table wider). The split-point group still shows as
+individual child rows under its parent; in the next table the phases are neighbouring column groups
+labeled with their Ø tags, and phase-mate children of phase-mate parents share one row (named once,
+no Ø tag, each phase's value under its own column group, notes merged); a child that exists under only
+some phases is its own row and keeps its tag. The next level's sets are the groups of phase-mates under
+a unit's members (the walk treats a phase set as one logical item), and the path above such tables
+leaves the Ø tags off labeled ancestors. Ordinary and phase siblings can share a table.
+
+**Next:** Phase 3 Word builder, Phase 4 settings control, docs and tests.
 
 ## Appendix A: Future Enhancements
 
