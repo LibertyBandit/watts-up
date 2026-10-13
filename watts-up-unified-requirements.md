@@ -5651,7 +5651,8 @@ warning appears in the banner; clean console.
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
-  layout and the phase unbalance warning done; remaining: splits on conversion AC outputs)
+  layout and the phase unbalance warning done). Long-term deferral, very low priority: splits on
+  conversion AC outputs (the AC side of an inverter or frequency converter can't carry phase labels yet).
 - Multiple flight phases / scenarios (Takeoff, Cruise, Approach and Landing, Emergency,
   generator failure, etc.)
 - Load intervals (instantaneous, 5-sec, 5-min, 15-min, continuous)
