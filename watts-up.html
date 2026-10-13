@@ -985,6 +985,10 @@
         <div class="section-label" style="margin-top:.75rem">Options</div>
         <div style="display:flex;flex-direction:column;gap:.35rem;font-size:.82rem;margin-top:.3rem">
           <label class="po-chk"><input type="checkbox" id="po-conv-nc-only"> Show conversion input (IN) side with Net Change only</label>
+          <label class="po-chk" title="How many sibling items the Vertical Load Analysis Detail puts side by side in one table before continuing in a new one. Auto: 4 for up to 3 value columns, 3 for 4, 2 for 5. A set of phases is never split."><span>Vertical Load Analysis Detail — siblings per table:</span>
+            <select id="po-lad-siblings" style="margin-left:.4rem">
+              <option value="auto">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+            </select></label>
         </div>
       </div>
       <div class="modal-footer">
@@ -7186,6 +7190,7 @@ function defaultPrintCfg(){
     },
     dc:{cap:{a:true,w:true},exload:{a:true,w:true},added:{a:true,w:true},nc:{a:true,w:true},newload:{a:true,w:true},rem:{a:true,w:true}},
     convInNcOnly:true,
+    ladSiblings:'auto',   // Revision 77: siblings per table in the Vertical Load Analysis Detail ('auto' or 1-4)
   };
 }
 // A genuine zero is a real value and renders as "0" — only a missing/inapplicable value (val==null,
@@ -8794,6 +8799,7 @@ function openPrintOpts(){
   chk('po-dc-newload-a',c.dc.newload.a);chk('po-dc-newload-w',c.dc.newload.w);
   chk('po-dc-rem-a',c.dc.rem.a);chk('po-dc-rem-w',c.dc.rem.w);
   chk('po-conv-nc-only',c.convInNcOnly);
+  { const sel=document.getElementById('po-lad-siblings'); if(sel) sel.value=(Number.isInteger(+c.ladSiblings)&&+c.ladSiblings>=1&&+c.ladSiblings<=4)?String(+c.ladSiblings):'auto'; }
   ['a','va','w','var','pf'].forEach(col=>chk(`po-ac-col-${col}`,false));
   ['a','w'].forEach(col=>chk(`po-dc-col-${col}`,false));
   document.getElementById('print-opts').classList.remove('hidden');
@@ -8815,6 +8821,7 @@ function applyPrintOpts(){
   c.dc.newload.a=get('po-dc-newload-a');c.dc.newload.w=get('po-dc-newload-w');
   c.dc.rem.a=get('po-dc-rem-a');c.dc.rem.w=get('po-dc-rem-w');
   c.convInNcOnly=get('po-conv-nc-only');
+  { const sel=document.getElementById('po-lad-siblings'); c.ladSiblings=(sel&&/^[1-4]$/.test(sel.value))?+sel.value:'auto'; }
 }
 
 // ── EVENTS ────────────────────────────────────────────────────────────────────
@@ -8867,6 +8874,8 @@ function initEvents() {
   // (Phase C / this phase), using whatever's currently saved.
   document.getElementById('print-opts-go'    ).addEventListener('click',()=>{
     applyPrintOpts();document.getElementById('print-opts').classList.add('hidden');
+    // The on-screen Load Analysis Detail reads these settings, so redraw it and keep them saved.
+    renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();persist();
   });
   // Revision 70, item 5.4: a "select all" checkbox above each power-unit column toggles every
   // individual checkbox in that column at once (5.4.1: individual ones stay independently

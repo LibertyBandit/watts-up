@@ -5605,7 +5605,19 @@ Bus 1 (ØA/ØB/ØC) and Feeder 1 (ØA/ØB/ØC) groups, notes numbering matches t
 PCM section builds after sharing; the full Word document still generates and parses (the built-in
 template has no `wu-lad-vertical` placeholder, so the section appears only in documents that have one).
 
-**Next:** Phase 4 settings control (siblings per table), docs and final tests.
+**Phase 4 (shipped 2026-10-13): siblings-per-table setting.** The Settings dialog gains "Vertical Load
+Analysis Detail — siblings per table" (Auto, 1, 2, 3, 4), stored as `reportCfg.ladSiblings` (default
+`'auto'`; a missing value in older files means Auto) and saved with the project in the JSON/Word-embedded
+data. Auto is the 4/3/2 rule above (`ladMaxSiblings`); a number is used as is, a phase set still never
+being split. Done redraws the on-screen report and saves; Reset to Defaults restores Auto; the Word
+builder reads the same value.
+
+Verified: with 5 sibling buses and 4 active value columns, Auto gives tables of 3 + 2, 2 gives 2 + 2 + 1,
+4 gives 4 + 1 and 1 gives one table per bus; the setting survives a JSON export/import and an older
+config without the key behaves as Auto; Word produces the same table counts; clean console.
+
+Revision 77 is complete, apart from changes that live testing may suggest. Not in scope: Print Report
+and the Horizontal layout (unchanged).
 
 ## Appendix A: Future Enhancements
 
