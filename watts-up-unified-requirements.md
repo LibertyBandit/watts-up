@@ -5529,6 +5529,56 @@ deletion; JSON round trip; clean console.
 
 Whole-group sharing is complete; further changes are expected from live testing.
 
+## 77. Vertical Load Analysis Detail — Sibling Tables (Revision 77)
+
+Source: "Watts Up Revision 77 (+) – Vertical detail report modifications.txt", refined in a design
+interview on 2026-10-13. Applies to the on-screen Vertical layout and the Word Vertical report
+(including its PCM twin section); Print Report and the Horizontal layout don't use it.
+
+### 77.1 Agreed design
+
+- **Sibling tables.** The siblings that share a parent are shown together as column groups of one
+  table instead of one table per parent: the first table is the shared parent (e.g. Aircraft Total)
+  with the siblings as its child rows, the next has the siblings (AC Bus 1…n) as column groups with
+  their children as rows. The left column holds the labels (CAPACITY, EXISTING LOAD, child items,
+  Net Change, New Load, Reserve), then Rating, then Notes, then one group of value columns per sibling
+  (the active units — A/VA/W/VAR/pf — repeated under each sibling's label).
+- **Sibling label (above its columns):** description [ref des], rating "(100 A)" for protective
+  devices, " — Installed" for an Installed sibling (bold), and "(Note: x,y)" on a new line for its
+  item-level notes. Warning highlights apply to the label.
+- **Rows:** Capacity, Existing Load, Net Change, New Load and Reserve are one row each across all the
+  siblings (Existing Load and Net Change stay blank for Installed siblings); group-scoped notes go in
+  that row's Notes cell, listing every sibling's note numbers. Child rows are ordered Existing, then
+  Removed, then Installed (banners span the table; the Installed banner is skipped when every sibling
+  in the table is Installed), within a status by sibling order, then each parent's own child order;
+  a child's values sit only under its own parent's column group.
+- **Which items are parents:** not a Load, not a Removed item, not a TRU input, and with children
+  (a Removed item is only ever a child row). AC and DC sections stay separate.
+- **Order of tables:** after a table, the walk goes to the first sibling's own parent-children as the
+  next sibling set, then the second sibling's, and so on (where the old report went on to the second
+  sibling, this one goes on to the second sibling's children). The path in the top-left header cell
+  is the shared parent's path.
+- **Siblings per table:** a setting (Auto or 1–4) in the report settings; Auto allows about 12 value
+  columns per table, capped at 4 siblings — 4 siblings for 1–3 active value columns, 3 for 4 columns,
+  2 for 5. More siblings continue in a new table straight after the first.
+- **Phase-split items:** the split-point group is shown as individual child rows under its parent; the
+  phase-siblings (Bus ØA/ØB/ØC) are then column groups of one table (labels with their Ø tags);
+  phase-mates one level down (Feeder ØA/ØB/ØC) share one row with each phase's value in its own
+  column group. A phase set is never split across tables (a new set starts on the next table if it
+  wouldn't fit; a set larger than the siblings-per-table setting is kept whole), and the walk treats a
+  phase set as one logical item (the next level's sets are the groups of phase-mates under its members).
+
+### 77.2 Implementation status
+
+**Phase 1 (shipped 2026-10-13): plan builder and on-screen renderer, ordinary (non-phase) trees.**
+`ladSiblingPlan(section,maxSib,annotator)` builds the report-wide plan (tables → members, rows, notes)
+and `renderLoadAnalysisDetailAlt` draws it (two-row header, shared value rows, status-ordered child
+rows with per-parent value placement); `ladMaxSiblings` gives the Auto limit. The Word Vertical builder
+still uses the old per-parent layout until Phase 3, and phase sets (Phase 2) and the settings control
+(Phase 4) are not built yet.
+
+**Next:** Phase 2 phase-sibling sets, Phase 3 Word builder, Phase 4 settings control, docs and tests.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74, §75 and §76 (TRU phase-mates and whole-group sharing

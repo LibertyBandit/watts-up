@@ -239,6 +239,8 @@
     .rpt-onscreen .rpt-over td{background:rgba(248,81,73,.14) !important}
     .rpt-onscreen .rpt-warn td{background:rgba(210,153,34,.14) !important}
     .rpt-onscreen .rpt-over-val{font-weight:700;color:var(--accent-red)}
+    .rpt-onscreen .rpt-table th.rpt-over-th{background:rgba(248,81,73,.22)}
+    .rpt-onscreen .rpt-table th.rpt-warn-th{background:rgba(210,153,34,.22)}
     .rpt-onscreen .rpt-grp-first{border-left:2px solid var(--text-muted) !important}
     .rpt-onscreen .rpt-lbl-removed td{font-style:italic;font-size:.66rem;padding-top:.2rem;padding-bottom:.05rem;border:none;background:transparent !important}
     .rpt-onscreen .rpt-lbl-added td{font-weight:700;font-size:.66rem;padding-top:.2rem;padding-bottom:.05rem;border:none;background:transparent !important}
@@ -3178,12 +3180,113 @@ function renderLoadAnalysisDetail() {
   el.innerHTML=html;
 }
 
-// Revision 33 (Phase 3): "Analysis Detail – Alternate" — transposes the above report's value
-// groups (Capacity/Existing Load/Net Change/New Load/Reserve) into rows instead of columns,
-// with immediate children flattened into rows between the parent's Existing Load and Net Change
-// rows. Screen-only for now (not wired into Print Report or Word export). Deliberately
-// self-contained (its own eligibleIds/pathFor/annotation helpers) rather than sharing closures
-// with renderLoadAnalysisDetail(), since the row/column shape is fundamentally different.
+// Revision 77 (Phase 1): "Vertical" Load Analysis Detail, rebuilt around sibling tables. Instead of one
+// table per parent, the siblings that share a parent are shown together as column groups of a single
+// table (several tables when there are more siblings than fit): the left column holds the row labels
+// (CAPACITY, EXISTING LOAD, the child items, Net Change, New Load, Reserve), then Rating and Notes,
+// then one group of value columns per sibling under the sibling's label. A report-wide plan is built
+// first (ladSiblingPlan) and the on-screen renderer below just draws it; the Word builder uses the
+// same plan, so the two can't drift apart.
+//
+// Reading the tree: a "parent" is any item that gets column groups — not a Load, not a Removed item,
+// not a TRU input, and with children. The walk goes: a set of sibling parents -> its table(s) ->
+// then, for each sibling in order, that sibling's own parent-children as the next set (so where the old
+// report went on to the second sibling, this one goes on to the second sibling's children).
+function ladMaxSiblings(colCount) {
+  const v=reportCfg&&reportCfg.ladSiblings;
+  if (Number.isInteger(+v)&&+v>=1&&+v<=4) return +v;
+  return colCount<=3?4:colCount===4?3:2;     // "Auto": about 12 value columns per table
+}
+// section: 'ac'|'dc'; cols: the active value columns (one set, repeated for every sibling).
+// Returns [{path:[names]|null, members:[node], rows:[...], notes:[{num,text}], hasNotesCol}].
+function ladSiblingPlan(section,maxSib,annotator) {
+  const nodes=state.nodes;
+  const isParent=n=>!!n&&n.acDc===section&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&children(n.id,nodes).length>0;
+  const parentKids=n=>children(n.id,nodes).filter(isParent);
+  function pathFor(n) {
+    if (!n.parentId) return null;
+    const parent=nodes[n.parentId];
+    // parent is the Aircraft Total Load item (Root type), or n is the entry point of its AC/DC system: no path.
+    if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
+    const chain=[]; let cur=parent;
+    while (cur) {
+      chain.unshift(dispName(cur));
+      const curParent=cur.parentId?nodes[cur.parentId]:null;
+      if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
+      cur=curParent;
+    }
+    return chain.length?chain:null;
+  }
+  const annotateGroup=(n,group)=>annotator.annotate((n.rowNotes||[]).filter(o=>(o.group||null)===group),(n.rowRefs||[]).filter(r=>(r.group||null)===group));
+  const tables=[];
+
+  function buildTable(members) {
+    const blockNotes=[], seen=new Set();
+    const push=entries=>entries.forEach(e=>{ if (!seen.has(e.num)) { seen.add(e.num); blockNotes.push(e); } });
+    const infos=members.map(n=>{
+      const a=annotateGroup(n,null); if (a) push(a.entries);
+      return {node:n,marker:a?a.marker:null,
+        rating:(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?n.capacity.a:null};
+    });
+    // A shared row's notes: every sibling's note numbers for that value group, without repeats.
+    const groupMarker=group=>{
+      const toks=[];
+      members.forEach(n=>{ const a=annotateGroup(n,group); if (a) { push(a.entries); a.marker.split(',').forEach(t=>{ if (!toks.includes(t)) toks.push(t); }); } });
+      return toks.length?toks.join(','):null;
+    };
+    const rows=[];
+    const anyNotNew=members.some(m=>m.status!=='new');
+    rows.push({type:'value',group:'cap',label:'CAPACITY',srcs:members.map(m=>m.capacity),marker:groupMarker('cap')});
+    if (anyNotNew) rows.push({type:'value',group:'exload',label:'EXISTING LOAD',srcs:members.map(m=>m.status!=='new'?m.existingLoad:undefined),marker:groupMarker('exload')});
+    // Child items: Existing, then Removed, then Installed; within a status by sibling (parent) order,
+    // then each parent's own child order. Each child's values sit under its own parent's column group.
+    const allNew=members.every(m=>m.status==='new');
+    [['existing',null],['removed','removed'],['new','new']].forEach(([st,banner])=>{
+      let shown=false;
+      members.forEach((m,mi)=>{
+        children(m.id,nodes).filter(k=>k.status===st).forEach(k=>{
+          if (banner&&!shown) { if (!(banner==='new'&&allNew)) rows.push({type:'banner',status:banner}); shown=true; }
+          const kAnnot=annotator.annotate(k.rowNotes,k.rowRefs); if (kAnnot) push(kAnnot.entries);
+          rows.push({type:'child',node:k,memberIdx:mi,marker:kAnnot?kAnnot.marker:null});
+        });
+      });
+    });
+    if (anyNotNew) rows.push({type:'value',group:'nc',label:'Net Change',srcs:members.map(m=>m.status!=='new'?m._netChange:undefined),marker:groupMarker('nc')});
+    rows.push({type:'value',group:'newload',label:'New Load',srcs:members.map(m=>m._newLoad),marker:groupMarker('newload')});
+    rows.push({type:'value',group:'rem',label:'Reserve',srcs:members.map(m=>m._remainingCapacity),marker:groupMarker('rem')});
+    blockNotes.sort((a,b)=>a.num-b.num);
+    return {path:pathFor(members[0]),members:infos,rows,notes:blockNotes};
+  }
+
+  // A set of sibling parents: one or more tables (a unit — later, a phase set — is never split),
+  // then each sibling's own parent-children as the next set.
+  function processSet(set) {
+    const maxN=Math.max(1,maxSib);
+    const chunks=[]; let cur=[];
+    set.map(n=>[n]).forEach(unit=>{
+      if (cur.length&&cur.length+unit.length>maxN) { chunks.push(cur); cur=[]; }
+      cur=cur.concat(unit);
+    });
+    if (cur.length) chunks.push(cur);
+    chunks.forEach(c=>tables.push(buildTable(c)));
+    set.forEach(m=>{ const kids=parentKids(m); if (kids.length) processSet(kids); });
+  }
+  // Entry sets: eligible parents whose own parent isn't in this section (or that have none); entries
+  // with the same parent form one set.
+  const entryGroups=new Map();
+  preOrder(state.rootIds,nodes).forEach(id=>{
+    const n=nodes[id]; if (!isParent(n)) return;
+    const p=n.parentId?nodes[n.parentId]:null;
+    if (p&&p.acDc===section) return;
+    const key=n.parentId||('top:'+id);
+    if (!entryGroups.has(key)) entryGroups.set(key,[]);
+    entryGroups.get(key).push(n);
+  });
+  entryGroups.forEach(set=>processSet(set));
+  return tables;
+}
+
+// On-screen "Vertical" Load Analysis Detail (the transposed layout — see ladSiblingPlan above).
 function renderLoadAnalysisDetailAlt() {
   const el=document.getElementById('ladalt-container');
   if (!el) return;
@@ -3195,189 +3298,122 @@ function renderLoadAnalysisDetailAlt() {
   // Local note/reference numbering, restarted per this report — same convention as the existing
   // Load Analysis Detail report (not the shared buildAnnotationMap's full-tree numbering).
   const annotator=makeAnnotator();
-  // A parent's own notes/refs are split out by which value-group they're scoped to (group=null
-  // is the item itself) — this is the one place group-scoped notes (Revision 33 Phase 2) are
-  // actually surfaced against the row they belong to, rather than collapsed onto the item row.
-  function annotateGroup(n,group) {
-    const rn=(n.rowNotes||[]).filter(o=>(o.group||null)===group);
-    const rr=(n.rowRefs||[]).filter(r=>(r.group||null)===group);
-    return annotator.annotate(rn,rr);
-  }
-  // Child rows only ever get one collapsed row in a parent's table (unlike the table's own
-  // subject, which gets a full group breakdown), so a child's notes all attach to that single
-  // row regardless of which group they're scoped to.
-  function annotateAll(n) { return annotator.annotate(n.rowNotes,n.rowRefs); }
   const hasAnyAnnot=Object.values(nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
 
-  const allOrdered=preOrder(state.rootIds,nodes);
-  function eligibleIds(acDc) {
-    return allOrdered.filter(id=>{
-      const n=nodes[id]; if (!n||n.acDc!==acDc||isLoad(n.type)||n.convRole==='in') return false;
-      return children(id,nodes).length>0;
-    });
-  }
-  function pathFor(n) {
-    if (!n.parentId) return null;
-    const parent=nodes[n.parentId];
-    // parent is the Aircraft Total Load item (Root type), or n is the entry point of its
-    // AC/DC system: no path. A root-level item of any OTHER type still gets a path.
-    if (!parent||NT.ROOT.includes(parent.type)||parent.acDc!==n.acDc) return null;
-    const chain=[]; let cur=parent;
-    while (cur) {
-      chain.unshift(esc(dispName(cur)));
-      const curParent=cur.parentId?nodes[cur.parentId]:null;
-      if (!curParent||NT.ROOT.includes(curParent.type)||curParent.acDc!==cur.acDc) break;
-      cur=curParent;
-    }
-    return chain.length?chain.join(' &gt; ')+' &gt;':null;
-  }
-
-  // The column set is the union of whichever unit keys are active for ANY of the six value
-  // groups (not a per-group column set — groups are rows here, so there's exactly one column
-  // per unit, shared across every row, populated only where that row's own group has it active).
-  function unionActiveCols(groups,cfgSec) {
-    const allKeys=groups[0].keys;
-    return allKeys.filter(kd=>groups.some(g=>cfgSec[g.id]&&cfgSec[g.id][kd.k]));
-  }
   function activeKeySet(groupId,cfgSec) {
     const gc=cfgSec[groupId]; if (!gc) return new Set();
     return new Set(Object.keys(gc).filter(k=>gc[k]));
   }
-
-  function colgroupHtmlFor(colsCount,hasAnnot) {
-    // Revision 42: the modifier column is gone — "(Net Change)" now appends onto the child's own
-    // description text, and the Installed-status parent label moved to a banner row instead.
-    const labelPct=24,cbPct=8,notesPct=hasAnnot?4:0;
-    const numPct=(100-labelPct-cbPct-notesPct)/colsCount;
-    let html=`<colgroup><col style="width:${labelPct}%"><col style="width:${cbPct}%">`;
-    if (hasAnnot) html+=`<col style="width:${notesPct}%">`;
-    for (let i=0;i<colsCount;i++) html+=`<col style="width:${numPct}%">`;
-    return html+`</colgroup>`;
+  // Warning highlights apply to the items themselves (a sibling's header and each child row), not to
+  // any value-group row — same rpt-over/rpt-warn convention as the existing report.
+  function warnLevel(node) {
+    const ws=node._warnings||[]; const ov=ws.some(w=>w.code==='W3'); const wn=ws.length>0&&!ov;
+    return ov?'over':wn?'warn':'';
   }
-  function headerHtml(cols,hasAnnot,leftCellContent) {
-    const notesTh=hasAnnot?'<th class="rpt-notes-col">Notes</th>':'';
-    return `<thead><tr><th class="rpt-left">${leftCellContent||''}</th><th></th>${notesTh}${cols.map(c=>`<th class="rpt-sub">${c.l}</th>`).join('')}</tr></thead>`;
+  function annotCellHtml(marker) {
+    if (!hasAnyAnnot) return '';
+    return marker?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(marker)}</span></td>`:'<td class="rpt-notes-col"></td>';
   }
-
-  // CB/fuse rating gets its own dedicated column here, shown whenever amps was selected or not
-  // (a deliberate change from the existing report, per the source request — Word wasn't
-  // right-justifying the inline version consistently).
+  // CB/fuse rating gets its own dedicated column, shown whether amps was selected or not.
   function cbCellHtml(n) {
     if (!NT.PROTECTION.includes(n.type)) return '<td class="rpt-num"></td>';
     const a=n.capacity?.a;
     return a==null?'<td class="rpt-num"></td>':`<td class="rpt-num">(${fmtRpt(a)} A)</td>`;
   }
-  function annotCellHtml(annot) {
-    if (!hasAnyAnnot) return '';
-    return annot?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>';
+  // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/Reserve ever
+  // go negative (shown as a positive value in parens), matching the existing report's convention.
+  function valueCell(val,col,i,isNeg) {
+    const gf=i===0?'rpt-grp-first':'';
+    if (val==null) return `<td class="rpt-num ${gf}">${val===null?'—':''}</td>`;
+    return rptTd(val,col.isPf||false,isNeg,'',gf);
   }
-  // Warning highlights apply to the items themselves (the Parent Item row and each child row),
-  // not to any value-group row — same rpt-over/rpt-warn convention as the existing report.
-  function warnRowCls(node) {
-    const ws=node._warnings||[]; const ov=ws.some(w=>w.code==='W3'); const wn=ws.length>0&&!ov;
-    return ov?' class="rpt-over"':wn?' class="rpt-warn"':'';
-  }
-  // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/
-  // Reserve ever go negative (shown as a positive value in parens), matching the existing
-  // report's buildRptRow convention exactly.
-  function valueCellsForGroup(groupId,src,cols,activeSet) {
-    return cols.map(col=>{
-      if (!activeSet.has(col.k)) return `<td class="rpt-num"></td>`;
-      let val=src?src[col.k]:null,isNeg=false;
-      if ((groupId==='nc'||groupId==='newload'||groupId==='rem')&&val!=null&&val<0) {isNeg=true;val=Math.abs(val);}
-      if (val==null) return `<td class="rpt-num">—</td>`;
-      return rptTd(val,col.isPf||false,isNeg,'',false);
+  function blankCells(cols) { return cols.map((c,i)=>`<td class="rpt-num${i===0?' rpt-grp-first':''}"></td>`).join(''); }
+  function valueRowCells(row,cols,activeSet) {
+    return row.srcs.map(src=>{
+      if (src===undefined) return blankCells(cols);       // not applicable (e.g. Existing Load of an Installed item)
+      return cols.map((col,i)=>{
+        if (!activeSet.has(col.k)) return `<td class="rpt-num${i===0?' rpt-grp-first':''}"></td>`;
+        let val=src?src[col.k]:null,isNeg=false;
+        if ((row.group==='nc'||row.group==='newload'||row.group==='rem')&&val!=null&&val<0) {isNeg=true;val=Math.abs(val);}
+        return valueCell(val==null?null:val,col,i,isNeg);
+      }).join('');
     }).join('');
   }
-  // Non-load children use Net Change values; Load children use Load values — per the source
-  // request, applied uniformly regardless of the child's own status (existing/removed/new).
-  function childValueCells(k,cols,ncSet,addedSet) {
+  // Non-load children use Net Change values; Load children use Load values — applied uniformly
+  // regardless of the child's own status. Only the child's own parent's column group is filled.
+  function childRowCells(k,memberIdx,memberCount,cols,ncSet,addedSet) {
     const isLd=isLoad(k.type);
     const activeSet=isLd?addedSet:ncSet;
-    return cols.map(col=>{
-      if (!activeSet.has(col.k)) return `<td class="rpt-num"></td>`;
-      let val,isNeg=false;
-      if (isLd) { val=k.loadValue?.[col.k]; if (k.status==='removed'&&val!=null) isNeg=true; }
-      else { val=k._netChange?.[col.k]; if (val!=null&&val<0) {isNeg=true;val=Math.abs(val);} }
-      if (val==null) return `<td class="rpt-num">—</td>`;
-      return rptTd(val,col.isPf||false,isNeg,'',false);
-    }).join('');
+    let html='';
+    for (let m=0;m<memberCount;m++) {
+      if (m!==memberIdx) { html+=blankCells(cols); continue; }
+      html+=cols.map((col,i)=>{
+        if (!activeSet.has(col.k)) return `<td class="rpt-num${i===0?' rpt-grp-first':''}"></td>`;
+        let val,isNeg=false;
+        if (isLd) { val=k.loadValue?.[col.k]; if (k.status==='removed'&&val!=null) isNeg=true; }
+        else { val=k._netChange?.[col.k]; if (val!=null&&val<0) {isNeg=true;val=Math.abs(val);} }
+        return valueCell(val==null?null:val,col,i,isNeg);
+      }).join('');
+    }
+    return html;
   }
 
-  function detailBlockAlt(id,cols,colgroupHtml,cfgSide) {
-    const n=nodes[id];
-    const kids=children(id,nodes);
-    const path=pathFor(n);
-    const pathHtml=path?`<span class="rpt-detail-path-inline">${path}</span>`:'';
-    const ncols=2+cols.length+(hasAnyAnnot?1:0);
-    const capSet=activeKeySet('cap',cfgSide),exSet=activeKeySet('exload',cfgSide),
-          ncSet=activeKeySet('nc',cfgSide),nlSet=activeKeySet('newload',cfgSide),
-          remSet=activeKeySet('rem',cfgSide),addedSet=activeKeySet('added',cfgSide);
-    const blockNotes=[]; const blockSeenNums=new Set();
-    const pushEntries=(entries)=>entries.forEach(e=>{ if (!blockSeenNums.has(e.num)) { blockSeenNums.add(e.num); blockNotes.push(e); } });
+  function tableHtml(t,cols,cfgSide) {
+    const ncSet=activeKeySet('nc',cfgSide), addedSet=activeKeySet('added',cfgSide);
+    const sets={cap:activeKeySet('cap',cfgSide),exload:activeKeySet('exload',cfgSide),nc:ncSet,newload:activeKeySet('newload',cfgSide),rem:activeKeySet('rem',cfgSide)};
+    const nm=t.members.length, ncols=2+(hasAnyAnnot?1:0)+nm*cols.length;
+    // Column widths: label / rating / notes, the rest shared equally by every value column.
+    const labelPct=20,cbPct=6,notesPct=hasAnyAnnot?4:0;
+    const numPct=(100-labelPct-cbPct-notesPct)/(nm*cols.length);
+    let colgroup=`<colgroup><col style="width:${labelPct}%"><col style="width:${cbPct}%">`;
+    if (hasAnyAnnot) colgroup+=`<col style="width:${notesPct}%">`;
+    colgroup+=`<col style="width:${numPct}%">`.repeat(nm*cols.length)+'</colgroup>';
+    const pathHtml=t.path?`<span class="rpt-detail-path-inline">${t.path.map(esc).join(' &gt; ')} &gt;</span>`:'';
+    // Header: two rows — the sibling labels (with " — Installed", rating and "(Note: …)") over their
+    // value columns, then the unit labels repeated under each sibling.
+    const grpHdr=t.members.map(mi=>{
+      const n=mi.node, w=warnLevel(n);
+      let label=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''))+(mi.rating!=null?` (${fmtRpt(mi.rating)} A)`:'');
+      if (n.status==='new') label=`<strong>${label} — Installed</strong>`;
+      const note=mi.marker?`<br><span class="rpt-note-marker">(Note: ${esc(mi.marker)})</span>`:'';
+      return `<th class="rpt-grp${w?' rpt-'+w+'-th':''}" colspan="${cols.length}">${label}${note}</th>`;
+    }).join('');
+    const unitHdr=t.members.map(()=>cols.map((c,i)=>`<th class="rpt-sub${i===0?' rpt-grp-first':''}">${c.l}</th>`).join('')).join('');
+    const notesTh=hasAnyAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
+    const thead=`<thead><tr><th class="rpt-left" rowspan="2">${pathHtml}</th><th rowspan="2"></th>${notesTh}${grpHdr}</tr><tr>${unitHdr}</tr></thead>`;
     const parentFs='8.5pt',childFs='7.5pt';
-    const rows=[];
-
-    const mainDesc=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''));
-    // Revision 42: the modifier column is gone. An Installed-status parent now gets a banner row
-    // above it instead (matching the original Load Analysis Detail report's convention exactly)
-    // — no "Removed" banner for a Removed-status parent's own row either way, matching that same
-    // report, which never labels a subject row this way — only its italic styling indicates removed.
-    if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Installed</td></tr>`);
-    const descWrap=n.status==='removed'?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
-    const itemAnnot=annotateGroup(n,null); if (itemAnnot) pushEntries(itemAnnot.entries);
-    // Warning highlights (Revision 36 §6.2) belong on the items themselves — the Parent Item row
-    // and each child row — rather than on any individual value-group row, reversing the prior
-    // New-Load-row-specific approach.
-    rows.push(`<tr${warnRowCls(n)} style="font-size:${parentFs}"><td style="padding-left:3px">${descWrap}</td>${cbCellHtml(n)}${annotCellHtml(itemAnnot)}${cols.map(()=>'<td class="rpt-num"></td>').join('')}</tr>`);
-
-    { const a=annotateGroup(n,'cap'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">CAPACITY</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('cap',n.capacity,cols,capSet)}</tr>`); }
-
-    if (n.status!=='new') {
-      const a=annotateGroup(n,'exload'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">EXISTING LOAD</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('exload',n.existingLoad,cols,exSet)}</tr>`);
-    }
-
-    // Installed-status children don't repeat the "Installed" divider when the parent itself is
-    // already Installed-status (matching the original report's identical suppression) — hence
-    // seeding shownAdded from the parent's own status instead of always starting false.
-    let shownRemoved=false,shownAdded=(n.status==='new');
-    kids.forEach(k=>{
-      if (k.status==='removed'&&!shownRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:28px">Removed</td></tr>`); shownRemoved=true; }
-      else if (k.status==='new'&&!shownAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Installed</td></tr>`); shownAdded=true; }
-      const kAnnot=annotateAll(k); if (kAnnot) pushEntries(kAnnot.entries);
-      // Load children don't have a Net Change concept of their own (a Load's net change is
-      // always 0 while existing — the modifier would misleadingly label a Load value as a net
-      // change), so this only applies to non-load existing children. Now appended directly onto
-      // the description instead of a separate modifier column (Revision 42).
+    const body=t.rows.map(r=>{
+      if (r.type==='banner') {
+        return r.status==='removed'
+          ?`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:28px">Removed</td></tr>`
+          :`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Installed</td></tr>`;
+      }
+      if (r.type==='value') {
+        return `<tr style="font-size:${parentFs}"><td style="padding-left:17px">${r.label}</td><td class="rpt-num"></td>${annotCellHtml(r.marker)}${valueRowCells(r,cols,sets[r.group])}</tr>`;
+      }
+      const k=r.node, w=warnLevel(k);
+      // Load children don't have a Net Change concept of their own, so "(Net Change)" only applies to
+      // non-load existing children.
       const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
       const kDesc=esc(dispName(k)+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
       const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
-      rows.push(`<tr${warnRowCls(k)} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(kAnnot)}${childValueCells(k,cols,ncSet,addedSet)}</tr>`);
-    });
-
-    if (n.status!=='new') {
-      const a=annotateGroup(n,'nc'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Net Change</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('nc',n._netChange,cols,ncSet)}</tr>`);
-    }
-    { const a=annotateGroup(n,'newload'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">New Load</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('newload',n._newLoad,cols,nlSet)}</tr>`); }
-    { const a=annotateGroup(n,'rem'); if (a) pushEntries(a.entries);
-      rows.push(`<tr style="font-size:${parentFs}"><td style="padding-left:17px">Reserve</td><td class="rpt-num"></td>${annotCellHtml(a)}${valueCellsForGroup('rem',n._remainingCapacity,cols,remSet)}</tr>`); }
-
-    blockNotes.sort((a,b)=>a.num-b.num);
-    const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
-    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${headerHtml(cols,hasAnyAnnot,pathHtml)}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
+      return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker)}${childRowCells(k,r.memberIdx,nm,cols,ncSet,addedSet)}</tr>`;
+    }).join('');
+    const notesHtml=t.notes.length?`<ol class="rpt-detail-notes">${t.notes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
+    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;
   }
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
-  const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
   const acLbl=acDcVoltageLabel('ac'), dcLbl=acDcVoltageLabel('dc');
-  const acCols=unionActiveCols(AC_GROUPS,cfg.ac), dcCols=unionActiveCols(DC_GROUPS,cfg.dc);
-  const acColgroup=colgroupHtmlFor(acCols.length,hasAnyAnnot), dcColgroup=colgroupHtmlFor(dcCols.length,hasAnyAnnot);
-  const acBlocks=acIds.length?`<div class="rpt-section-hdr">${acLbl?`${acLbl} Detail`:'AC Detail'}</div>${acIds.map(id=>detailBlockAlt(id,acCols,acColgroup,cfg.ac)).join('')}`:'';
-  const dcBlocks=dcIds.length?`<div class="rpt-section-hdr">${dcLbl?`${dcLbl} Detail`:'DC Detail'}</div>${dcIds.map(id=>detailBlockAlt(id,dcCols,dcColgroup,cfg.dc)).join('')}`:'';
+  const section=(sec,cfgSide,label)=>{
+    const groups=sec==='ac'?AC_GROUPS:DC_GROUPS;
+    const cols=ladAltUnionCols(groups,cfgSide);
+    if (!cols.length) return '';
+    const tables=ladSiblingPlan(sec,ladMaxSiblings(cols.length),annotator);
+    return tables.length?`<div class="rpt-section-hdr">${label}</div>${tables.map(t=>tableHtml(t,cols,cfgSide)).join('')}`:'';
+  };
+  const acBlocks=section('ac',cfg.ac,acLbl?`${acLbl} Detail`:'AC Detail');
+  const dcBlocks=section('dc',cfg.dc,dcLbl?`${dcLbl} Detail`:'DC Detail');
   let html=acFirst?acBlocks+dcBlocks:dcBlocks+acBlocks;
   if (!html) html='<div class="empty-state">No items to detail.</div>';
   el.innerHTML=html;
