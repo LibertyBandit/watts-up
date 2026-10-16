@@ -5616,6 +5616,17 @@ Verified: with 5 sibling buses and 4 active value columns, Auto gives tables of 
 4 gives 4 + 1 and 1 gives one table per bus; the setting survives a JSON export/import and an older
 config without the key behaves as Auto; Word produces the same table counts; clean console.
 
+**Follow-up (2026-10-15): consistent column widths within a section** (as §23.4 did for the Horizontal
+report). Every table in the AC or DC section of the Vertical report now uses the column widths of the
+widest table in that section (the one with the most sibling column groups): the label, Rating and Notes
+columns and each value column keep the same width in every table, so a table with fewer siblings — even
+one — lines up column for column with the first siblings of the wider tables and is simply narrower
+(on screen, `tableHtml(…,maxMembers)` sets the table width to its columns' share of the report width;
+in Word, `buildLadSiblingWordTable(…,maxMembers)` sets the table width to that share of the page and the
+cell widths as fractions of it). Verified: with a 3-sibling table and single-sibling tables the unit
+headers of the first group sit at identical x-positions and the label column is the same width in every
+table; the Word XML parses and the cell shares match across tables.
+
 Revision 77 is complete, apart from changes that live testing may suggest. Not in scope: Print Report
 and the Horizontal layout (unchanged).
 

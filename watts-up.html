@@ -3431,16 +3431,22 @@ function renderLoadAnalysisDetailAlt() {
     return html;
   }
 
-  function tableHtml(t,cols,cfgSide) {
+  // maxMembers: the most sibling column groups any table in this section has — every table in the
+  // section uses the column widths of that widest layout, so a table with fewer siblings (even just one)
+  // lines up column for column with the first siblings of the wider ones and is simply narrower.
+  function tableHtml(t,cols,cfgSide,maxMembers) {
     const ncSet=activeKeySet('nc',cfgSide), addedSet=activeKeySet('added',cfgSide);
     const sets={cap:activeKeySet('cap',cfgSide),exload:activeKeySet('exload',cfgSide),nc:ncSet,newload:activeKeySet('newload',cfgSide),rem:activeKeySet('rem',cfgSide)};
     const nm=t.members.length, ncols=2+(hasAnyAnnot?1:0)+nm*cols.length;
-    // Column widths: label / rating / notes, the rest shared equally by every value column.
+    // Column widths (as % of the report width): label / rating / notes, the rest shared equally by every
+    // value column of the widest table; this table's own width is just its columns' share of that.
     const labelPct=20,cbPct=6,notesPct=hasAnyAnnot?4:0;
-    const numPct=(100-labelPct-cbPct-notesPct)/(nm*cols.length);
-    let colgroup=`<colgroup><col style="width:${labelPct}%"><col style="width:${cbPct}%">`;
-    if (hasAnyAnnot) colgroup+=`<col style="width:${notesPct}%">`;
-    colgroup+=`<col style="width:${numPct}%">`.repeat(nm*cols.length)+'</colgroup>';
+    const numPct=(100-labelPct-cbPct-notesPct)/(Math.max(nm,maxMembers||nm)*cols.length);
+    const tablePct=labelPct+cbPct+notesPct+nm*cols.length*numPct;
+    const rel=p=>(p*100/tablePct);
+    let colgroup=`<colgroup><col style="width:${rel(labelPct)}%"><col style="width:${rel(cbPct)}%">`;
+    if (hasAnyAnnot) colgroup+=`<col style="width:${rel(notesPct)}%">`;
+    colgroup+=`<col style="width:${rel(numPct)}%">`.repeat(nm*cols.length)+'</colgroup>';
     const pathHtml=t.path?`<span class="rpt-detail-path-inline">${t.path.map(esc).join(' &gt; ')} &gt;</span>`:'';
     // Header: two rows — the sibling labels (with " — Installed", rating and "(Note: …)") over their
     // value columns, then the unit labels repeated under each sibling.
@@ -3476,7 +3482,7 @@ function renderLoadAnalysisDetailAlt() {
       return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker)}${childRowCells(r.kids,nm,cols,ncSet,addedSet)}</tr>`;
     }).join('');
     const notesHtml=t.notes.length?`<ol class="rpt-detail-notes">${t.notes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
-    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;
+    return `<div class="rpt-detail-block"><table class="rpt-table" style="width:${tablePct}%">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;
   }
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
@@ -3486,7 +3492,8 @@ function renderLoadAnalysisDetailAlt() {
     const cols=ladAltUnionCols(groups,cfgSide);
     if (!cols.length) return '';
     const tables=ladSiblingPlan(sec,ladMaxSiblings(cols.length),annotator);
-    return tables.length?`<div class="rpt-section-hdr">${label}</div>${tables.map(t=>tableHtml(t,cols,cfgSide)).join('')}`:'';
+    const maxMembers=Math.max(0,...tables.map(t=>t.members.length));
+    return tables.length?`<div class="rpt-section-hdr">${label}</div>${tables.map(t=>tableHtml(t,cols,cfgSide,maxMembers)).join('')}`:'';
   };
   const acBlocks=section('ac',cfg.ac,acLbl?`${acLbl} Detail`:'AC Detail');
   const dcBlocks=section('dc',cfg.dc,dcLbl?`${dcLbl} Detail`:'DC Detail');
@@ -7777,11 +7784,11 @@ function buildWordSectionTables(acDc,cols,cfg,annotator,{descW,ratingW,notesW,co
 // <w:tblW type="pct" w:w="5000"> = 100%), so the table always fills whatever page/section width
 // it's actually placed on, portrait or landscape, instead of the fixed landscape-sized width it
 // used to assume.
-function wxTableOpen(colWidths){
+function wxTableOpen(colWidths,tblPct=5000){
   const gridCols=colWidths.map(w=>`<w:gridCol w:w="${w}"/>`).join('');
   // Revision 71, item 2.1: left/right edges now solid (were "none"), matching the existing
   // top/bottom rule weight and color exactly.
-  const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>`+
+  const tblPr=`<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="${tblPct}" w:type="pct"/><w:tblBorders>`+
     `<w:top w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:left w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
     `<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>` +
@@ -8210,11 +8217,16 @@ function ladSibWordWidths(valueCols,hasAnnot){
   const labelW=Math.max(Math.round(TOTAL_W*0.12),TOTAL_W-cbW-notesW-numW*valueCols);
   return {labelW,cbW,notesW,numW,hasAnnot};
 }
-function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot){
+function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   const HSZ=7.5;
   const nm=t.members.length, nc=cols.length;
-  const W=ladSibWordWidths(nm*nc,hasAnnot);
-  const {labelW,cbW,notesW,numW}=W;
+  // Every table in a section uses the column widths of the widest one (maxMembers sibling groups), so a
+  // table with fewer siblings lines up with the first siblings of the wider ones and is just narrower:
+  // its table width is its columns' share of the page, and its cell widths are fractions of that.
+  const W0=ladSibWordWidths(Math.max(nm,maxMembers||nm)*nc,hasAnnot);
+  const tblPct=W0.labelW+W0.cbW+(hasAnnot?W0.notesW:0)+W0.numW*nm*nc;
+  const sc=v=>Math.round(v*5000/tblPct);
+  const labelW=sc(W0.labelW), cbW=sc(W0.cbW), notesW=sc(W0.notesW), numW=sc(W0.numW);
   const totalCols=2+(hasAnnot?1:0)+nm*nc;
   const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*nm*nc;
   const sets={cap:ladAltActiveKeySet('cap',cfgSide),exload:ladAltActiveKeySet('exload',cfgSide),nc:ladAltActiveKeySet('nc',cfgSide),
@@ -8290,7 +8302,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot){
   });
 
   const notesParas=t.notes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
-  return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)])+
+  return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)],Math.min(5000,Math.round(tblPct)))+
     header+rows.join('')+`</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
 }
 function buildLadVerticalWordContent(){
@@ -8302,8 +8314,9 @@ function buildLadVerticalWordContent(){
     const cols=ladAltUnionCols(sec==='ac'?AC_GROUPS:DC_GROUPS,cfgSide);
     if(!cols.length) return '';
     const tables=ladSiblingPlan(sec,ladMaxSiblings(cols.length),annotator);
+    const maxMembers=Math.max(0,...tables.map(t=>t.members.length));
     return tables.length?wxPar(wxRun(label),{style:'Heading8',before:160,after:60,keepNext:true})+
-      tables.map(t=>buildLadSiblingWordTable(t,cols,cfgSide,hasAnyAnnot)).join(''):'';
+      tables.map(t=>buildLadSiblingWordTable(t,cols,cfgSide,hasAnyAnnot,maxMembers)).join(''):'';
   };
   const acLbl=acDcVoltageLabel('ac'), dcLbl=acDcVoltageLabel('dc');
   const acSec=section('ac',cfg.ac,acLbl?`${acLbl} Detail`:'AC Detail');
