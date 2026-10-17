@@ -5642,6 +5642,28 @@ Verified: a bus split into three phases with a feeder group, a load only under p
 TRU: the Bus 1 table shows "Feeder 1", "TRU 1" (one row, a value under each phase) and "Only On B" with
 no tags, while the Gen 1 table keeps "Bus 1 (ØA)…(ØC)"; the Word XML shows the same labels and parses.
 
+**Follow-up (2026-10-17): TRU outputs and root nodes as siblings.** Which section entry points share a
+table is now configurable (Vertical report, screen and Word):
+- Two Settings checkboxes (`reportCfg.ladTruSiblings`, default on; `reportCfg.ladRootSiblings`, default
+  off): TRU DC outputs are by default sibling column groups of one table (in tree order, chunked by
+  "siblings per table"), whichever bus feeds each TRU; several top-level (root) items keep one table each
+  unless the second checkbox is on. With both on, a section that has both kinds (a DC section with TRU
+  outputs and a top-level DC item) shows them together as one set; with only one on, only that kind is
+  grouped; with both off, one table per entry point (the old behaviour).
+- A per-item choice `ladGroup` on each TRU output / top-level item, set from a list in the Settings dialog
+  (shown when there are at least two): Default (follow the checkboxes), Own table, or Group 1–4 (the same
+  number = siblings in one set, any mix of kinds). E.g. "two of three TRU outputs together": set the third
+  to Own table, or with the checkbox off put the two in Group 1. Stored on the item (so per analysis; a
+  PCM twin can differ); Reset to Defaults clears the choices; older files behave as Default. Other entry
+  points (items that share a parent) are grouped by parent as before.
+
+Verified: default DC section has TRU 1+2+3 in one table with each DC bus following; TRU 3 set to Own table
+gives [TRU 1+2] and [TRU 3]; checkbox off gives separate tables and Group 1 on two of them regroups them;
+Group 1 on TRU 1 and 3 with TRU 2 Own gives [1+3]; two roots stay separate by default and join with the
+checkbox; both checkboxes on put a top-level DC bus and the TRU outputs in one set; the Settings list
+applies on Done, Reset clears it, older configs default correctly, screen and Word table counts agree,
+and `ladGroup` is saved with the project; clean console.
+
 Revision 77 is complete, apart from changes that live testing may suggest. Not in scope: Print Report
 and the Horizontal layout (unchanged).
 

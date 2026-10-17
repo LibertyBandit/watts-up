@@ -989,6 +989,9 @@
             <select id="po-lad-siblings" style="margin-left:.4rem">
               <option value="auto">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
             </select></label>
+          <label class="po-chk" title="In the Vertical Load Analysis Detail, show the DC outputs of all TRUs side by side as sibling column groups of one table instead of one table each."><input type="checkbox" id="po-lad-tru-sib"> Vertical Load Analysis Detail — treat TRU outputs as siblings</label>
+          <label class="po-chk" title="Show several top-level (root) items side by side as sibling column groups of one table instead of one table each."><input type="checkbox" id="po-lad-root-sib"> Vertical Load Analysis Detail — treat multiple top-level items as siblings</label>
+          <div id="po-lad-entries" style="margin-top:.2rem"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -3349,19 +3352,38 @@ function ladSiblingPlan(section,maxSib,annotator) {
       if (kids.length) processSet(kids);
     });
   }
-  // Entry sets: eligible parents whose own parent isn't in this section (or that have none); entries
-  // with the same parent form one set.
+  // Entry sets: eligible parents whose own parent isn't in this section (or that have none). Entries
+  // with the same parent form one set; TRU outputs and top-level (root) items can also be grouped as
+  // siblings — by the two report settings (TRU outputs together: on by default, top-level items
+  // together: off by default) and, per item, by its own choice (see ladEntryKind / ladGroup).
+  const cfgAll=reportCfg||{};
+  const truTogether=cfgAll.ladTruSiblings!==false, rootTogether=cfgAll.ladRootSiblings===true;
   const entryGroups=new Map();
   preOrder(state.rootIds,nodes).forEach(id=>{
     const n=nodes[id]; if (!isParent(n)) return;
     const p=n.parentId?nodes[n.parentId]:null;
     if (p&&p.acDc===section) return;
-    const key=n.parentId||('top:'+id);
+    const kind=ladEntryKind(n);
+    const choice=kind?n.ladGroup:null;
+    let key;
+    if (kind&&choice==='own') key='own:'+id;
+    else if (kind&&/^[1-4]$/.test(choice||'')) key='grp:'+choice;
+    else if (kind==='tru') key=truTogether?(rootTogether?'dflt':'dflt-tru'):'own:'+id;
+    else if (kind==='root') key=rootTogether?(truTogether?'dflt':'dflt-root'):'own:'+id;
+    else key=n.parentId||('top:'+id);
     if (!entryGroups.has(key)) entryGroups.set(key,[]);
     entryGroups.get(key).push(n);
   });
   entryGroups.forEach(set=>processSet(unitsOf(set)));
   return tables;
+}
+// The kinds of section entry point the report can group as siblings: a TRU's DC output ('tru') or a
+// top-level item with no parent ('root'). Anything else returns null (it keeps being grouped by parent).
+function ladEntryKind(n) {
+  if (!n) return null;
+  if (n.convRole==='out'&&n.type==='TRU') return 'tru';
+  if (!n.parentId) return 'root';
+  return null;
 }
 
 // On-screen "Vertical" Load Analysis Detail (the transposed layout — see ladSiblingPlan above).
@@ -7236,6 +7258,8 @@ function defaultPrintCfg(){
     dc:{cap:{a:true,w:true},exload:{a:true,w:true},added:{a:true,w:true},nc:{a:true,w:true},newload:{a:true,w:true},rem:{a:true,w:true}},
     convInNcOnly:true,
     ladSiblings:'auto',   // Revision 77: siblings per table in the Vertical Load Analysis Detail ('auto' or 1-4)
+    ladTruSiblings:true,  // Vertical report: TRU outputs as siblings of one table (default on)
+    ladRootSiblings:false,// Vertical report: multiple top-level items as siblings (default off)
   };
 }
 // A genuine zero is a real value and renders as "0" — only a missing/inapplicable value (val==null,
@@ -8851,6 +8875,8 @@ function openPrintOpts(){
   chk('po-dc-rem-a',c.dc.rem.a);chk('po-dc-rem-w',c.dc.rem.w);
   chk('po-conv-nc-only',c.convInNcOnly);
   { const sel=document.getElementById('po-lad-siblings'); if(sel) sel.value=(Number.isInteger(+c.ladSiblings)&&+c.ladSiblings>=1&&+c.ladSiblings<=4)?String(+c.ladSiblings):'auto'; }
+  chk('po-lad-tru-sib',c.ladTruSiblings!==false); chk('po-lad-root-sib',c.ladRootSiblings===true);
+  fillLadEntryList();
   ['a','va','w','var','pf'].forEach(col=>chk(`po-ac-col-${col}`,false));
   ['a','w'].forEach(col=>chk(`po-dc-col-${col}`,false));
   document.getElementById('print-opts').classList.remove('hidden');
@@ -8873,6 +8899,34 @@ function applyPrintOpts(){
   c.dc.rem.a=get('po-dc-rem-a');c.dc.rem.w=get('po-dc-rem-w');
   c.convInNcOnly=get('po-conv-nc-only');
   { const sel=document.getElementById('po-lad-siblings'); c.ladSiblings=(sel&&/^[1-4]$/.test(sel.value))?+sel.value:'auto'; }
+  c.ladTruSiblings=get('po-lad-tru-sib'); c.ladRootSiblings=get('po-lad-root-sib');
+  // Per-item choice for each TRU output / top-level item of the current analysis.
+  document.querySelectorAll('#po-lad-entries select[data-nid]').forEach(sel=>{
+    const n=state&&state.nodes[sel.dataset.nid]; if(!n) return;
+    if (sel.value==='default') delete n.ladGroup; else n.ladGroup=sel.value;
+  });
+}
+// Settings dialog: one dropdown per TRU output / top-level item of the current analysis that can start a
+// section table — Default (follows the two checkboxes), Own table, or Group 1–4 (same number = siblings).
+function fillLadEntryList() {
+  const box=document.getElementById('po-lad-entries'); if(!box) return;
+  box.innerHTML='';
+  if (!state) return;
+  const nodes=state.nodes;
+  const items=preOrder(state.rootIds,nodes).map(id=>nodes[id]).filter(n=>n&&ladEntryKind(n)&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&children(n.id,nodes).length>0);
+  if (items.length<2) return;     // nothing to choose between
+  const head=document.createElement('div'); head.className='section-label'; head.style.cssText='margin-top:.4rem;font-size:.7rem';
+  head.textContent='Vertical Load Analysis Detail — table for each TRU output / top-level item';
+  box.appendChild(head);
+  items.forEach(n=>{
+    const row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:.5rem;font-size:.78rem;margin:.1rem 0';
+    const nm=document.createElement('span'); nm.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    nm.textContent=dispName(n)+(ladEntryKind(n)==='tru'?'  (TRU output)':'  (top-level)');
+    const sel=document.createElement('select'); sel.dataset.nid=n.id;
+    [['default','Default'],['own','Own table'],['1','Group 1'],['2','Group 2'],['3','Group 3'],['4','Group 4']].forEach(([v,l])=>{ const o=document.createElement('option'); o.value=v; o.textContent=l; sel.appendChild(o); });
+    sel.value=/^(own|[1-4])$/.test(n.ladGroup||'')?n.ladGroup:'default';
+    row.appendChild(nm); row.appendChild(sel); box.appendChild(row);
+  });
 }
 
 // ── EVENTS ────────────────────────────────────────────────────────────────────
@@ -8919,7 +8973,11 @@ function initEvents() {
   });
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
-  document.getElementById('print-opts-reset' ).addEventListener('click',()=>{reportCfg=defaultPrintCfg();openPrintOpts();});
+  document.getElementById('print-opts-reset' ).addEventListener('click',()=>{
+    reportCfg=defaultPrintCfg();
+    if (state) Object.values(state.nodes).forEach(n=>{ delete n.ladGroup; });   // per-item Vertical report table choices
+    openPrintOpts();
+  });
   // Revision 70, item 5.3: no more Print/Export action here — "Done" just applies the checkbox
   // changes and closes. Print Report and Word Report each trigger their own action directly now
   // (Phase C / this phase), using whatever's currently saved.
