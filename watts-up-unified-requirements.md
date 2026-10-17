@@ -5627,6 +5627,21 @@ cell widths as fractions of it). Verified: with a 3-sibling table and single-sib
 headers of the first group sit at identical x-positions and the label column is the same width in every
 table; the Word XML parses and the cell shares match across tables.
 
+**Follow-up (2026-10-16): phase tags on child rows, multi-phase TRU inputs.** Vertical report only
+(on screen and Word; the tree, grids and other reports keep their Ø tags):
+- A phase-labeled child of a phase-labeled parent is named without its Ø tag, whether it shares a row
+  with its phase-mates or exists under only one phase (e.g. "Only On B"), because the column group it
+  sits under — the parent's phase — already says which phase it is. The split-point group itself (the
+  children of an unsplit parent, e.g. Bus 1 (ØA/ØB/ØC) under Gen 1) keeps its tags, as those are the
+  individual rows of 1.7. (`row.plainName` in the plan.)
+- The input phases of a multi-phase TRU under a multi-phase bus are phase-mates of each other, so they
+  now share one row like any other phase-mate children: the TRU's description without a phase tag and
+  each phase's Net Change in the column group of the bus phase it sits under.
+
+Verified: a bus split into three phases with a feeder group, a load only under phase B and a 3-input
+TRU: the Bus 1 table shows "Feeder 1", "TRU 1" (one row, a value under each phase) and "Only On B" with
+no tags, while the Gen 1 table keeps "Bus 1 (ØA)…(ØC)"; the Word XML shows the same labels and parses.
+
 Revision 77 is complete, apart from changes that live testing may suggest. Not in scope: Print Report
 and the Horizontal layout (unchanged).
 

@@ -3305,7 +3305,8 @@ function ladSiblingPlan(section,maxSib,annotator) {
       const stRows=[], byGroup=new Map();
       mnodes.forEach((m,mi)=>{
         children(m.id,nodes).filter(k=>k.status===st).forEach(k=>{
-          const key=(isPhaseMate(k)&&members[mi].unit!==undefined&&units[members[mi].unit].length>1)?'pg:'+k.phaseGroupId:null;
+          // (a multi-phase TRU's input phases are phase-mates of each other too, so they share a row)
+          const key=(k.phase&&k.phaseGroupId&&members[mi].unit!==undefined&&units[members[mi].unit].length>1)?'pg:'+k.phaseGroupId:null;
           if (key&&byGroup.has(key)) { byGroup.get(key).kids.push({node:k,memberIdx:mi}); return; }
           const row={type:'child',kids:[{node:k,memberIdx:mi}]};
           if (key) byGroup.set(key,row);
@@ -3317,6 +3318,10 @@ function ladSiblingPlan(section,maxSib,annotator) {
       stRows.forEach(row=>{
         const ms=row.kids.map(({node:k})=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs); if (a) push(a.entries); return a?a.marker:null; });
         row.marker=mergeMarkers(ms);
+        // A phase-labeled child of a phase-labeled parent is named without its Ø tag: the column group
+        // it sits under (the parent's phase) already says which phase it is.
+        const k0=row.kids[0].node, p0=k0.parentId?nodes[k0.parentId]:null;
+        row.plainName=row.kids.length>1||(!!k0.phase&&!!p0&&!!p0.phase);
         rows.push(row);
       });
     });
@@ -3472,7 +3477,7 @@ function renderLoadAnalysisDetailAlt() {
       }
       // A row shared by the phase-mates of a phase set is named once, without a Ø tag (each phase's
       // values are under its own column group).
-      const k=r.kids[0].node, shared=r.kids.length>1;
+      const k=r.kids[0].node, shared=r.plainName;
       const lv=r.kids.map(x=>warnLevel(x.node)), w=lv.includes('over')?'over':lv.includes('warn')?'warn':'';
       // Load children don't have a Net Change concept of their own, so "(Net Change)" only applies to
       // non-load existing children.
@@ -8281,7 +8286,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
       return;
     }
     // child row (one or, for phase-mates of a phase set, several kids sharing the row)
-    const k=r.kids[0].node, shared=r.kids.length>1;
+    const k=r.kids[0].node, shared=r.plainName;
     const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
     const kDesc=(shared?(k.description||'unnamed'):dispName(k))+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
     const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
