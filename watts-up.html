@@ -21,6 +21,7 @@
       display:flex;align-items:center;justify-content:space-between;padding:0 1rem}
     .header-left{display:flex;align-items:center;gap:.75rem}
     .app-title{font-size:1.1rem;font-weight:700;color:var(--accent-blue);letter-spacing:1px}
+    .app-version{font-size:.72rem;color:var(--text-muted);font-weight:600;margin-left:.1rem}
     .save-indicator{font-size:.72rem;color:var(--text-muted)}
     .header-right{display:flex;gap:.4rem}
     button{cursor:pointer;border:none;border-radius:6px;padding:.3rem .7rem;font-size:.82rem;
@@ -427,6 +428,7 @@
   <header id="app-header">
     <div class="header-left">
       <span class="app-title">⚡ Watts Up</span>
+      <span id="app-version" class="app-version"></span>
       <span id="save-indicator" class="save-indicator"></span>
     </div>
     <div class="header-right">
@@ -2363,6 +2365,33 @@ function allWarnings() {
 // ── PERSISTENCE ───────────────────────────────────────────────────────────────
 const LS='wattsup_v1';
 
+// ── VERSION (formal versioning, v0.9.0) ──────────────────────────────────────
+// MAJOR.MINOR.PATCH. MAJOR: saved files or results change incompatibly. MINOR: new features that
+// still open older files. PATCH: fixes only. This constant is the one place the version lives —
+// bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
+// internal development history; CHANGELOG.md maps each release to them.
+const APP_VERSION='0.9.0';
+const APP_RELEASE_DATE='2026-10-18';
+const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
+// -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
+// either is not a well-formed version.
+function cmpVersion(a,b){
+  const ma=VERSION_RE.exec(String(a)), mb=VERSION_RE.exec(String(b));
+  if (!ma||!mb) return null;
+  for (let i=1;i<=3;i++){ const d=Number(ma[i])-Number(mb[i]); if (d) return d<0?-1:1; }
+  return 0;
+}
+// A file stamped by a newer program than this one may hold data this copy misreads or drops, so
+// ask before using it. Unstamped files (made before versioning) and malformed stamps pass silently.
+// Returns true to go ahead.
+function confirmFileVersion(p){
+  const v=p&&typeof p.appVersion==='string'?p.appVersion:null;
+  if (v&&cmpVersion(v,APP_VERSION)===1) {
+    return confirm(`This file was made by a newer version of Watts Up (${v}); you are running ${APP_VERSION}. Opening it in an older version can misread or lose some of its data.\n\nGet the current version first, or continue anyway?`);
+  }
+  return true;
+}
+
 function strip(nodes) {
   const out={};
   Object.entries(nodes).forEach(([id,n])=>{
@@ -2387,7 +2416,7 @@ function snapshotState() {
   // Revision 72 Follow-Up: report column-selection settings (reportCfg) travel with the project
   // now, instead of resetting to defaults every time a file is loaded — see doImport/importDocx
   // below for the read-back half, and writeWattsUpMetaParts for the Word-file equivalent.
-  return {meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved,reportCfg};
+  return {appVersion:APP_VERSION,meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved,reportCfg};
 }
 
 function persist() {
@@ -2499,6 +2528,7 @@ function doImport(file) {
     try {
       const p=JSON.parse(e.target.result);
       migrateLegacy(p);validateImport(p);
+      if (!confirmFileVersion(p)) return;
       state=p;reportCfg=p.reportCfg||defaultPrintCfg();recalc();renderAll();persist();
     } catch(err){alert('Import failed: '+err.message);}
   };
@@ -2536,6 +2566,7 @@ async function importDocx(file){
     const jsonStr=m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&apos;/g,"'");
     const parsed=JSON.parse(jsonStr);
     migrateLegacy(parsed);validateImport(parsed);
+    if (!confirmFileVersion(parsed)) return 'declined';
     const docFile=zip.file('word/document.xml');
     if(docFile){
       const docXml=await docFile.async('string');
@@ -7301,6 +7332,7 @@ function buildPrint() {
         <span><strong>Serial #:</strong> ${esc(m.serialNumber||'—')}</span>
         <span><strong>Flight Phase:</strong> ${esc(m.flightPhase||'—')}</span>
         <span><strong>Date:</strong> ${new Date().toLocaleDateString()}</span>
+        <span><strong>Watts Up:</strong> v${APP_VERSION}</span>
       </div>
     </div>${tables}${warnSec}`;
 }
@@ -7635,6 +7667,7 @@ function buildPrintR10(){
         <span><b>Flight Phase:</b> ${esc(m.flightPhase||'—')}</span>
         ${m.revisionLevel?`<span><b>Rev:</b> ${esc(m.revisionLevel)}</span>`:''}
         <span><b>Date:</b> ${new Date().toLocaleDateString()}</span>
+        <span><b>Watts Up:</b> v${APP_VERSION}</span>
       </div>
     </div>${refSec}${acFirst?acSec+dcSec:dcSec+acSec}${notesSec}${warnSec}`;
 }
@@ -8500,6 +8533,17 @@ function updateDocProp(xml,name,value,found){
   if (found&&!re.test(xml)) found.missingProps.push(name);
   return xml.replace(re,'$1'+xe(value)+'$3');
 }
+// Stamps the program version into the document's custom properties (File > Info > Properties >
+// Advanced > Custom: "WattsUpVersion"), adding the property if the document doesn't have it yet.
+// Never reported as "missing": the template predates versioning and a user's own file needn't have it.
+function setWattsUpVersionProp(xml){
+  const re=/(name="WattsUpVersion"(?:[^>]*)>[\s\S]*?<vt:lpwstr>)([^<]*)(<\/vt:lpwstr>)/;
+  if (re.test(xml)) return xml.replace(re,'$1'+xe(APP_VERSION)+'$3');
+  if (!xml.includes('</Properties>')) return xml;
+  const pids=[...xml.matchAll(/\bpid="(\d+)"/g)].map(x=>Number(x[1]));
+  const pid=Math.max(1,...pids)+1;
+  return xml.replace('</Properties>',`<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="${pid}" name="WattsUpVersion"><vt:lpwstr>${xe(APP_VERSION)}</vt:lpwstr></property></Properties>`);
+}
 // The parts of a Watts-Up-managed docx that are never tied to the body's own visible content —
 // shared by fillWattsUpDocx (fills an existing template/external file) and fillBlankWattsUpDocx
 // (Phase 5, generates a fresh blank-body one): the embedded JSON is always written regardless of
@@ -8513,7 +8557,7 @@ async function writeWattsUpMetaParts(zip,st,found){
   // variable — see its own declaration — rather than a property of `st`) is spread in here as a
   // sibling of meta/analyses/etc. rather than mutating the real state object, so it round-trips
   // through importDocx exactly like every other field already does.
-  const jsonStr=JSON.stringify({...st,reportCfg}).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const jsonStr=JSON.stringify({...st,appVersion:APP_VERSION,reportCfg}).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   zip.file('customXml/item1.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
     `<wuData xmlns="urn:watts-up:v1"><json>${jsonStr}</json></wuData>`);
@@ -8523,6 +8567,7 @@ async function writeWattsUpMetaParts(zip,st,found){
     [['ReportNo',m.documentNumber],['ReportRev',m.revisionNumber||m.revisionLevel],
      ['Make',m.make],['Model',m.model],['S/N',m.serialNumber],['Flight Phase',m.flightPhase]
     ].forEach(([n,v])=>{propXml=updateDocProp(propXml,n,v,found);});
+    propXml=setWattsUpVersionProp(propXml);
     zip.file('docProps/custom.xml',propXml);
   } else if (found) found.missingFiles.push('docProps/custom.xml');
 }
@@ -9365,7 +9410,9 @@ async function doOpenProject(){
       wordDocHandle=handle;
       wordDocFileName=handle.name;
       updateWordDocUI();
-      await importDocx(file);
+      // Declining the "made by a newer version" warning loads nothing, so don't stay linked to a
+      // file whose contents were never read (a later sync would overwrite it).
+      if (await importDocx(file)==='declined') disconnectWordDoc(true);
     } else {
       await doImport(file);
     }
@@ -9436,6 +9483,7 @@ async function runLaunchDialog(){
     if (choice==='resume') {
       if (!confirm('This will resume your previous session, which is not connected to a Word document. Use "Open" instead if you want to connect one.\n\nContinue and resume without a connection?')) continue;
       migrateLegacy(saved);
+      if (!confirmFileVersion(saved)) continue;
       try{validateImport(saved);state=saved;reportCfg=saved.reportCfg||defaultPrintCfg();}
       catch(e){state=freshState();reportCfg=null;}
       collapsed=new Set();recalc();renderAll();
@@ -9444,6 +9492,9 @@ async function runLaunchDialog(){
   }
 }
 function init() {
+  const ver=document.getElementById('app-version');
+  ver.textContent='v'+APP_VERSION;
+  ver.title=`Watts Up version ${APP_VERSION} — released ${APP_RELEASE_DATE}`;
   initEvents();
   runLaunchDialog();
 }

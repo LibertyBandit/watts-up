@@ -5762,6 +5762,41 @@ import path; exercise every screen, every Edit dialog, the Print Report and the 
 nothing executes after the fixes. Not done: a formal penetration test, a Content-Security-Policy (the
 IT document lists it as optional hardening).
 
+## 81. Formal Versioning (Version 0.9.0)
+
+Designed 2026-10-17/18 in a design interview; all seven proposals accepted. Phase 1 of 2 (Phase 2 is the Help
+button and embedded user guide).
+
+- **Scheme.** `MAJOR.MINOR.PATCH`. MAJOR = saved files or results change incompatibly; MINOR = new features, older
+  files still open; PATCH = fixes. Today's build is **0.9.0** (testing); `1.0.0` is declared by the owner. The
+  "Revision NN" numbers remain the internal history; `CHANGELOG.md` maps each release to them.
+- **Single source of truth.** `APP_VERSION` and `APP_RELEASE_DATE` (next to `const LS`). Helpers `cmpVersion(a,b)`
+  (numeric MAJOR.MINOR.PATCH, pre-release suffix ignored, `null` if malformed) and `confirmFileVersion(p)`.
+- **Display.** `v0.9.0` beside the title in the header (tooltip: release date); a "Watts Up: v…" item in the Print
+  Report header (both print builders); Word custom document property `WattsUpVersion` (`setWattsUpVersionProp`,
+  added if the document lacks it, updated otherwise, never reported as missing). No visible text was added to the
+  Word body, because a new content control would be reported as "missing" in older templates and users' own files.
+- **File stamps.** `appVersion` is written by `snapshotState()` (JSON export, auto-save) and by
+  `writeWattsUpMetaParts` (the embedded project in Word files).
+- **Newer-file warning.** On JSON open, Word open/load and Resume, a file stamped with a *newer* version than the
+  running copy asks "continue anyway?"; declining loads nothing. If a Word file was just connected through Open and
+  the warning is declined, the connection is dropped (`importDocx` returns `'declined'`) so a later sync cannot
+  overwrite a file that was never read. Unstamped files (pre-versioning) and malformed stamps pass silently.
+- **Staying current.** No update check (the program makes no network requests of its own, which the IT summary
+  states). Everyone launches from one read-only shared copy; every release is archived as
+  `releases\watts-up-X.Y.Z.html`; a release note carries the version, date, changes and SHA-256; users compare it
+  with the header. A later opt-in check against the user's own server would require updating the IT summary first.
+- **Release routine.** `RELEASING.md` (checklist: bump constant, changelog, requirements, user guide, IT hash, commit,
+  tag `vX.Y.Z`, push on request, archive and publish). Old tags `revision-19/-46/-64` stay.
+- **Deviation from the proposal:** the proposed SHA-256 in the About view is not shown, because a page cannot hash its
+  own file without reading it back from disk or the network; the hash is in the release note and IT summary instead.
+
+Verified: header and tooltip; stamp in `snapshotState` and in the Word embedded JSON; comparison cases (equal, newer
+patch/minor/major, older, pre-release, malformed); `confirmFileVersion` silent for unstamped/older/equal/garbage and
+prompting for newer; JSON import declined leaves the project untouched, accepted loads it and re-stamps the current
+version; unstamped files open silently; Word property added once (pid 16) and updated, not duplicated, on a second
+sync; newer-stamped `.docx` declined loads nothing; print header shows the version; clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
