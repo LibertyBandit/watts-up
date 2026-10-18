@@ -222,6 +222,9 @@
     .rpt-onscreen .rpt-detail-path{font-size:.74rem;font-style:italic;color:var(--text-muted);margin-bottom:.2rem}
     .rpt-onscreen .rpt-detail-path-inline{display:block;font-style:italic;font-weight:400;text-transform:none;
       letter-spacing:normal;color:var(--text-muted);font-size:.66rem;white-space:normal}
+    /* Revision 78: the distribution path sits above the detail table, larger and highlighted */
+    .rpt-onscreen .rpt-detail-path-bar{display:block;font-style:italic;font-size:.88rem;line-height:1.25;padding:.2rem .55rem;margin:0 0 .3rem;
+      background:rgba(88,166,255,.16);color:var(--accent-blue);border-left:3px solid var(--accent-blue);border-radius:3px}
     .rpt-onscreen .rpt-detail-notes{margin:.15rem 0 0;padding-left:1.2rem;font-size:.7rem;color:var(--text-secondary)}
     .rpt-onscreen .rpt-detail-notes li{margin-bottom:.1rem}
     .rpt-onscreen .rpt-section-hdr{font-size:.8rem;font-weight:700;margin:.9rem 0 .3rem;border-bottom:2px solid var(--border);
@@ -992,6 +995,14 @@
           <label class="po-chk" title="In the Vertical Load Analysis Detail, show the DC outputs of all TRUs side by side as sibling column groups of one table instead of one table each."><input type="checkbox" id="po-lad-tru-sib"> Vertical Load Analysis Detail — treat TRU outputs as siblings</label>
           <label class="po-chk" title="Show several top-level (root) items side by side as sibling column groups of one table instead of one table each."><input type="checkbox" id="po-lad-root-sib"> Vertical Load Analysis Detail — treat multiple top-level items as siblings</label>
           <div id="po-lad-entries" style="margin-top:.2rem"></div>
+          <label class="po-chk" title="How the numbers in the reports (Print, Word, and the on-screen Power Distribution Summary and Load Analysis Detail) are rounded. Significant digits: 3, 4 or 5 digits (never finer than 0.001; from 10^digits up, to the nearest 10). Fixed decimal: to the nearest step, shown with that many decimals. Protective-device ratings and power factors are not affected."><span>Report rounding:</span>
+            <select id="po-round-mode" style="margin-left:.4rem"><option value="sig">Significant digits</option><option value="fixed">Fixed decimal</option></select>
+            <select id="po-round-digits"><option value="3">3 digits</option><option value="4">4 digits</option><option value="5">5 digits</option></select>
+            <select id="po-round-step"><option value="0.001">nearest 0.001</option><option value="0.01">nearest 0.01</option><option value="0.1">nearest 0.1</option><option value="1">nearest 1</option><option value="10">nearest 10</option></select></label>
+          <label class="po-chk" title="How an AC item's VA is carried up the tree. Vector: derived from the summed W and VAR. Algebraic: the signed sum of the VA values of its children (New Load and Reserve are then worked from those VA values). A load's own VA, a TRU's VA and data entry still use W, VAR and power factor."><span>VA calculation (whole project):</span>
+            <select id="po-va-method" style="margin-left:.4rem">
+              <option value="vector">Vector sum (from W and VAR)</option><option value="algebraic">Algebraic sum (add VA directly)</option>
+            </select></label>
         </div>
       </div>
       <div class="modal-footer">
@@ -1411,8 +1422,21 @@ function negPow(p) {
   if (!p) return mkPow(0,0,0,0,1);
   return {w:p.w!==null?-p.w:null,var:p.var!==null?-p.var:null,va:p.va!==null?-p.va:null,a:p.a!==null?-p.a:null,pf:p.pf};
 }
+// Revision 78: VA calculation method. 'vector' (default): an aggregate's VA is derived from its summed
+// W and VAR. 'algebraic': an aggregate's VA is the signed sum of its parts' VA (W and VAR still add up
+// as before, and the power factor shown is W ÷ VA); a load's own VA, a TRU's VA and data entry keep
+// deriving VA from W, VAR and power factor. A project setting (state.meta.vaMethod).
+function vaAlgebraic() { return !!(state&&state.meta&&state.meta.vaMethod==='algebraic'); }
+function withAlgebraicVA(r,sumVA,v) {
+  r.va=sumVA; r.a=v>0?sumVA/v:null;
+  r.pf=sumVA!==0?r.w/sumVA:(r.w===0?1:0);
+  return r;
+}
 function addPow(a,b,acDc,v) {
-  if (acDc==='ac') return deriveAcFromWVar((a.w||0)+(b.w||0),(a.var||0)+(b.var||0),v);
+  if (acDc==='ac') {
+    const r=deriveAcFromWVar((a.w||0)+(b.w||0),(a.var||0)+(b.var||0),v);
+    return vaAlgebraic()?withAlgebraicVA(r,(a.va||0)+(b.va||0),v):r;
+  }
   return deriveDcFromA((a.a||0)+(b.a||0),v);
 }
 function subPow(cap,load,acDc,v) {
@@ -2149,12 +2173,12 @@ function calcNC(node,nodes) {
     }
   }
   if (node.status==='removed') return negPow(node.existingLoad||mkPow(0,0,0,0,1));
-  let sumW=0,sumVAR=0,sumA=0;
+  let sumW=0,sumVAR=0,sumA=0,sumVA=0;
   children(node.id,nodes).forEach(c=>{
     const nc=calcNC(c,nodes);
     if (isConv(c.type)&&!c.convRole&&c.efficiency>0) {
-      sumW+=(nc.w||0)/c.efficiency; sumA+=(nc.a||0)/c.efficiency;
-    } else { sumW+=nc.w||0; sumVAR+=nc.var||0; sumA+=nc.a||0; }
+      sumW+=(nc.w||0)/c.efficiency; sumA+=(nc.a||0)/c.efficiency; sumVA+=(nc.va||0)/c.efficiency;
+    } else { sumW+=nc.w||0; sumVAR+=nc.var||0; sumA+=nc.a||0; sumVA+=nc.va||0; }
   });
   if (node.convRole==='in'&&node.efficiency>0) {
     // Revision 57: resolve the group's output via convGroupId rather than via structural
@@ -2179,7 +2203,7 @@ function calcNC(node,nodes) {
     const inA=v>0?inVA/v:null;
     return {w:inW,var:inVAR,va:inVA,a:inA,pf:isAcIn?pf:null};
   }
-  if (ac) return deriveAcFromWVar(sumW,sumVAR,v);
+  if (ac) { const r=deriveAcFromWVar(sumW,sumVAR,v); return vaAlgebraic()?withAlgebraicVA(r,sumVA,v):r; }
   return deriveDcFromA(sumA,v);
 }
 
@@ -3174,7 +3198,7 @@ function renderLoadAnalysisDetail() {
     const n=nodes[id];
     const kids=children(id,nodes);
     const path=pathFor(n);
-    const pathHtml=path?`<span class="rpt-detail-path-inline">${path}</span>`:'';
+    const pathHtml=path?`<div class="rpt-detail-path-bar">${path}</div>`:'';
     const ncols=cols.length+2+(hasAnyAnnot?1:0);
 
     const am={}; const blockNotes=[]; const blockSeenNums=new Set();
@@ -3206,7 +3230,7 @@ function renderLoadAnalysisDetail() {
     // sort so the printed list still reads in ascending order.
     blockNotes.sort((a,b)=>a.num-b.num);
     const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
-    return `<div class="rpt-detail-block"><table class="rpt-table">${colgroupHtml}${buildRptHeader(cols,hasAnyAnnot,pathHtml)}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
+    return `<div class="rpt-detail-block">${pathHtml}<table class="rpt-table">${colgroupHtml}${buildRptHeader(cols,hasAnyAnnot,'')}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
   }
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
@@ -3418,7 +3442,7 @@ function renderLoadAnalysisDetailAlt() {
   function cbCellHtml(n) {
     if (!NT.PROTECTION.includes(n.type)) return '<td class="rpt-num"></td>';
     const a=n.capacity?.a;
-    return a==null?'<td class="rpt-num"></td>':`<td class="rpt-num">(${fmtRpt(a)} A)</td>`;
+    return a==null?'<td class="rpt-num"></td>':`<td class="rpt-num">(${fmtRating(a)} A)</td>`;
   }
   // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/Reserve ever
   // go negative (shown as a positive value in parens), matching the existing report's convention.
@@ -3474,19 +3498,19 @@ function renderLoadAnalysisDetailAlt() {
     let colgroup=`<colgroup><col style="width:${rel(labelPct)}%"><col style="width:${rel(cbPct)}%">`;
     if (hasAnyAnnot) colgroup+=`<col style="width:${rel(notesPct)}%">`;
     colgroup+=`<col style="width:${rel(numPct)}%">`.repeat(nm*cols.length)+'</colgroup>';
-    const pathHtml=t.path?`<span class="rpt-detail-path-inline">${t.path.map(esc).join(' &gt; ')} &gt;</span>`:'';
+    const pathHtml=t.path?`<div class="rpt-detail-path-bar">${t.path.map(esc).join(' &gt; ')} &gt;</div>`:'';
     // Header: two rows — the sibling labels (with " — Installed", rating and "(Note: …)") over their
     // value columns, then the unit labels repeated under each sibling.
     const grpHdr=t.members.map(mi=>{
       const n=mi.node, w=warnLevel(n);
-      let label=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''))+(mi.rating!=null?` (${fmtRpt(mi.rating)} A)`:'');
+      let label=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''))+(mi.rating!=null?` (${fmtRating(mi.rating)} A)`:'');
       if (n.status==='new') label=`<strong>${label} — Installed</strong>`;
       const note=mi.marker?`<br><span class="rpt-note-marker">(Note: ${esc(mi.marker)})</span>`:'';
       return `<th class="rpt-grp${w?' rpt-'+w+'-th':''}" colspan="${cols.length}">${label}${note}</th>`;
     }).join('');
     const unitHdr=t.members.map(()=>cols.map((c,i)=>`<th class="rpt-sub${i===0?' rpt-grp-first':''}">${c.l}</th>`).join('')).join('');
     const notesTh=hasAnyAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
-    const thead=`<thead><tr><th class="rpt-left" rowspan="2">${pathHtml}</th><th rowspan="2"></th>${notesTh}${grpHdr}</tr><tr>${unitHdr}</tr></thead>`;
+    const thead=`<thead><tr><th class="rpt-left" rowspan="2"></th><th rowspan="2"></th>${notesTh}${grpHdr}</tr><tr>${unitHdr}</tr></thead>`;
     const parentFs='8.5pt',childFs='7.5pt';
     const body=t.rows.map(r=>{
       if (r.type==='banner') {
@@ -3509,7 +3533,7 @@ function renderLoadAnalysisDetailAlt() {
       return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker)}${childRowCells(r.kids,nm,cols,ncSet,addedSet)}</tr>`;
     }).join('');
     const notesHtml=t.notes.length?`<ol class="rpt-detail-notes">${t.notes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
-    return `<div class="rpt-detail-block"><table class="rpt-table" style="width:${tablePct}%">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;
+    return `<div class="rpt-detail-block">${pathHtml}<table class="rpt-table" style="width:${tablePct}%">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;
   }
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
@@ -7260,20 +7284,42 @@ function defaultPrintCfg(){
     ladSiblings:'auto',   // Revision 77: siblings per table in the Vertical Load Analysis Detail ('auto' or 1-4)
     ladTruSiblings:true,  // Vertical report: TRU outputs as siblings of one table (default on)
     ladRootSiblings:false,// Vertical report: multiple top-level items as siblings (default off)
+    rounding:{mode:'sig',digits:4,step:0.01},   // Revision 78: report rounding (see fmtRpt)
   };
 }
 // A genuine zero is a real value and renders as "0" — only a missing/inapplicable value (val==null,
 // filtered by callers before this is reached) should render as an em-dash. Previously this collapsed
 // near-zero reals to null too, making zero indistinguishable from "not applicable".
+// Revision 78: report rounding is a setting (reportCfg.rounding): {mode:'sig',digits:3|4|5} — N
+// significant digits, never more than 3 decimals (0.001 is the smallest reported value) and from 10^N up
+// rounded to the nearest 10 — or {mode:'fixed',step:0.001|0.01|0.1|1|10} — nearest step, shown with that
+// many decimals (trailing zeros kept). The default, 4 significant digits, is the original behaviour.
+function fmtSig(n,digits){
+  const abs=Math.abs(n);
+  if (abs>=Math.pow(10,digits)) return (Math.round(n/10)*10).toLocaleString('en-US');
+  const intDigits=abs<1?1:Math.floor(Math.log10(abs))+1;
+  const dec=Math.max(0,Math.min(3,digits-intDigits));
+  const r=parseFloat(n.toFixed(dec));
+  return abs>=1000?r.toLocaleString('en-US',{maximumFractionDigits:dec}):String(r);
+}
+function fmtFixed(n,step){
+  const dec=step>=1?0:Math.round(-Math.log10(step));
+  let r=Math.round(n/step)*step; if (Object.is(r,-0)||Math.abs(r)<step/2) r=0;
+  return r.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
 function fmtRpt(v){
   if(v===null||v===undefined)return null;
   const n=+v;if(isNaN(n))return null;
-  const abs=Math.abs(n);
-  if(abs<10)   return String(parseFloat(n.toFixed(3)));
-  if(abs<100)  return String(parseFloat(n.toFixed(2)));
-  if(abs<1000) return String(parseFloat(n.toFixed(1)));
-  if(abs<10000)return Math.round(n).toLocaleString('en-US');
-  return (Math.round(n/10)*10).toLocaleString('en-US');
+  const r=reportCfg&&reportCfg.rounding;
+  if (r&&r.mode==='fixed'&&[0.001,0.01,0.1,1,10].includes(+r.step)) return fmtFixed(n,+r.step);
+  return fmtSig(n,(r&&r.mode==='sig'&&[3,4,5].includes(+r.digits))?+r.digits:4);
+}
+// Protective-device ratings ("(45 A)") are always shown at the default 4 significant digits, whatever
+// the report rounding setting — a rating rounded to the nearest 10 would misreport a breaker.
+function fmtRating(v){
+  if(v===null||v===undefined)return null;
+  const n=+v;if(isNaN(n))return null;
+  return fmtSig(n,4);
 }
 // Revision 70 (Phase G): explicit null/undefined guard added, matching fmtRpt's own — without it,
 // JS's unary-plus coerces null to 0 (`+null===0`, not NaN), so a genuinely missing pf value was
@@ -7321,7 +7367,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder){
   const removed=n.status==='removed';
   const cfgSide=n.acDc==='ac'?cfg.ac:cfg.dc;
   const mainDesc=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''));
-  const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+  const ampInline=(isProt&&!cfgSide.cap.a&&n.capacity?.a!=null)?fmtRating(n.capacity.a):null;
   const ampSpan=ampInline?`<span style="float:right;color:#555;font-size:6.5pt;margin-left:6pt;white-space:nowrap">(${ampInline} A)</span>`:'';
   const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
   const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
@@ -7429,7 +7475,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
   // whether Amps is a selected capacity column) instead of an inline float in the description
   // cell — Word wasn't right-justifying the inline version consistently, per the same reasoning
   // that already motivated the Analysis Detail – Alternate report's own Rating column.
-  const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+  const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRating(n.capacity.a):null;
   const ratingCell=`<td class="rpt-num">${ratingVal!=null?`(${ratingVal} A)`:''}</td>`;
   const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
   const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
@@ -7675,7 +7721,7 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   // Revision 71, item 3.1: omitted entirely for Power Distribution Summary (hasRating:false).
   let ratingCell='';
   if(hasRating){
-    const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRpt(n.capacity.a):null;
+    const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRating(n.capacity.a):null;
     ratingCell=wxTc(wxPar(ratingVal!=null?wxRun(`(${ratingVal} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:ratingW,topBdr});
   }
   let notesCell='';
@@ -8136,7 +8182,8 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
 
   // Revision 71, item 4.2: bold (was plain) and larger (was 7pt) — italic retained.
   const path=pathForWord(n);
-  const pathXml=path?wxRun(path,{b:true,i:true,sz:9}):'';
+  // Revision 78: the path is its own paragraph above the table (bold italic, 10 pt), kept with the table.
+  const pathParaXml=path?wxPar(wxRun(path,{b:true,i:true,sz:10}),{before:100,after:40,keepNext:true}):'';
 
   const totalCols=2+(hasAnnot?1:0)+cols.length;
   const totalW=descW+ratingW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
@@ -8162,8 +8209,8 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
   blockNotes.sort((a,b)=>a.num-b.num);
   const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
 
-  return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
-    buildWordTblHeader(cols,hasAnnot,colOpts,pathXml)+
+  return pathParaXml+wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
+    buildWordTblHeader(cols,hasAnnot,colOpts,'')+
     rows.join('')+
     `</w:tbl>`+
     notesParas+
@@ -8263,12 +8310,13 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   const kp=(inner)=>wxPar(inner,{before:0,after:0,keepNext:true});
 
   // ── header: two rows — sibling labels over their value columns, then the unit labels repeated
-  const pathXml=t.path?wxRun(t.path.join(' > ')+' >',{b:true,i:true,sz:9}):'';
-  let h1=wxTc(kp(pathXml),{w:labelW,vm:'start'})+wxTc(kp(''),{w:cbW,vm:'start'});
+  // Revision 78: the path is its own paragraph above the table (bold italic, 10 pt), kept with the table.
+  const pathParaXml=t.path?wxPar(wxRun(t.path.join(' > ')+' >',{b:true,i:true,sz:10}),{before:100,after:40,keepNext:true}):'';
+  let h1=wxTc(kp(''),{w:labelW,vm:'start'})+wxTc(kp(''),{w:cbW,vm:'start'});
   if(hasAnnot) h1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   t.members.forEach(m=>{
     const n=m.node;
-    let label=dispName(n)+(n.refDes?` [${n.refDes}]`:'')+(m.rating!=null?` (${fmtRpt(m.rating)} A)`:'');
+    let label=dispName(n)+(n.refDes?` [${n.refDes}]`:'')+(m.rating!=null?` (${fmtRating(m.rating)} A)`:'');
     if(n.status==='new') label+=' — Installed';
     let inner=wxPar(wxRun(label,{b:true,sz:HSZ+1}),{before:20,after:m.marker?0:20,jc:'center',keepNext:true});
     if(m.marker) inner+=wxPar(wxRun(`(Note: ${m.marker})`,{sz:6.5}),{before:0,after:20,jc:'center',keepNext:true});
@@ -8287,7 +8335,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   const valCell=(val,c,i,isNeg)=>wxTc(wxPar(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
   const markerCell=(marker)=>hasAnnot?wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
   const ratingCell=(n,sz)=>{
-    const a=(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?fmtRpt(n.capacity.a):null;
+    const a=(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?fmtRating(n.capacity.a):null;
     return wxTc(wxPar(a!=null?wxRun(`(${a} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
   };
   const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:7.5}:{i:true,sz:7.5}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
@@ -8331,7 +8379,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   });
 
   const notesParas=t.notes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
-  return wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)],Math.min(5000,Math.round(tblPct)))+
+  return pathParaXml+wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)],Math.min(5000,Math.round(tblPct)))+
     header+rows.join('')+`</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
 }
 function buildLadVerticalWordContent(){
@@ -8876,6 +8924,12 @@ function openPrintOpts(){
   chk('po-conv-nc-only',c.convInNcOnly);
   { const sel=document.getElementById('po-lad-siblings'); if(sel) sel.value=(Number.isInteger(+c.ladSiblings)&&+c.ladSiblings>=1&&+c.ladSiblings<=4)?String(+c.ladSiblings):'auto'; }
   chk('po-lad-tru-sib',c.ladTruSiblings!==false); chk('po-lad-root-sib',c.ladRootSiblings===true);
+  { const sel=document.getElementById('po-va-method'); if(sel) sel.value=vaAlgebraic()?'algebraic':'vector'; }
+  { const r=c.rounding||{mode:'sig',digits:4,step:0.01};
+    document.getElementById('po-round-mode').value=r.mode==='fixed'?'fixed':'sig';
+    document.getElementById('po-round-digits').value=[3,4,5].includes(+r.digits)?String(+r.digits):'4';
+    document.getElementById('po-round-step').value=[0.001,0.01,0.1,1,10].includes(+r.step)?String(+r.step):'0.01';
+    syncRoundingControls(); }
   fillLadEntryList();
   ['a','va','w','var','pf'].forEach(col=>chk(`po-ac-col-${col}`,false));
   ['a','w'].forEach(col=>chk(`po-dc-col-${col}`,false));
@@ -8900,11 +8954,20 @@ function applyPrintOpts(){
   c.convInNcOnly=get('po-conv-nc-only');
   { const sel=document.getElementById('po-lad-siblings'); c.ladSiblings=(sel&&/^[1-4]$/.test(sel.value))?+sel.value:'auto'; }
   c.ladTruSiblings=get('po-lad-tru-sib'); c.ladRootSiblings=get('po-lad-root-sib');
+  { const sel=document.getElementById('po-va-method'); if(sel&&state) state.meta.vaMethod=sel.value==='algebraic'?'algebraic':'vector'; }
+  { const fixed=document.getElementById('po-round-mode').value==='fixed';
+    c.rounding={mode:fixed?'fixed':'sig',digits:+document.getElementById('po-round-digits').value||4,step:+document.getElementById('po-round-step').value||0.01}; }
   // Per-item choice for each TRU output / top-level item of the current analysis.
   document.querySelectorAll('#po-lad-entries select[data-nid]').forEach(sel=>{
     const n=state&&state.nodes[sel.dataset.nid]; if(!n) return;
     if (sel.value==='default') delete n.ladGroup; else n.ladGroup=sel.value;
   });
+}
+// Shows the digits choice for "Significant digits" and the step choice for "Fixed decimal".
+function syncRoundingControls() {
+  const fixed=document.getElementById('po-round-mode').value==='fixed';
+  document.getElementById('po-round-digits').style.display=fixed?'none':'';
+  document.getElementById('po-round-step').style.display=fixed?'':'none';
 }
 // Settings dialog: one dropdown per TRU output / top-level item of the current analysis that can start a
 // section table — Default (follows the two checkboxes), Own table, or Group 1–4 (same number = siblings).
@@ -8971,6 +9034,7 @@ function initEvents() {
     e.preventDefault();
     e.returnValue='';
   });
+  document.getElementById('po-round-mode').addEventListener('change',syncRoundingControls);
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-reset' ).addEventListener('click',()=>{
@@ -8983,8 +9047,9 @@ function initEvents() {
   // (Phase C / this phase), using whatever's currently saved.
   document.getElementById('print-opts-go'    ).addEventListener('click',()=>{
     applyPrintOpts();document.getElementById('print-opts').classList.add('hidden');
-    // The on-screen Load Analysis Detail reads these settings, so redraw it and keep them saved.
-    renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();persist();
+    // The reports read these settings (and the VA method changes every calculated VA), so recalculate,
+    // redraw everything and keep them saved.
+    recalc();renderAll();persist();
   });
   // Revision 70, item 5.4: a "select all" checkbox above each power-unit column toggles every
   // individual checkbox in that column at once (5.4.1: individual ones stay independently

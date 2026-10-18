@@ -5696,6 +5696,52 @@ add up badly warn; an unsplit three-phase motor under the generator doesn't chan
 below an unsplit main bus is found; blank capacity and a split with no generator above are skipped; the
 warning appears in the banner; clean console.
 
+## 79. Revision 78 — Detail Path Above the Table, Algebraic VA, Report Rounding
+
+Designed 2026-10-18 in a design interview (every answer "as suggested").
+
+### 79.1 Distribution path above the detail tables
+In both Load Analysis Detail layouts (Horizontal and Vertical), on screen and in Word, the distribution
+path (e.g. "Gen 1 > Bus 1 >") moved out of the table's top-left header cell into its own line above the
+table; the top-left cell is now empty. On screen it is italic, larger than the table text and
+highlighted (soft accent-colored background with an accent bar and accent-colored text,
+`.rpt-detail-path-bar`). In Word it is its own paragraph, bold italic 10 pt, "keep with next" so it stays
+with the table. Tables with no path (section entry points) show nothing above them.
+
+### 79.2 VA calculation method (algebraic option)
+A project setting (Settings dialog → "VA calculation (whole project)", `state.meta.vaMethod`, default
+`'vector'`, saved with the project and in the Word-embedded data): **Vector** is the original method — an
+aggregate's VA is derived from its summed W and VAR. **Algebraic**: a parent's Net Change VA is the signed
+sum of its children's Net Change VA (removed items negative; a child conversion's VA is scaled by its
+efficiency like its W); New Load VA = the item's own Existing Load VA + that Net Change VA; Reserve VA =
+Capacity VA − New Load VA; Amps = VA ÷ volts; W and VAR still add up as before and an aggregate's power
+factor shown is W ÷ VA. A load's own VA, a TRU's VA (Watts ÷ power factor) and data entry still derive VA
+from W, VAR and power factor, and an entered Net Change Override (which has only W and VAR) keeps a
+derived VA. One set of values follows the active method (`vaAlgebraic()`, `addPow`, `calcNC`), so the
+tree, grids, reports, warnings (overload, phase unbalance) and Word all use it; changing the setting
+recalculates everything on Done. Reports do not state which method was used. Reset to Defaults leaves
+this calculation setting alone.
+
+### 79.3 Report rounding
+New Settings option "Report rounding" (`reportCfg.rounding`, saved with the project; default 4
+significant digits = the original behaviour, verified identical across 20,000 random values):
+- **Significant digits** (3, 4 or 5): N significant digits, never more than 3 decimals (0.001 is the
+  smallest reported value); from 10^N upward rounded to the nearest 10 (never coarser).
+  E.g. 1,234.56 → 1,230 / 1,235 / 1,234.6; 12.3456 → 12.3 / 12.35 / 12.346; 123,456 → 123,460.
+- **Fixed decimal**: nearest 0.001, 0.01, 0.1, 1 or 10, shown with that many decimals including
+  trailing zeros (0.01 → "2.00"), thousands separators kept.
+Applies to the reports only (Print Report, Word, the on-screen Power Distribution Summary and Load
+Analysis Detail — everything that uses `fmtRpt`); the tree, grids and the Analysis tab's summary table
+keep their own formats, the power factor stays at 2 decimals, and protective-device ratings ("(45 A)")
+always use the default 4 digits (`fmtRating`) so a breaker is never misreported.
+
+Verified: path bars above every table in both layouts (screen) and bold italic 10 pt keep-with-next
+paragraphs in both Word builders, header cells empty; with L1 1000 VA pf 0.9 + L2 1000 VA pf 0.8 under a
+breaker, the breaker's Net Change VA is 1,991 (vector) vs 2,000 (algebraic), a removed 500 VA load makes the
+bus 1,500, New Load 3,500 and Reserve 16,500 with W and VAR unchanged; the setting persists through
+export/import; an override stays vector-derived; the rounding tables above, the Settings controls (digits vs step
+shown by mode), Reset to Defaults, persistence, report/Word output under fixed rounding; clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
