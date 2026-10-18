@@ -5854,6 +5854,33 @@ member of the sibling table with its override as Net Change; alone as the root i
 override and Reserve = capacity − new load, on screen and in Word; Word XML well-formed; first columns identical across tables; no
 empty paragraph without a mark size; labels capitalised, ind 0; Word COM render of the generated document; console clean.
 
+### Phase 2 — Summary tables, grid focus, Word connection (items 2.1, 2.2, 3.1, 4.1)
+
+- **One table per section (2.1, Q1–Q3).** `buildWordSectionTables` (Load Analysis Summary) and `buildPdsWordTables` (Power
+  Distribution Summary) still split the section into highest-order-sibling groups (`splitSectionGroups`), but now return one
+  chunk of rows per group and `assembleSplitTable` joins them into a single `<w:tbl>`: the column header once (it repeats at the top of
+  each page), each group's rows with "keep with next" (Revision 71 item 2.3), then the group's notes as full-width rows
+  (heading "Notes", entries as before), then a thin 120-twip spacer row. The last row of every group has `keepNext` removed, so
+  Word may break the page there; a group longer than a page still breaks inside it, as Word does. Note numbering and the
+  notes' placement (after their own group) are as before. On-screen tables are unchanged.
+- **One paragraph between AC and DC (2.2).** The extra spacer paragraph is gone in both builders (the Power Distribution Summary
+  had the same doubling); each section's table is followed by its one closing paragraph, then the next heading.
+- **Grid focus (3.1).** After a status-badge toggle the grid re-renders; focus is put back on that row's badge
+  (`tr[data-nid] button[data-act=toggle-status]`), and the grid's own Tab handler (the badge is one of its row fields) then
+  moves to the next/previous cell. An Installed-grid toggle moves the row to the other tab, so nothing is refocused there.
+- **Word connection (4.1).** When connected, the Word Report dialog offers Sync, Load, Create New, **Connect Different…**
+  (the existing connect flow: pick a file, then Sync or Load; cancelling the picker keeps the current connection) and
+  **Disconnect** (confirmation; `disconnectWordDoc(true)`; the analysis is untouched). `.choice-btns` now wraps so five
+  buttons fit.
+- **Version 0.9.1.** `APP_VERSION` bumped; CHANGELOG entry; user guide updated; IT summary hash refreshed.
+
+Verified: tree with three generators (three sibling groups), notes in two groups, a DC bus — AC and DC Summary are each one
+table (and likewise the PDS), the XML parses, keepNext is cleared on the spacer/last row of each group and set elsewhere,
+notes rows carry the right numbers, exactly one paragraph between AC and DC; the generated document opens in Word (AC and DC
+Summary tables, 15 and 3 rows, rows of all groups in one table); dialog shows the five choices, Disconnect asks first, declining
+keeps the connection, accepting clears it and hides the indicator; focus stays on the badge in the same row and a real Tab moves to
+the next field; console clean. Not testable here: the real file picker behind Connect Different….
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

@@ -148,7 +148,7 @@
     .choice-modal{background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;
       width:440px;max-width:92vw;display:flex;flex-direction:column;overflow:hidden}
     .choice-message{font-size:.85rem;color:var(--text-secondary);line-height:1.4}
-    .choice-btns{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.3rem}
+    .choice-btns{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;margin-top:.3rem}
     .choice-btns button{padding:.4rem .8rem;border-radius:6px;font-size:.82rem;cursor:pointer}
     .form-row{display:flex;gap:.6rem;flex-wrap:wrap}
     .form-group{display:flex;flex-direction:column;gap:.22rem;flex:1;min-width:70px}
@@ -1187,7 +1187,8 @@ buttons:</p>
 </tr>
 </tbody>
 </table>
-<p>The status badge in a row toggles an item between Existing and Installed (or Removed) when clicked.</p>
+<p>The status badge in a row toggles an item between Existing and Removed (in the Existing / Removed grid) when clicked; the
+keyboard focus stays on the badge, so Tab and Shift+Tab continue to the next or previous cell in the same row.</p>
 <p>Above each grid are <strong>filters</strong>: AC / DC, and a <strong>Branch</strong> list (an item and everything beneath it). <strong>Clear
 Filters</strong> appears while a filter is active. The filters are shared between the two grids and are not saved
 with the project.</p>
@@ -1444,6 +1445,10 @@ own Word file, updating it in place without disturbing anything else in it.</p>
   because unsynced changes are lost). Text you typed in Word into the introduction, compliance statement and general
   notes controls is brought back too.</li>
 <li><strong>Create New Report…</strong> — as above.</li>
+<li><strong>Connect Different…</strong> — pick another existing report and connect to it instead (then choose Sync or Load, as when
+  connecting for the first time). Cancelling the file dialog leaves the current connection as it was.</li>
+<li><strong>Disconnect</strong> — stops linking the analysis to the Word file (after a confirmation). Nothing in the analysis or in the
+  file changes; you can connect again later.</li>
 </ul>
 <p><strong>Important:</strong> Word locks a file while it is open. Close the report in Word before syncing, otherwise the program
 reports that the file is probably open and nothing is written.</p>
@@ -1456,8 +1461,11 @@ a <code>.docx</code> or <code>.json</code>.</p>
   without an Internet connection, the program says so and the Word functions are unavailable until it is reloaded online.</li>
 <li>A Word report holds the full project in hidden form. Anyone who has the <code>.docx</code> can extract it, even if the visible
   report shows only part of the data. Send a PDF instead if you do not want to share the project.</li>
-<li>Opening a different project, or clicking <strong>New</strong>, disconnects the Word file (the program tells you first).</li>
+<li>Opening a different project, or clicking <strong>New</strong>, disconnects the Word file (the program tells you first). You can also
+  disconnect or switch to another report at any time without touching the analysis (§7.3).</li>
 <li>The report uses the same column choices, rounding and layout options as <strong>Settings</strong>.</li>
+<li>In the Word Summary tables, each section (AC and DC) is one table. Word keeps the rows of one group of siblings together
+  where it can and breaks the page between groups; the column headings repeat at the top of each page.</li>
 </ul>
 <h2 id="8-tips-and-troubleshooting">8. Tips and troubleshooting</h2>
 <table>
@@ -2927,12 +2935,12 @@ function allWarnings() {
 // ── PERSISTENCE ───────────────────────────────────────────────────────────────
 const LS='wattsup_v1';
 
-// ── VERSION (formal versioning, v0.9.0) ──────────────────────────────────────
+// ── VERSION (formal versioning) ──────────────────────────────────────
 // MAJOR.MINOR.PATCH. MAJOR: saved files or results change incompatibly. MINOR: new features that
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.0';
+const APP_VERSION='0.9.1';
 const APP_RELEASE_DATE='2026-10-18';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -5060,6 +5068,12 @@ function wireGridEvents(el,renderFn,defaultChildStatus){
             }
           }
           recalc();persist();renderAll();
+          // Revision 83: renderAll rebuilt the row, so put the keyboard focus back on its status badge —
+          // the next Tab / Shift+Tab then moves to the cell to the right / left in the same row (the grid's
+          // own Tab handler treats the badge as one of the row's fields). A row that left this grid (an
+          // Installed-grid toggle sends it to the other tab) is simply not found.
+          const badge=document.querySelector(`tr[data-nid="${id}"] button[data-act="toggle-status"]`);
+          if (badge) badge.focus();
         }
       }
       else if (act==='share') shareWithOther(id);
@@ -8426,6 +8440,29 @@ function splitSectionGroups(secRoots,childrenOf){
   }
   return [];
 }
+// Revision 83: the Word Summary tables (Load Analysis Summary and Power Distribution Summary) are ONE table
+// per section instead of one table per highest-order-sibling group. Each group's rows keep "keep with next"
+// (so Word prefers not to break inside a group), and the last row of every group has it cleared, so a page
+// can break there without a separate table. The group's own notes follow it as full-width rows, then a thin
+// spacer row; the column header is written once (and repeats at the top of every page). `chunks` is
+// [{rows:[row xml], notes:[{num,text}]}], one per group, in order.
+function assembleSplitTable(tblOpen,headerXml,chunks,totalW,totalCols){
+  if(!chunks.length) return '';
+  const span=totalCols>1?totalCols:undefined;
+  const noKeep=x=>x.replace(/<w:keepNext\/>/g,'');
+  const rows=[];
+  chunks.forEach((ch,i)=>{
+    const cr=[...ch.rows];
+    if(ch.notes.length){
+      cr.push(wxTr(wxTc(wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true}),{w:totalW,span})));
+      ch.notes.forEach(({num,text})=>cr.push(wxTr(wxTc(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:20,keepNext:true}),{w:totalW,span}))));
+    }
+    if(i<chunks.length-1) cr.push(wxTr(wxTc(wxPar('',{before:0,after:0,keepNext:true,markSz:2}),{w:totalW,span}),{h:120,exact:true}));
+    cr[cr.length-1]=noKeep(cr[cr.length-1]);
+    rows.push(...cr);
+  });
+  return tblOpen+headerXml+rows.join('')+`</w:tbl>`+wxPar('',{before:100,after:0});
+}
 // Revision 72, item 3: replaces the old buildWordSectionRows/buildWordRptTable pair — instead of
 // one continuous table (rows only) wrapped once by its caller, this builds every split group's own
 // complete <w:tbl>...</w:tbl>, each with a fresh depth/banner-dedup/spacer state (matching how
@@ -8449,7 +8486,7 @@ function buildWordSectionTables(acDc,cols,cfg,annotator,{descW,ratingW,notesW,co
   const totalW=descW+ratingW+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
   const colOpts={descW,ratingW,notesW,colWidths,hasAnnot};
 
-  return splitSectionGroups(secRoots,childrenOf).map(({startId,startDepth,childOverride})=>{
+  const chunks=splitSectionGroups(secRoots,childrenOf).map(({startId,startDepth,childOverride})=>{
     const emRem=new Set(),emAdd=new Set();
     const rows=[];let prevDepth=-1;
     const am={};const blockNotes=[];const seenNums=new Set();
@@ -8485,14 +8522,10 @@ function buildWordSectionTables(acDc,cols,cfg,annotator,{descW,ratingW,notesW,co
     }
     visit(startId,startDepth,false,false,false,childOverride);
     blockNotes.sort((a,b)=>a.num-b.num);
-    const notesParas=blockNotes.length?
-      wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true})+
-      blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:20,keepNext:true})).join(''):'';
-    return wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
-      buildWordTblHeader(cols,hasAnnot,colOpts)+
-      rows.join('')+
-      `</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
-  }).join('');
+    return {rows,notes:blockNotes};
+  });
+  return assembleSplitTable(wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths]),
+    buildWordTblHeader(cols,hasAnnot,colOpts),chunks,totalW,totalCols);
 }
 
 // Revision 70 (Phase G): table-shell XML (borders/grid) extracted out of buildWordRptTable so the
@@ -8674,9 +8707,10 @@ function buildTablesContent(){
   const al=vLbl('ac'),dl=vLbl('dc');
   const acTbl=mkTbl('ac',acCols,al?`${al} Summary`:'AC Summary',acOpts);
   const dcTbl=mkTbl('dc',dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts);
-  const spacerP=wxPar('',{before:120,after:0});
-  if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
-  else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
+  // Revision 83: each section's table is already followed by one empty paragraph (needed so the two tables
+  // don't merge), so no extra spacer paragraph goes between the AC and DC sections.
+  if(acFirst){out.push(acTbl);out.push(dcTbl);}
+  else{out.push(dcTbl);out.push(acTbl);}
   return out.join('');
 }
 
@@ -8717,7 +8751,7 @@ function buildPdsWordTables(ids,cols,dm,cfg,annotator,am,opts){
   const totalCols=1+(hasRating?1:0)+(hasAnnot?1:0)+cols.length;
   const totalW=descW+(hasRating?ratingW:0)+(hasAnnot?notesW:0)+colWidths.reduce((a,b)=>a+b,0);
 
-  return splitSectionGroups(secRoots,childrenOf).map(({startId,childOverride})=>{
+  const chunks=splitSectionGroups(secRoots,childrenOf).map(({startId,childOverride})=>{
     const groupIds=childOverride?[startId,...childOverride.flatMap(subtreeIds)]:subtreeIds(startId);
     const emRem=new Set(),emAdd=new Set();
     const rows=[];
@@ -8740,14 +8774,10 @@ function buildPdsWordTables(ids,cols,dm,cfg,annotator,am,opts){
       rows.push(buildWordDataRow(n,depth,cols,cfg,am,false,opts));
     });
     blockNotes.sort((a,b)=>a.num-b.num);
-    const notesParas=blockNotes.length?
-      wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true})+
-      blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:20,keepNext:true})).join(''):'';
-    return wxTableOpen([descW,...(hasRating?[ratingW]:[]),...(hasAnnot?[notesW]:[]),...colWidths])+
-      buildWordTblHeader(cols,hasAnnot,opts)+
-      rows.join('')+
-      `</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
-  }).join('');
+    return {rows,notes:blockNotes};
+  });
+  return assembleSplitTable(wxTableOpen([descW,...(hasRating?[ratingW]:[]),...(hasAnnot?[notesW]:[]),...colWidths]),
+    buildWordTblHeader(cols,hasAnnot,opts),chunks,totalW,totalCols);
 }
 function buildPdsWordContent(){
   const cfg=reportCfg||defaultPrintCfg();
@@ -8798,9 +8828,10 @@ function buildPdsWordContent(){
   const acTbl=mkTbl(acIds,acCols,al?`${al} Summary`:'AC Summary',acOpts,acDm);
   const dcTbl=mkTbl(dcIds,dcCols,dl?`${dl} Summary`:'DC Summary',dcOpts,dcDm);
   const out=[];
-  const spacerP=wxPar('',{before:120,after:0});
-  if(acFirst){out.push(acTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(dcTbl);}
-  else{out.push(dcTbl);if(acTbl&&dcTbl)out.push(spacerP);out.push(acTbl);}
+  // Revision 83: each section's table is already followed by one empty paragraph (needed so the two tables
+  // don't merge), so no extra spacer paragraph goes between the AC and DC sections.
+  if(acFirst){out.push(acTbl);out.push(dcTbl);}
+  else{out.push(dcTbl);out.push(acTbl);}
   return out.filter(Boolean).join('');
 }
 
@@ -9436,11 +9467,14 @@ async function doWordReportAction(){
   }
   const choice=await showChoiceDialog({
     title:'Word Report',
-    message:`Connected to "${wordDocFileName}". Sync the current analysis to it, load from it, or create a new report?`,
+    message:`Connected to "${wordDocFileName}". Sync the current analysis to it, load from it, create a new report, connect to a different report, or disconnect?`,
     options:[
       {label:'Sync to Report',value:'sync',primary:true},
       {label:'Load from Report',value:'load'},
       {label:'Create New Report…',value:'create'},
+      // Revision 83: switch to another report, or drop the link, without starting or loading an analysis.
+      {label:'Connect Different…',value:'connect'},
+      {label:'Disconnect',value:'disconnect'},
     ]
   });
   if (choice==='sync') {
@@ -9450,6 +9484,11 @@ async function doWordReportAction(){
     await loadFromWordDoc(); // already confirms internally
   } else if (choice==='create') {
     await createNewWordReport();
+  } else if (choice==='connect') {
+    // Keeps the current connection if the file picker is cancelled; on a pick it asks Sync or Load.
+    await connectExistingWordReport();
+  } else if (choice==='disconnect') {
+    if (confirm(`Disconnect from "${wordDocFileName}"? Your analysis stays exactly as it is; it just stops being linked to that file.`)) disconnectWordDoc(true);
   }
 }
 // Revision 68 (Phase 5), item 2.4.2: Save-As a document built from a blank body (see

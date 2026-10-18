@@ -92,7 +92,8 @@ buttons:
 | **↑ ↓** | Reorder. |
 | **Share / Unshare** | When a Previous & Concurrent Modifications analysis exists (§4.4). |
 
-The status badge in a row toggles an item between Existing and Installed (or Removed) when clicked.
+The status badge in a row toggles an item between Existing and Removed (in the Existing / Removed grid) when clicked; the
+keyboard focus stays on the badge, so Tab and Shift+Tab continue to the next or previous cell in the same row.
 
 Above each grid are **filters**: AC / DC, and a **Branch** list (an item and everything beneath it). **Clear
 Filters** appears while a filter is active. The filters are shared between the two grids and are not saved
@@ -274,6 +275,10 @@ With a file connected, **Word Report** offers:
   because unsynced changes are lost). Text you typed in Word into the introduction, compliance statement and general
   notes controls is brought back too.
 - **Create New Report…** — as above.
+- **Connect Different…** — pick another existing report and connect to it instead (then choose Sync or Load, as when
+  connecting for the first time). Cancelling the file dialog leaves the current connection as it was.
+- **Disconnect** — stops linking the analysis to the Word file (after a confirmation). Nothing in the analysis or in the
+  file changes; you can connect again later.
 
 **Important:** Word locks a file while it is open. Close the report in Word before syncing, otherwise the program
 reports that the file is probably open and nothing is written.
@@ -287,8 +292,11 @@ a `.docx` or `.json`.
   without an Internet connection, the program says so and the Word functions are unavailable until it is reloaded online.
 - A Word report holds the full project in hidden form. Anyone who has the `.docx` can extract it, even if the visible
   report shows only part of the data. Send a PDF instead if you do not want to share the project.
-- Opening a different project, or clicking **New**, disconnects the Word file (the program tells you first).
+- Opening a different project, or clicking **New**, disconnects the Word file (the program tells you first). You can also
+  disconnect or switch to another report at any time without touching the analysis (§7.3).
 - The report uses the same column choices, rounding and layout options as **Settings**.
+- In the Word Summary tables, each section (AC and DC) is one table. Word keeps the rows of one group of siblings together
+  where it can and breaks the page between groups; the column headings repeat at the top of each page.
 
 ## 8. Tips and troubleshooting
 

@@ -9,6 +9,23 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.1 — 2026-10-18 (testing build)
+
+Revision 83.
+
+- **Vertical Load Analysis Detail:** row labels (CAPACITY, EXISTING LOAD, NET CHANGE, NEW LOAD, RESERVE) are all capitals,
+  and flush left in Word. In Word the label column is a fixed 12 % of the table, the CB rating column 5.5 % and the Notes
+  column 4.5 %, with the value columns sharing the rest. "Auto" siblings per table is never below 3 (4 for up to 3 value
+  columns, otherwise 3). Empty cells no longer inflate the rows. An Existing item with a net change override but no children now
+  gets its own table, so its New Load and Reserve are reported.
+- **Word Summary tables** (Load Analysis Summary and Power Distribution Summary): each section is one table instead of
+  one per group of siblings. Word keeps a group together where it can and breaks between groups; notes follow their group
+  inside the table; the column headings repeat on each page. One empty paragraph (not two) between the AC and DC sections.
+- **Existing / Removed grid:** after toggling a row's status badge the keyboard focus stays on the badge, so Tab / Shift+Tab move
+  to the next / previous cell in that row.
+- **Word Report dialog (when connected):** new **Connect Different…** and **Disconnect** choices, so you can switch reports or
+  stop syncing without starting or loading an analysis.
+
 ## 0.9.0 — 2026-10-18 (testing build)
 
 First numbered version. Everything built through Revision 78, plus formal versioning. This is the build
