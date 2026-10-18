@@ -5898,6 +5898,17 @@ and fewer columns, so one label width doesn't suit both. Design interview, all f
   one line in all tables; AC leading columns 12/6.5/5 %, DC 20/6.5/5 %; label wraps to at most 3 lines (AC) / 2 lines (DC) in the
   test tree.
 
+### Follow-up 2 (version 0.9.3) — 30 % label state, two-line sibling headers
+
+- **Label column, third state** (`ladSibWordWidths`): 30 % when the section's widest table has **6 or fewer** value columns, 20 %
+  for 7–10, 12 % above 10 (CB 6.5 % and Notes 5 % unchanged). Still decided per section and shared by every table in it, so a small
+  table in a section with a wide one keeps the wide section's label width. Word only; on-screen widths unchanged.
+- **Two-line headers** (`buildLadSiblingWordTable`): the sibling's name (with its Ø tag where it has one) on line one; line two
+  carries `[ref des]`, `(rating A)` and, for an Installed item, "— Installed" (just "Installed" when nothing else precedes it).
+  No line break when there is no extra information. Word only — the on-screen headers are unchanged.
+- Verified: label 30 % at 2 and 6 value columns, 12 % at 12 (AC), parsed XML shows `AC Bus B<br>[B2]`, `AC Bus C<br>Installed`,
+  `DC CB 0<br>[D0] (20 A)`, plain names unbroken; the generated document opens in Word.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

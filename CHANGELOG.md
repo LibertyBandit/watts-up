@@ -9,6 +9,13 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.3 — 2026-10-18 (testing build)
+
+- **Vertical Load Analysis Detail, Word:** the label column is now 30 % of the table when the section's widest table has 6 or
+  fewer value columns (20 % for 7–10, 12 % above 10).
+- **Vertical report headers (Word):** each sibling's header shows the item name on the first line and, only when there is
+  more to say, the reference designator, CB rating and "Installed" on a second line.
+
 ## 0.9.2 — 2026-10-18 (testing build)
 
 Revision 83 follow-up.
