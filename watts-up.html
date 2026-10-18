@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Watts Up — Aircraft Electrical Load Analysis</title>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <!-- Revision 79: pinned with a Subresource Integrity hash, so the browser refuses to run the file if the CDN ever serves anything other than JSZip 3.10.1 -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg-primary:#0d1117;--bg-secondary:#161b22;--bg-elevated:#21262d;
@@ -2398,9 +2399,46 @@ function persist() {
 
 function loadLS() { try{const r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){return null;} }
 
+// Field-type checks for imported/loaded project data. The app builds a lot of its HTML by string
+// interpolation and trusts numbers, ids and enum-like fields (status, AC/DC, ids, note groups…) to be
+// what they should be, so a hand-edited or malicious file could otherwise smuggle markup in through a
+// field the screens don't escape. Free-text fields are escaped where they're drawn; everything else
+// is checked here. Throws a plain-language error naming the problem.
+const IMPORT_ID_RE=/^[A-Za-z0-9_.:-]{1,80}$/;
+function checkImportFields(ns,anLabel) {
+  const bad=(n,what)=>{ throw new Error(`${anLabel}: item "${String((n&&n.description)||'').slice(0,40).replace(/[<>&"]/g,'?')}" has an invalid ${what}.`); };
+  const isId=v=>typeof v==='string'&&IMPORT_ID_RE.test(v);
+  const isNum=v=>v===null||v===undefined||(typeof v==='number'&&isFinite(v));
+  const pow=(n,p,name)=>{
+    if (p===null||p===undefined||typeof p==='number') { if (!isNum(p)) bad(n,name); return; }
+    if (typeof p!=='object') bad(n,name);
+    ['w','var','va','a','pf'].forEach(k=>{ if (!isNum(p[k])) bad(n,name); });
+  };
+  Object.keys(ns).forEach(key=>{
+    const n=ns[key];
+    if (!isId(key)||!isId(n.id)) bad(n,'id');
+    if (n.parentId!==null&&n.parentId!==undefined&&!isId(n.parentId)) bad(n,'parent');
+    if (n.childIds!==undefined&&!(Array.isArray(n.childIds)&&n.childIds.every(isId))) bad(n,'child list');
+    ['sharedPeerId','convGroupId','phaseGroupId'].forEach(f=>{ if (n[f]!==null&&n[f]!==undefined&&!isId(n[f])) bad(n,f); });
+    if (!['existing','removed','new'].includes(n.status)) bad(n,'status');
+    if (!['ac','dc'].includes(n.acDc)) bad(n,'AC/DC setting');
+    if (n.convRole!==null&&n.convRole!==undefined&&n.convRole!=='in'&&n.convRole!=='out') bad(n,'conversion role');
+    ['voltage','efficiency','convPf','phaseOrder','phaseSeq'].forEach(f=>{ if (!isNum(n[f])) bad(n,f); });
+    ['capacity','existingLoad','loadValue','netChangeOverride'].forEach(f=>pow(n,n[f],f));
+    if (n.phase!==null&&n.phase!==undefined&&(typeof n.phase!=='string'||/[<>]/.test(n.phase))) bad(n,'phase label');
+    if (n.ladGroup!==undefined&&!/^(own|[1-4])$/.test(String(n.ladGroup))) bad(n,'report group');
+    ['rowNotes','rowRefs'].forEach(f=>{
+      if (n[f]===undefined) return;
+      if (!Array.isArray(n[f])) bad(n,f);
+      n[f].forEach(o=>{ if (!o||!isId(o.key)||(o.group!==null&&o.group!==undefined&&!/^[a-z]{1,12}$/.test(String(o.group)))) bad(n,f); });
+    });
+  });
+}
 function validateImport(p) {
   if (!p||typeof p!=='object') throw new Error('Not a valid JSON object.');
   if (!p.meta||!p.analyses||!p.analyses.ap) throw new Error('Missing required fields (meta, analyses).');
+  if (p.currentAnalysis!==undefined&&p.currentAnalysis!=='ap'&&p.currentAnalysis!=='pcm') throw new Error('Invalid current analysis.');
+  if (p.meta.vaMethod!==undefined&&p.meta.vaMethod!=='vector'&&p.meta.vaMethod!=='algebraic') throw new Error('Invalid VA calculation method.');
   ['ap','pcm'].forEach(id=>{
     const an=p.analyses[id];
     if (!an) return;
@@ -2410,6 +2448,10 @@ function validateImport(p) {
     Object.values(ns).forEach(n=>{
       if (n.parentId!==null&&!ns[n.parentId]) throw new Error(`Node "${n.description}" has unknown parent.`);
       if (!ALL_TYPES.includes(n.type)) throw new Error(`Unknown node type: "${n.type}".`);
+    });
+    checkImportFields(ns,`"${String(an.label||id).replace(/[<>&"]/g,'?')}" analysis`);
+    [['references','key'],['rowNoteDefs','key'],['generalNotes','key']].forEach(([list,f])=>{
+      (an[list]||[]).forEach(o=>{ if (!o||typeof o[f]!=='string'||!IMPORT_ID_RE.test(o[f])) throw new Error(`"${String(an.label||id).replace(/[<>&"]/g,'?')}" analysis has an invalid ${list} entry.`); });
     });
     const pv=phaseViolations(ns);
     if (pv.length) throw new Error(`"${an.label||id}" analysis has a phase problem — ${pv[0]}.`);
@@ -7573,7 +7615,7 @@ function buildPrintR10(){
   // References section
   const refs=m.references||[];
   const refSec=refs.length?`<div class="rpt-annot-section"><h3>References</h3><ol>${refs.map(r=>{
-    const parts=[r.organization,r.docNumber,r.title?`<em>${esc(r.title)}</em>`:null,r.revision?`Revision ${esc(r.revision)}`:null,r.date?esc(r.date):null];
+    const parts=[r.organization?esc(r.organization):null,r.docNumber?esc(r.docNumber):null,r.title?`<em>${esc(r.title)}</em>`:null,r.revision?`Revision ${esc(r.revision)}`:null,r.date?esc(r.date):null];
     return `<li>${parts.filter(Boolean).join('. ')}.</li>`;
   }).join('')}</ol></div>`:'';
 

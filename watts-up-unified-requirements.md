@@ -5698,7 +5698,7 @@ warning appears in the banner; clean console.
 
 ## 79. Revision 78 — Detail Path Above the Table, Algebraic VA, Report Rounding
 
-Designed 2026-10-18 in a design interview (every answer "as suggested").
+Designed 2026-10-17 in a design interview (every answer "as suggested").
 
 ### 79.1 Distribution path above the detail tables
 In both Load Analysis Detail layouts (Horizontal and Vertical), on screen and in Word, the distribution
@@ -5741,6 +5741,26 @@ breaker, the breaker's Net Change VA is 1,991 (vector) vs 2,000 (algebraic), a r
 bus 1,500, New Load 3,500 and Reserve 16,500 with W and VAR unchanged; the setting persists through
 export/import; an override stays vector-derived; the rounding tables above, the Settings controls (digits vs step
 shown by mode), Reset to Defaults, persistence, report/Word output under fixed rounding; clean console.
+
+## 80. Security Review and Hardening (2026-10-17)
+
+Prompted by a request for an IT summary for network deployment ("Watts Up - IT Summary and Security
+Assessment.md" in the project folder). Review of the single-file app (no executable, no server, no network
+calls of its own; only external load is JSZip from jsDelivr) plus injection testing with booby-trapped
+project files found and fixed:
+- **Print Report References** wrote a reference's organization and document number into the page
+  unescaped (stored script injection from a crafted project file) — both now escaped.
+- **Import validation** (`validateImport` → `checkImportFields`, used for JSON import, Word import and the
+  saved-browser-data restore) now type-checks every item: identifiers (`[A-Za-z0-9_.:-]`, ≤ 80), status,
+  AC/DC, conversion role, numeric fields, power-value objects, phase labels (no `<`/`>`), report-group
+  values, note/reference entries and their ids, the current-analysis and VA-method values. A bad file is
+  refused with a message naming the item and field; the sample project file still loads.
+- **JSZip** script tag now has a Subresource Integrity hash (SHA-384) and `crossorigin="anonymous"`.
+Test method: every string field, then every numeric, status, AC/DC, conversion-role, id, note-key,
+note-group, reference-key and current-analysis field set to markup/script payloads; load through the real
+import path; exercise every screen, every Edit dialog, the Print Report and the three Word builders;
+nothing executes after the fixes. Not done: a formal penetration test, a Content-Security-Policy (the
+IT document lists it as optional hardening).
 
 ## Appendix A: Future Enhancements
 
