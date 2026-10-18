@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.2 — 2026-10-18 (testing build)
+
+Revision 83 follow-up.
+
+- **Vertical Load Analysis Detail, Word column widths:** the label column is now 20 % of the table by default and 12 % when
+  the section's widest table has more than 10 value columns (AC sections usually do; DC sections usually don't, so their item
+  names wrap less). The CB rating column is 6.5 % and the Notes column 5 %, so "(7.5 A)", "(999 A)" and the Notes heading
+  no longer wrap on a portrait page; the Notes heading is 7 pt.
+
 ## 0.9.1 — 2026-10-18 (testing build)
 
 Revision 83.

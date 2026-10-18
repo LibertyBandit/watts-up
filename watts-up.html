@@ -2940,7 +2940,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.1';
+const APP_VERSION='0.9.2';
 const APP_RELEASE_DATE='2026-10-18';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -8955,12 +8955,15 @@ function ladAltActiveKeySet(groupId,cfgSec){
 // of a real dxa measurement, so the table stretches to fill whatever page/section width it lands on.
 function ladSibWordWidths(valueCols,hasAnnot){
   const TOTAL_W=5000;
-  // Revision 83: the label column is a fixed 12 % of the table, the CB-rating (room for "(999 A)") and
-  // Notes columns are fixed shares too, and the value columns share whatever is left equally. Nothing
-  // here depends on how many siblings a table holds, so the leading columns line up from table to table.
-  const labelW=Math.round(TOTAL_W*0.12);
-  const cbW=Math.round(TOTAL_W*0.055);
-  const notesW=hasAnnot?Math.round(TOTAL_W*0.045):0;
+  // Revision 83 (follow-up, 0.9.2): the CB-rating column (room for "(999 A)" in portrait) and the Notes
+  // column (room for its 7 pt header) are fixed shares; the label column is 20 % by default and 12 % when
+  // the section's widest table has more than 10 value columns (AC sections usually do, DC sections —
+  // fewer columns, more children — usually don't, so their item names wrap less); the value columns share
+  // whatever is left equally. Nothing depends on how many siblings one particular table holds, so the
+  // leading columns line up from table to table within a section.
+  const labelW=Math.round(TOTAL_W*(valueCols>10?0.12:0.20));
+  const cbW=Math.round(TOTAL_W*0.065);
+  const notesW=hasAnnot?Math.round(TOTAL_W*0.05):0;
   const numW=Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,valueCols));
   return {labelW,cbW,notesW,numW,hasAnnot};
 }
@@ -8987,7 +8990,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   // Revision 78: the path is its own paragraph above the table (bold italic, 10 pt), kept with the table.
   const pathParaXml=t.path?wxPar(wxRun(t.path.join(' > ')+' >',{b:true,i:true,sz:10}),{before:100,after:40,keepNext:true}):'';
   let h1=wxTc(kp(''),{w:labelW,vm:'start'})+wxTc(kp(''),{w:cbW,vm:'start'});
-  if(hasAnnot) h1+=wxTc(wp(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
+  if(hasAnnot) h1+=wxTc(wp(wxRun('Notes',{b:true,sz:7}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   t.members.forEach(m=>{
     const n=m.node;
     let label=dispName(n)+(n.refDes?` [${n.refDes}]`:'')+(m.rating!=null?` (${fmtRating(m.rating)} A)`:'');

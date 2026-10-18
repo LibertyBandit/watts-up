@@ -5881,6 +5881,23 @@ Summary tables, 15 and 3 rows, rows of all groups in one table); dialog shows th
 keeps the connection, accepting clears it and hides the indicator; focus stays on the badge in the same row and a real Tab moves to
 the next field; console clean. Not testable here: the real file picker behind Connect Different….
 
+### Follow-up (version 0.9.2) — label column by section, CB and Notes columns, Notes header
+
+Prompted by the first real use: AC detail sections have many value columns but few children, DC sections have more children
+and fewer columns, so one label width doesn't suit both. Design interview, all four proposals accepted.
+
+- **Label column** (`ladSibWordWidths`): **20 %** by default, **12 %** when the section's widest table has **more than 10 value
+  columns** (sibling groups × value columns). Decided per section (AC / DC), shared by every table in the section. Because sibling
+  count × column count can only total 10 or fewer, or 12 or more, this is effectively a two-state rule. On-screen widths unchanged.
+- **CB rating 6.5 %** (was 5.5 %) and **Notes 5 %** (was 4.5 %): measured against standard Times New Roman, "(7.5 A)" needs
+  ~21.7 pt and "(999 A)" ~23.5 pt, "Notes" in bold 7 pt ~16.7 pt (plus 6 pt of cell padding); at portrait margins of 0.5 / 0.8 / 1.0 in
+  (usable 540 / 497 / 468 pt) the old shares were marginal or too narrow, the new ones fit all three.
+- **Notes header 7 pt** (was 7.5 pt).
+- **Auto siblings per table** unchanged (4 for up to 3 value columns, otherwise 3; the manual 1–4 setting remains).
+- Verified in Word (portrait, margins 0.5 and 1.0 in; the intermediate 0.8 in case didn't apply): the Notes header and every CB rating on
+  one line in all tables; AC leading columns 12/6.5/5 %, DC 20/6.5/5 %; label wraps to at most 3 lines (AC) / 2 lines (DC) in the
+  test tree.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
