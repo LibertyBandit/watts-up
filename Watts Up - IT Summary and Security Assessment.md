@@ -1,7 +1,7 @@
 # Watts Up — IT Summary and Security Assessment
 
 *Prepared 2026-10-17 for IT review. Describes `watts-up.html` as of the release whose SHA-256 is given in §9;
-recompute the hash for any later copy before relying on this document.*
+recompute the hash for any later copy before relying on this document. Current program version: 0.9.0 (testing build).*
 
 ## 1. Summary for IT
 
@@ -31,9 +31,9 @@ write-protected (§6). Two weaknesses found during this review were fixed (§7).
 |---|---|
 | Deliverable | `watts-up.html` — HTML, CSS and JavaScript in one file; no build step, no other files needed |
 | Runs in | A current desktop browser. Chrome or Edge give the full feature set (direct open/save dialogs); Firefox and Safari work but save by downloading files |
-| Embedded content | A Word report template, stored inside the file as Base64. Reviewed: 31 parts, **no macros, no embedded or ActiveX objects, no external links** |
+| Embedded content | A Word report template, stored inside the file as Base64. Reviewed: 31 parts, **no macros, no embedded or ActiveX objects, no external links**. The user guide is also stored inside the file, as inert text (see §3.4) |
 | Installation | None. Copy the file; open it in a browser |
-| Updates | Manual: replace the file. There is no self-update mechanism |
+| Updates | Manual: replace the file. There is no self-update mechanism and no update check. The program carries a version number (`MAJOR.MINOR.PATCH`, shown in its header); each release is archived and published with a release note giving the version and SHA-256 (see `RELEASING.md`) |
 | Authentication / roles | None. Whoever can open the file can use all of it |
 | Source | A plain-text HTML file; everything the program does can be read in the file itself |
 
@@ -59,14 +59,23 @@ write-protected (§6). Two weaknesses found during this review were fixed (§7).
 |---|---|---|
 | `localStorage` (key `wattsup_v1`) | Automatic save of the current project so it survives a page reload | Per browser profile and per web origin; not encrypted |
 | File System Access API (`showOpenFilePicker`, `showSaveFilePicker`, handle permission) | Open/save project and Word files | Only the files the user picks; a write permission prompt is shown; no folder access; no access outside the pick |
-| Blob downloads / `window.print` | Fallback downloads, printing | Standard browser behaviour |
+| Blob downloads, `blob:` page for the user guide, `window.print` | Fallback downloads, the Help guide tab (built from text inside the file; no script in it), printing | In-memory addresses only; standard browser behaviour |
 | JSZip (from the CDN) | Read/write the zip container inside `.docx` | See §5.2 |
 
 ### 3.4 What it does **not** do
-No `fetch`/XHR/WebSocket calls, no cookies, no `postMessage`, no web workers or service workers, no pop-up
-windows, no geolocation/camera/microphone/clipboard access, no IndexedDB, no `eval`, no remote code loading
-other than JSZip, no execution of anything found in a project or Word file, no access to the network
-file system other than through a file the user chooses.
+No `fetch`/XHR/WebSocket calls, no cookies, no `postMessage`, no web workers or service workers, no geolocation/camera/microphone/clipboard
+access, no IndexedDB, no `eval`, no remote code loading other than JSZip, no execution of anything found in a project or Word
+file, no access to the network file system other than through a file the user chooses.
+
+**One new window, only when the user asks for it.** The **Help** button opens the user guide in a new browser tab. The guide
+is text stored inside `watts-up.html` (an inert `<script type="text/html">` block that the browser never runs). On a click, the
+program fills in its version and date and opens the page from a `blob:` address created in the browser's memory — nothing is
+downloaded or fetched, the page contains **no script**, and it is opened with `noopener` so it has no link back to the program's
+window. No other window, pop-up or redirect is ever opened.
+
+**Version stamping.** Project files and Word reports record the version of the program that made them (`appVersion` in the
+project data; a `WattsUpVersion` Word document property). This is a local text value; it is not sent anywhere. When a file
+made by a *newer* version is opened, the program shows a confirmation prompt.
 
 ## 4. Data handled
 
@@ -116,7 +125,7 @@ with that user's own permissions.
 5. Allow outbound HTTPS to `cdn.jsdelivr.net` (for JSZip) — or host `jszip.min.js` internally as described in §5.2.
 6. Use current, patched Chrome or Edge.
 7. Tell users: project and Word files contain the full project; store and share them accordingly.
-8. Keep a copy of previous versions so a change can be rolled back.
+8. Keep a copy of every released version (`releases\watts-up-X.Y.Z.html`) so a change can be rolled back, and publish a release note with each version's SHA-256. Users can see which version they are running in the program header.
 
 ## 7. Security review performed on 2026-10-17 — findings and fixes
 
@@ -134,6 +143,12 @@ builders to see whether anything would execute.
 After the fixes, none of the test files executed any injected code, and normal project files load and report as before.
 This was a code review and functional test, not a formal penetration test; IT may wish to run its own scan.
 
+**Addendum, 2026-10-18 (version 0.9.0 — versioning and the Help guide).** Reviewed the two additions. (1) The version a file
+claims is used only after it matches a strict `number.number.number` pattern, and is shown in a plain-text confirmation, never
+inserted into a page. (2) The Help page is built only from text constants inside the program (no project data, nothing from a
+file), contains no script, and is opened with `noopener`. Tested: a project file with a malformed or markup-bearing version
+is treated as unstamped; the guide page contains no script element and no unreplaced placeholders.
+
 ## 8. Optional further hardening
 
 - **Host JSZip internally** and remove the CDN dependency (air-gapped or high-assurance networks).
@@ -146,8 +161,8 @@ This was a code review and functional test, not a formal penetration test; IT ma
 
 ## 9. How IT can verify the copy
 
-- **SHA-256 of the reviewed file (`watts-up.html`, 652,429 bytes):**
-  `7e4af3ce7b38d47b4be0c07d27d99cec462355546fdd4fdae22cff97fce7ef44`
+- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.0, 688,517 bytes):**
+  `d86c09341d39717a8b51aa89a0c35a477ddd90b2a686aa8cf4f3fe0ccd1047f3`
   (PowerShell: `Get-FileHash watts-up.html -Algorithm SHA256`). A different value means the file has changed since
   this assessment — a newer release, a modified copy, or a copy whose line endings were converted (for example by
   a source-control checkout on Windows). Ask the owner for the hash of the exact release being deployed.

@@ -22,9 +22,10 @@ the release is `1.0.0`.
 3. **CHANGELOG.md** — add a section for the new version: what changed for users, and which internal
    Revision numbers it contains.
 4. **Requirements document** (`watts-up-unified-requirements.md`) — make sure the new revisions are recorded.
-5. **User guide** — update `Watts Up - User Guide.md` for anything users will notice; make sure it names the new
-   version.
-6. **IT summary** (`Watts Up - IT Summary and Security Assessment.md` and `.docx`) — recompute the SHA-256 and byte
+5. **User guide** — update `Watts Up - User Guide.md` for anything users will notice, then rebuild the copy built into the
+   program: `py -3 tools/build-guide.py` (needs `pip install markdown`). The version and date on the guide fill in by
+   themselves. Regenerate the Word copy too if you keep one (`Watts Up - User Guide.docx`).
+6. **IT summary** (do this last, after every change to `watts-up.html`, including the guide rebuild) (`Watts Up - IT Summary and Security Assessment.md` and `.docx`) — recompute the SHA-256 and byte
    size of `watts-up.html` (`Get-FileHash watts-up.html -Algorithm SHA256`) and update §9. Update any statement
    about network access, pop-ups or storage if the release changed them.
 7. **Commit** (message like `Release 1.0.0`), then **tag**: `git tag -a v1.0.0 -m "Watts Up 1.0.0"`.

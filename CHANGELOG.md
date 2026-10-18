@@ -15,6 +15,8 @@ First numbered version. Everything built through Revision 78, plus formal versio
 being tested before `1.0.0` is declared.
 
 **New in this build**
+- **Help** button on the toolbar opens the user guide in a new tab. The guide is built into the program, so it always
+  matches the version you are running; it can be printed or saved as PDF from the browser.
 - The version number is shown in the program header (hover for the release date), on the printed report, and
   in Word reports (document property `WattsUpVersion`).
 - Saved project files (`.json`) and Word reports now carry the version of the program that made them. Opening a

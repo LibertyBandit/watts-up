@@ -5797,6 +5797,31 @@ prompting for newer; JSON import declined leaves the project untouched, accepted
 version; unstamped files open silently; Word property added once (pid 16) and updated, not duplicated, on a second
 sync; newer-stamped `.docx` declined loads nothing; print header shows the version; clean console.
 
+## 82. Help Button and Embedded User Guide (Version 0.9.0, Phase 2)
+
+Phase 2 of the versioning/user-guide work (see §81). All proposals accepted as made.
+
+- **Source and build.** The guide is written in `Watts Up - User Guide.md` (the only file to edit). `tools/build-guide.py`
+  (needs the Python `markdown` package) renders it to a light, printable HTML page with a contents list and writes it into
+  `watts-up.html` between `USER-GUIDE-BEGIN/END` comment markers, as an inert `<script type="text/html"
+  id="user-guide-html">` block (~31 KB). `{{VERSION}}` / `{{DATE}}` placeholders in the guide are filled in at click time.
+- **Help button.** Toolbar, between Settings and Exit. `openUserGuide()` fills the placeholders, makes a `blob:` address
+  and opens it with a temporary `<a target="_blank" rel="noopener">` click (so no `window.open`, and the guide has no handle
+  back to the program). The address is not revoked, so the guide tab survives a reload. The guide page has no script.
+- **Content.** Getting started, main screen, tabs, building an analysis (types, Edit/Add dialogs, PCM, three-phase,
+  calculations, warnings W1–W6), Settings, saving/opening/exporting, the Word interface, troubleshooting, and versions/help (§9).
+- **Word copies.** `Watts Up - User Guide.docx` (from the same text, version filled in) and a refreshed IT summary `.docx`
+  (scratchpad converter `md2docx.py`, now with a document-title argument).
+- **IT summary.** Replaced "no pop-ups" with the Help-tab description (§3.4), added version stamping text, the `blob:` row
+  in the browser-features table, release/rollback wording, a 2026-10-18 security addendum, and the new SHA-256
+  (688,517 bytes).
+
+Verified: button present and wired; the generated page has the right title, version and date, no unreplaced placeholders and
+no script element; guide renders correctly (contents list, tables, in-page links) at desktop width without horizontal
+scroll; app console clean. The built-in browser pane blocks pop-ups and blob navigation, so the new-tab opening itself was
+checked by capturing the anchor (`href` blob, `target=_blank`, `rel=noopener`) and fetching its content, and the page by
+rendering the same HTML from a temporary file (deleted). **A real click in Chrome/Edge should be confirmed by the user.**
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
