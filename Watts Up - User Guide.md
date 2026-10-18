@@ -213,7 +213,7 @@ the **Word report**, and they are saved with the project.
 | **AC Summary — Columns to Include** | For each group (Capacity, Existing Load, Installed (Removed), Net Change, New Load, Reserve) tick the units to show: A, VA, W, VAR, pf. The **Select All** row toggles a whole unit column. |
 | **DC Summary — Columns to Include** | The same for DC: A and W. |
 | **Show conversion input (IN) side with Net Change only** | By default a converter's input side shows values only under Net Change. Untick to show all columns. |
-| **Vertical Load Analysis Detail — siblings per table** | How many sibling items are placed side by side in one table before continuing in another. *Auto* chooses 4, 3 or 2 depending on the number of value columns. A set of phases is never split. |
+| **Vertical Load Analysis Detail — siblings per table** | How many sibling items are placed side by side in one table before continuing in another. *Auto* chooses 4 siblings for up to 3 value columns and 3 otherwise. A set of phases is never split. |
 | **…treat TRU outputs as siblings** | Show the DC outputs of several TRUs side by side in one table. |
 | **…treat multiple top-level items as siblings** | Show several root items side by side. |
 | **Table for each TRU output / top-level item** | Shown when there are at least two such items. For each one choose *Default* (follow the two options above), *Own table*, or *Group 1–4*; items given the same group number are shown side by side in one table. |

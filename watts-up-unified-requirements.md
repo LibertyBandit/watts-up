@@ -5822,6 +5822,38 @@ scroll; app console clean. The built-in browser pane blocks pop-ups and blob nav
 checked by capturing the anchor (`href` blob, `target=_blank`, `rel=noopener`) and fetching its content, and the page by
 rendering the same HTML from a temporary file (deleted). **A real click in Chrome/Edge should be confirmed by the user.**
 
+## 83. Revision 83 — Vertical Report Formatting, Summary Tables, Grid Focus, Word Connection (version 0.9.1)
+
+Source: "Watts Up Revision 83 (+) – More word formatting - plus.txt" (8 items). Designed 2026-10-18 in a design interview;
+two rounds, every proposal accepted (Q4 reworked by the user, see below). Delivered in two phases.
+
+### Phase 1 — Vertical Load Analysis Detail (items 1.1.1, 1.1.2, 1.1.3, 1.2)
+
+- **Labels (1.1.1).** CAPACITY, EXISTING LOAD, NET CHANGE, NEW LOAD, RESERVE are ALL CAPS in the shared plan
+  (`ladSiblingPlan`), so screen and Word match, and the Word label cell's 340-twip indent is gone (flush left).
+- **Widths (1.1.2).** Word (`ladSibWordWidths`): label column a fixed **12 %** of the table, CB rating **5.5 %**, Notes **4.5 %**
+  (only when the report has notes), value columns share the rest equally — nothing depends on sibling count, so the leading
+  columns line up from table to table; a table with fewer siblings keeps the same column widths and is narrower. This replaces
+  the earlier idea of matching the horizontal report's first three columns (the user's landscape experience: lots of room for
+  values). Measured in Word (landscape, 669.6 pt usable): 80.2 / 36.8 / ≈46 pt per value column, all tables aligned.
+  The on-screen column widths are unchanged (20 % / 6 % / 4 %).
+- **Auto siblings per table.** `ladMaxSiblings`: 4 for up to 3 value columns, **3 otherwise** (was 2 for 5 columns) — never
+  fewer than 3; the same on screen and in Word (shared plan). Sized for a landscape page; on a portrait page numbers may run
+  tight, and the manual 1–4 setting is still available. **If tables are still too wide, the user's next step is a smaller font
+  for tables with more columns** (not done; not needed yet).
+- **Blank cells (1.1.3).** `wxPar` has a new `markSz` option (paragraph-mark size); every cell paragraph of the vertical Word
+  table uses the table's 7.5 pt, so empty cells no longer fall back to the 11 pt default and inflate rows. Verified in Word: blank cell
+  size 7.5.
+- **Parent-only table (1.2).** `ladOverrideLeaf(n)`: an **Existing**, non-Load, non-conversion-input item with a net change
+  override entered and **no children** now counts as a parent in `ladSiblingPlan` (also in the Settings entry list), so it gets
+  a table of CAPACITY, EXISTING LOAD, NET CHANGE, NEW LOAD, RESERVE with no child rows (screen and Word; it can sit among
+  siblings or alone). Horizontal report: no change (the user confirmed it already shows these values).
+
+Verified (test tree: generator, 4 buses, one Existing bus with an override and no children, CBs and loads): the override bus is a
+member of the sibling table with its override as Net Change; alone as the root it yields one table with New Load = existing +
+override and Reserve = capacity − new load, on screen and in Word; Word XML well-formed; first columns identical across tables; no
+empty paragraph without a mark size; labels capitalised, ind 0; Word COM render of the generated document; console clean.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

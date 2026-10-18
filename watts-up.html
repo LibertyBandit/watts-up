@@ -1375,7 +1375,7 @@ the <strong>Word report</strong>, and they are saved with the project.</p>
 </tr>
 <tr>
 <td><strong>Vertical Load Analysis Detail — siblings per table</strong></td>
-<td>How many sibling items are placed side by side in one table before continuing in another. <em>Auto</em> chooses 4, 3 or 2 depending on the number of value columns. A set of phases is never split.</td>
+<td>How many sibling items are placed side by side in one table before continuing in another. <em>Auto</em> chooses 4 siblings for up to 3 value columns and 3 otherwise. A set of phases is never split.</td>
 </tr>
 <tr>
 <td><strong>…treat TRU outputs as siblings</strong></td>
@@ -1553,7 +1553,7 @@ a <code>.docx</code> or <code>.json</code>.</p>
         <div class="section-label" style="margin-top:.75rem">Options</div>
         <div style="display:flex;flex-direction:column;gap:.35rem;font-size:.82rem;margin-top:.3rem">
           <label class="po-chk"><input type="checkbox" id="po-conv-nc-only"> Show conversion input (IN) side with Net Change only</label>
-          <label class="po-chk" title="How many sibling items the Vertical Load Analysis Detail puts side by side in one table before continuing in a new one. Auto: 4 for up to 3 value columns, 3 for 4, 2 for 5. A set of phases is never split."><span>Vertical Load Analysis Detail — siblings per table:</span>
+          <label class="po-chk" title="How many sibling items the Vertical Load Analysis Detail puts side by side in one table before continuing in a new one. Auto: 4 for up to 3 value columns, otherwise 3. A set of phases is never split."><span>Vertical Load Analysis Detail — siblings per table:</span>
             <select id="po-lad-siblings" style="margin-left:.4rem">
               <option value="auto">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
             </select></label>
@@ -3891,10 +3891,16 @@ function renderLoadAnalysisDetail() {
 // not a TRU input, and with children. The walk goes: a set of sibling parents -> its table(s) ->
 // then, for each sibling in order, that sibling's own parent-children as the next set (so where the old
 // report went on to the second sibling, this one goes on to the second sibling's children).
+// Revision 83: an Existing item with a net change override entered but no children still gets its own
+// table (Capacity, Existing Load, Net Change, New Load, Reserve — no child rows), so its New Load and
+// Reserve are reported. Shared by the table plan and the Settings list of entry items.
+function ladOverrideLeaf(n,nodes) {
+  return !!n&&n.status==='existing'&&!isLoad(n.type)&&n.convRole!=='in'&&n.netChangeOverride!=null&&children(n.id,nodes).length===0;
+}
 function ladMaxSiblings(colCount) {
   const v=reportCfg&&reportCfg.ladSiblings;
   if (Number.isInteger(+v)&&+v>=1&&+v<=4) return +v;
-  return colCount<=3?4:colCount===4?3:2;     // "Auto": about 12 value columns per table
+  return colCount<=3?4:3;     // "Auto": 4 siblings up to 3 value columns, otherwise 3 (never fewer)
 }
 // section: 'ac'|'dc'; maxSib: siblings (column groups) allowed per table before it continues in a new one.
 // Returns [{path:[names]|null, members:[{node,marker,rating,unit}], rows:[...], notes:[{num,text}]}].
@@ -3905,7 +3911,7 @@ function ladMaxSiblings(colCount) {
 // in its own column group.
 function ladSiblingPlan(section,maxSib,annotator) {
   const nodes=state.nodes;
-  const isParent=n=>!!n&&n.acDc===section&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&children(n.id,nodes).length>0;
+  const isParent=n=>!!n&&n.acDc===section&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&(children(n.id,nodes).length>0||ladOverrideLeaf(n,nodes));
   const parentKids=n=>children(n.id,nodes).filter(isParent);
   const isPhaseMate=n=>!!n&&!!n.phase&&!n.convRole&&!!n.phaseGroupId;
   // Groups a list of nodes into units: phase-mates of one group together (in group order, at the place
@@ -3987,9 +3993,9 @@ function ladSiblingPlan(section,maxSib,annotator) {
         rows.push(row);
       });
     });
-    if (anyNotNew) rows.push({type:'value',group:'nc',label:'Net Change',srcs:mnodes.map(m=>m.status!=='new'?m._netChange:undefined),marker:groupMarker('nc')});
-    rows.push({type:'value',group:'newload',label:'New Load',srcs:mnodes.map(m=>m._newLoad),marker:groupMarker('newload')});
-    rows.push({type:'value',group:'rem',label:'Reserve',srcs:mnodes.map(m=>m._remainingCapacity),marker:groupMarker('rem')});
+    if (anyNotNew) rows.push({type:'value',group:'nc',label:'NET CHANGE',srcs:mnodes.map(m=>m.status!=='new'?m._netChange:undefined),marker:groupMarker('nc')});
+    rows.push({type:'value',group:'newload',label:'NEW LOAD',srcs:mnodes.map(m=>m._newLoad),marker:groupMarker('newload')});
+    rows.push({type:'value',group:'rem',label:'RESERVE',srcs:mnodes.map(m=>m._remainingCapacity),marker:groupMarker('rem')});
     blockNotes.sort((a,b)=>a.num-b.num);
     return {path:pathFor(mnodes[0],units.some(u=>u.length>1)),members:infos,rows,notes:blockNotes};
   }
@@ -8248,13 +8254,14 @@ function wxRun(text,{b,i,sz,color}={}){
   return `<w:r>${rPr?`<w:rPr>${rPr}</w:rPr>`:''}<w:t xml:space="preserve">${wxEsc(text)}</w:t></w:r>`;
 }
 
-function wxPar(inner,{style,ind,before=40,after=40,jc,keepNext}={}){
+function wxPar(inner,{style,ind,before=40,after=40,jc,keepNext,markSz}={}){
   const pPr=[
     style?`<w:pStyle w:val="${style}"/>`:'',
     keepNext?'<w:keepNext/>':'',
     `<w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>`,
     ind!=null?`<w:ind w:left="${ind}"/>`:'',
     jc?`<w:jc w:val="${jc}"/>`:'',
+    markSz?`<w:rPr><w:sz w:val="${wxHpt(markSz)}"/><w:szCs w:val="${wxHpt(markSz)}"/></w:rPr>`:'',
   ].join('');
   return `<w:p><w:pPr>${pPr}</w:pPr>${inner||''}</w:p>`;
 }
@@ -8917,21 +8924,20 @@ function ladAltActiveKeySet(groupId,cfgSec){
 // of a real dxa measurement, so the table stretches to fill whatever page/section width it lands on.
 function ladSibWordWidths(valueCols,hasAnnot){
   const TOTAL_W=5000;
-  // The Rating cell only needs room for a parenthesized amperage like "(999 A)" (Revision 72
-  // Follow-Up (2)); the Notes column is only present when there are notes.
-  const cbW=Math.round(TOTAL_W*0.04);
-  const notesW=hasAnnot?Math.round(TOTAL_W*0.04):0;
-  // Floors each value column at the same 7-character minimum used elsewhere (see ladAltWordColWidths'
-  // old comment / pctW) so many sibling groups can't squeeze numbers into wrapping.
-  const minNumW=pctW(Math.ceil(7*7.5*9.5)+160,9360);
-  const labelWant=Math.round(TOTAL_W*0.20);
-  const numW=Math.max(minNumW,Math.floor((TOTAL_W-labelWant-cbW-notesW)/Math.max(1,valueCols)));
-  // The label column takes whatever the value columns leave (never below 12%).
-  const labelW=Math.max(Math.round(TOTAL_W*0.12),TOTAL_W-cbW-notesW-numW*valueCols);
+  // Revision 83: the label column is a fixed 12 % of the table, the CB-rating (room for "(999 A)") and
+  // Notes columns are fixed shares too, and the value columns share whatever is left equally. Nothing
+  // here depends on how many siblings a table holds, so the leading columns line up from table to table.
+  const labelW=Math.round(TOTAL_W*0.12);
+  const cbW=Math.round(TOTAL_W*0.055);
+  const notesW=hasAnnot?Math.round(TOTAL_W*0.045):0;
+  const numW=Math.floor((TOTAL_W-labelW-cbW-notesW)/Math.max(1,valueCols));
   return {labelW,cbW,notesW,numW,hasAnnot};
 }
 function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   const HSZ=7.5;
+  // Empty cells and paragraph marks take the table's own text size (an empty paragraph otherwise falls
+  // back to the 11 pt default and inflates the row).
+  const wp=(inner,o)=>wxPar(inner,{markSz:HSZ,...o});
   const nm=t.members.length, nc=cols.length;
   // Every table in a section uses the column widths of the widest one (maxMembers sibling groups), so a
   // table with fewer siblings lines up with the first siblings of the wider ones and is just narrower:
@@ -8944,38 +8950,38 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   const totalW=labelW+cbW+(hasAnnot?notesW:0)+numW*nm*nc;
   const sets={cap:ladAltActiveKeySet('cap',cfgSide),exload:ladAltActiveKeySet('exload',cfgSide),nc:ladAltActiveKeySet('nc',cfgSide),
     newload:ladAltActiveKeySet('newload',cfgSide),rem:ladAltActiveKeySet('rem',cfgSide),added:ladAltActiveKeySet('added',cfgSide)};
-  const kp=(inner)=>wxPar(inner,{before:0,after:0,keepNext:true});
+  const kp=(inner)=>wp(inner,{before:0,after:0,keepNext:true});
 
   // ── header: two rows — sibling labels over their value columns, then the unit labels repeated
   // Revision 78: the path is its own paragraph above the table (bold italic, 10 pt), kept with the table.
   const pathParaXml=t.path?wxPar(wxRun(t.path.join(' > ')+' >',{b:true,i:true,sz:10}),{before:100,after:40,keepNext:true}):'';
   let h1=wxTc(kp(''),{w:labelW,vm:'start'})+wxTc(kp(''),{w:cbW,vm:'start'});
-  if(hasAnnot) h1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
+  if(hasAnnot) h1+=wxTc(wp(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   t.members.forEach(m=>{
     const n=m.node;
     let label=dispName(n)+(n.refDes?` [${n.refDes}]`:'')+(m.rating!=null?` (${fmtRating(m.rating)} A)`:'');
     if(n.status==='new') label+=' — Installed';
-    let inner=wxPar(wxRun(label,{b:true,sz:HSZ+1}),{before:20,after:m.marker?0:20,jc:'center',keepNext:true});
-    if(m.marker) inner+=wxPar(wxRun(`(Note: ${m.marker})`,{sz:6.5}),{before:0,after:20,jc:'center',keepNext:true});
+    let inner=wp(wxRun(label,{b:true,sz:HSZ+1}),{before:20,after:m.marker?0:20,jc:'center',keepNext:true});
+    if(m.marker) inner+=wp(wxRun(`(Note: ${m.marker})`,{sz:6.5}),{before:0,after:20,jc:'center',keepNext:true});
     h1+=wxTc(inner,{w:numW*nc,span:nc,leftBdr:true});
   });
   let h2=wxTc(kp(''),{w:labelW,vm:'cont',bottomBdr:true})+wxTc(kp(''),{w:cbW,vm:'cont',bottomBdr:true});
   if(hasAnnot) h2+=wxTc(kp(''),{w:notesW,vm:'cont',leftBdr:true,bottomBdr:true});
   t.members.forEach(()=>cols.forEach((c,i)=>{
-    h2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0,bottomBdr:true});
+    h2+=wxTc(wp(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0,bottomBdr:true});
   }));
   const header=wxTr(h1,{h:280,hdr:true})+wxTr(h2,{h:280,hdr:true});
 
   // ── body
-  const blank=(first)=>wxTc(wxPar('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:first});
+  const blank=(first)=>wxTc(wp('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:first});
   const blanks=()=>cols.map((c,i)=>blank(i===0)).join('');
-  const valCell=(val,c,i,isNeg)=>wxTc(wxPar(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
-  const markerCell=(marker)=>hasAnnot?wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
+  const valCell=(val,c,i,isNeg)=>wxTc(wp(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
+  const markerCell=(marker)=>hasAnnot?wxTc(wp(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
   const ratingCell=(n,sz)=>{
     const a=(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?fmtRating(n.capacity.a):null;
-    return wxTc(wxPar(a!=null?wxRun(`(${a} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
+    return wxTc(wp(a!=null?wxRun(`(${a} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
   };
-  const bannerRow=(label,bold)=>wxTr(wxTc(wxPar(wxRun(label,bold?{b:true,sz:7.5}:{i:true,sz:7.5}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
+  const bannerRow=(label,bold)=>wxTr(wxTc(wp(wxRun(label,bold?{b:true,sz:7.5}:{i:true,sz:7.5}),{ind:200,before:10,after:10,keepNext:true}),{w:totalW,span:totalCols>1?totalCols:undefined}));
   const rows=[];
   t.rows.forEach(r=>{
     if(r.type==='banner'){ rows.push(bannerRow(r.status==='removed'?'Removed':'Installed',r.status==='new')); return; }
@@ -8990,7 +8996,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
           return valCell(val,c,i,isNeg);
         }).join('');
       }).join('');
-      rows.push(wxTr(wxTc(wxPar(wxRun(r.label,{sz:8.5}),{ind:340,before:20,after:20,keepNext:true}),{w:labelW})+
+      rows.push(wxTr(wxTc(wp(wxRun(r.label,{sz:8.5}),{ind:0,before:20,after:20,keepNext:true}),{w:labelW})+
         wxTc(kp(''),{w:cbW})+markerCell(r.marker)+cells));
       return;
     }
@@ -9012,7 +9018,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
         return valCell(val,c,i,isNeg);
       }).join('');
     }
-    rows.push(wxTr(wxTc(wxPar(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW})+ratingCell(k,7.5)+markerCell(r.marker)+cells));
+    rows.push(wxTr(wxTc(wp(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW})+ratingCell(k,7.5)+markerCell(r.marker)+cells));
   });
 
   const notesParas=t.notes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
@@ -9625,7 +9631,7 @@ function fillLadEntryList() {
   box.innerHTML='';
   if (!state) return;
   const nodes=state.nodes;
-  const items=preOrder(state.rootIds,nodes).map(id=>nodes[id]).filter(n=>n&&ladEntryKind(n)&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&children(n.id,nodes).length>0);
+  const items=preOrder(state.rootIds,nodes).map(id=>nodes[id]).filter(n=>n&&ladEntryKind(n)&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&(children(n.id,nodes).length>0||ladOverrideLeaf(n,nodes)));
   if (items.length<2) return;     // nothing to choose between
   const head=document.createElement('div'); head.className='section-label'; head.style.cssText='margin-top:.4rem;font-size:.7rem';
   head.textContent='Vertical Load Analysis Detail — table for each TRU output / top-level item';
