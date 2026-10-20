@@ -1296,7 +1296,9 @@ content.</p>
 <p>Items that exist in both can be <strong>shared</strong>: a shared item keeps its key fields in step in both analyses, and the
 Active Project's existing load for such an item can be taken from the other analysis' new load. Use <strong>Share</strong> /
 <strong>Unshare</strong> in a grid for items, and the Share buttons on the Document tab for references and notes.
-A shared item (or a shared ancestor) cannot be deleted until it is unshared.</p>
+A shared item (or a shared ancestor) cannot be deleted until it is unshared. For a shared TRU, input phases you add or
+remove in its Edit dialog are added or removed in the other analysis as well (after a confirmation); a new input phase needs a
+shared bus to sit under.</p>
 <h3 id="45-three-phase-systems">4.5 Three-phase systems</h3>
 <p>An AC item can be split into up to three <strong>phase-mates</strong> so the phases of one real item stay together in the
 reports. In <strong>Edit Item</strong>, tick <strong>Multi-phase</strong> on an eligible AC item (generators, buses, feeders and so on; not the
@@ -1495,6 +1497,10 @@ a <code>.docx</code> or <code>.json</code>.</p>
 <tr>
 <td>A number you typed "disappeared"</td>
 <td>If it began with <code>=</code> and contained anything but digits and <code>+ - * / . ( )</code>, it is left as typed; check for stray letters or commas.</td>
+</tr>
+<tr>
+<td>"This file was repaired as it opened"</td>
+<td>An older version let a shared TRU's phases get out of step between the two analyses. The program linked the matching phases (or un-shared that item) so the file could open. Save the file again to keep the repair.</td>
 </tr>
 <tr>
 <td>Work is missing after reopening the browser</td>
@@ -2723,7 +2729,55 @@ function migrateLegacy(p) {
     // validateImport.
     syncAllPhaseGroups(an.nodes);
   });
+  repairPartlySharedGroups(p);
   installAnalysisView(p);
+}
+// Revision 83 follow-up (0.9.4): a phase group (including a TRU's input phases) must be shared with the
+// other analysis as a whole or not at all. Earlier versions let input phases be added to a shared TRU on
+// one side only, so some files hold groups that are only partly linked — and the loader refused them.
+// Here the unlinked phases are linked to the matching unlinked phases (same label, same type, under the
+// twin of the same parent) of the other side's group; if that doesn't make the pair whole, the group is
+// un-linked on both sides (both copies stay, as with Unshare). What was done is kept in
+// importRepairNotes for the caller to tell the user.
+let importRepairNotes=[];
+function repairPartlySharedGroups(p) {
+  importRepairNotes=[];
+  const ap=p&&p.analyses&&p.analyses.ap, pc=p&&p.analyses&&p.analyses.pcm;
+  if (!ap||!pc||!ap.nodes||!pc.nodes) return;
+  const groupsOf=an=>{ const g={}; Object.values(an.nodes).forEach(n=>{ if (n&&n.phase&&n.phaseGroupId) (g[n.phaseGroupId]=g[n.phaseGroupId]||[]).push(n); }); return g; };
+  const nm=m=>`"${String(m.description||'unnamed').replace(/[<>&"]/g,'?').slice(0,60)}"`;
+  const pass=(from,to)=>{
+    Object.values(groupsOf(from)).forEach(ms=>{
+      if (ms.length<2) return;
+      const lk=m=>!!(m.sharedPeerId&&to.nodes[m.sharedPeerId]);
+      const linked=ms.filter(lk), loose=ms.filter(m=>!lk(m));
+      if (!linked.length||!loose.length) return;
+      const H=to.nodes[linked[0].sharedPeerId].phaseGroupId;
+      const cands=Object.values(to.nodes).filter(c=>c.phase&&c.phaseGroupId===H&&!c.sharedPeerId);
+      loose.forEach(m=>{
+        const par=m.parentId?from.nodes[m.parentId]:null;
+        const c=cands.find(c=>c.phase===m.phase&&c.type===m.type&&(!par||!par.sharedPeerId||par.sharedPeerId===c.parentId));
+        if (c) { m.sharedPeerId=c.id; c.sharedPeerId=m.id; cands.splice(cands.indexOf(c),1); }
+      });
+      const there=Object.values(to.nodes).filter(c=>c.phaseGroupId===H);
+      if (ms.every(lk)&&there.every(c=>c.sharedPeerId&&from.nodes[c.sharedPeerId])) {
+        importRepairNotes.push(`the phases of ${nm(ms[0])} were only partly shared with the other analysis, so they were linked up by phase label`);
+      } else {
+        ms.forEach(m=>{ const t=m.sharedPeerId&&to.nodes[m.sharedPeerId]; if (t&&t.sharedPeerId===m.id) t.sharedPeerId=null; m.sharedPeerId=null; });
+        there.forEach(c=>{ const t=c.sharedPeerId&&from.nodes[c.sharedPeerId]; if (t&&t.sharedPeerId===c.id) t.sharedPeerId=null; c.sharedPeerId=null; });
+        importRepairNotes.push(`the phases of ${nm(ms[0])} were only partly shared with the other analysis and didn't match up, so that item is no longer shared (both copies remain)`);
+      }
+    });
+  };
+  pass(ap,pc); pass(pc,ap);
+}
+// Tells the user about any repair repairPartlySharedGroups made while the file just opened was prepared.
+function reportImportRepairs() {
+  if (!importRepairNotes.length) return;
+  const NL=String.fromCharCode(10);
+  const notes=importRepairNotes.slice(0,6).map(t=>'• '+t).join(NL)+(importRepairNotes.length>6?NL+'• …and '+(importRepairNotes.length-6)+' more':'');
+  importRepairNotes=[];
+  alert('This file was repaired as it opened:'+NL+notes+NL+NL+'Save it again to keep the repair.');
 }
 // ── CALCULATION ──────────────────────────────────────────────────────────────
 function calcNC(node,nodes) {
@@ -2940,8 +2994,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.3';
-const APP_RELEASE_DATE='2026-10-18';
+const APP_VERSION='0.9.4';
+const APP_RELEASE_DATE='2026-10-19';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -3100,6 +3154,7 @@ function doImport(file) {
       migrateLegacy(p);validateImport(p);
       if (!confirmFileVersion(p)) return;
       state=p;reportCfg=p.reportCfg||defaultPrintCfg();recalc();renderAll();persist();
+      reportImportRepairs();
     } catch(err){alert('Import failed: '+err.message);}
   };
   r.readAsText(file);
@@ -3165,6 +3220,7 @@ async function importDocx(file){
       }
     }
     state=parsed;reportCfg=parsed.reportCfg||defaultPrintCfg();recalc();renderAll();persist();
+    reportImportRepairs();
   }catch(err){alert('Import failed: '+err.message);}
 }
 
@@ -4020,9 +4076,19 @@ function ladSiblingPlan(section,maxSib,annotator) {
     });
     if (cur.length) chunks.push(cur);
     chunks.forEach(c=>tables.push(buildTable(c)));
+    // Revision 83 follow-up (0.9.4): a phase set's children come from every phase of it, but only true
+    // phase-mate groups of children (a unit of several) belong side by side in one table. Any other child
+    // keeps to a set of its own parent's children: otherwise a breaker under the phase C feeder landed in
+    // the table headed by the phase B feeder's path (the path shows only the first member's parents).
     units.forEach(unit=>{
-      const kids=unitsOf(unit.flatMap(m=>parentKids(m)));
-      if (kids.length) processSet(kids);
+      const kidUnits=unitsOf(unit.flatMap(m=>parentKids(m)));
+      const sets=new Map();
+      kidUnits.forEach(u=>{
+        const key=u.length>1?'group':'parent:'+u[0].parentId;
+        if (!sets.has(key)) sets.set(key,[]);
+        sets.get(key).push(u);
+      });
+      sets.forEach(set=>processSet(set));
     });
   }
   // Entry sets: eligible parents whose own parent isn't in this section (or that have none). Entries
@@ -7260,6 +7326,12 @@ function doEditSaveTru(n) {
   const keepSlots=efTruAdditionalParents.filter(s=>s.parentId);
   const keptNodeIds=new Set();
   const activeInputNodes=[primary];
+  // Revision 83 follow-up (0.9.4): a shared TRU's input phases are added and removed on both sides, so the
+  // pair never ends up partly shared. Planned (and refused, if it can't be done) before anything changes.
+  const mirror=truMirrorPlan(primary,keepSlots,existingAdditional);
+  if (mirror&&mirror.error) { alert(mirror.error); return; }
+  if (mirror&&(mirror.newSlots.length||mirror.removed.length)&&!confirm(mirror.confirmText)) return;
+  const createdInputs=[];
   keepSlots.forEach((slot,i)=>{
     let node;
     if (slot.nodeId&&state.nodes[slot.nodeId]) {
@@ -7269,6 +7341,7 @@ function doEditSaveTru(n) {
       const newId=addNode(slot.parentId,{type:'TRU',status,convRole:'in',convGroupId:primary.convGroupId,
         acDc:CONV_IN_ACDC.TRU,voltage:inV,netChangeOverride:null});
       node=state.nodes[newId];
+      createdInputs.push(node);
     }
     node.description=aware?primaryDesc:(slot.description||'');
     node.refDes=aware?primaryRefDes:(slot.refDes||'');
@@ -7284,7 +7357,9 @@ function doEditSaveTru(n) {
     if (oldNode.sharedPeerId) {
       const otherId=state.currentAnalysis==='ap'?'pcm':'ap';
       const peer=state.analyses[otherId]&&state.analyses[otherId].nodes[oldNode.sharedPeerId];
-      if (peer) peer.sharedPeerId=null;
+      // A shared TRU loses the phase on both sides; otherwise (no usable plan) just un-link the twin.
+      if (peer&&mirror&&mirror.removed.includes(oldNode)) withOtherAnalysis(()=>{ detachChild(peer.id,peer.parentId); delete state.nodes[peer.id]; });
+      else if (peer) peer.sharedPeerId=null;
     }
     detachChild(oldNode.id,oldNode.parentId);
     delete state.nodes[oldNode.id];
@@ -7357,7 +7432,60 @@ function doEditSaveTru(n) {
     state.nodes[mNode].rowRefs=collectEfRefs();
   }
 
-  recalc();persist();renderAll();closeModal();
+  recalc();
+  // The new input phases have their labels now (recalc assigns them), so their twins can be made.
+  if (mirror) { truMirrorApply(mirror,primary,createdInputs,activeInputNodes); recalc(); }
+  persist();renderAll();closeModal();
+}
+// Revision 83 follow-up (0.9.4): input phases added to or removed from a SHARED TRU in the Edit dialog
+// are added/removed on the other side too (before, only the side being edited changed, leaving the TRU
+// "partly shared" — which the file loader rejects). Returns null (TRU not shared / no usable twin),
+// {error} when it can't be done, or the plan {newSlots,removed,pPrimary,pGroup,n0,confirmText,...}.
+function truMirrorPlan(primary,keepSlots,existingAdditional) {
+  if (!primary.sharedPeerId) return null;
+  const otherId=otherAnalysisId(), otherAn=state.analyses[otherId];
+  const otherNodes=otherAn&&otherAn.nodes;
+  const pPrimary=otherNodes&&otherNodes[primary.sharedPeerId];
+  if (!pPrimary) return null;
+  const pGroup=findConversionGroup(pPrimary,otherNodes);
+  if (!pGroup) return null;
+  const newSlots=keepSlots.filter(sl=>!(sl.nodeId&&state.nodes[sl.nodeId]));
+  const keptIds=new Set(keepSlots.map(sl=>sl.nodeId).filter(Boolean));
+  const removed=existingAdditional.filter(o=>!keptIds.has(o.id));
+  const label=otherAn.label||'the other analysis';
+  for (const sl of newSlots) {
+    const par=state.nodes[sl.parentId];
+    const parPeer=par&&par.sharedPeerId?otherNodes[par.sharedPeerId]:null;
+    if (!parPeer) return {error:`This TRU is shared with ${label}, so a new input phase needs a shared bus to sit under there — "${par?dispName(par):'the chosen bus'}" isn't shared. Share it first (or unshare the TRU).`};
+    if (pGroup.inputs.some(i=>i.parentId===parPeer.id)) return {error:`The matching bus in ${label} already feeds an input of this TRU there.`};
+  }
+  const parts=[];
+  if (newSlots.length) parts.push(`${newSlots.length} new input phase${newSlots.length>1?'s':''} will also be added`);
+  if (removed.length) parts.push(`${removed.length} input phase${removed.length>1?'s':''} will also be removed`);
+  return {otherId,otherAn,otherNodes,pPrimary,pGroup,newSlots,removed,n0:pGroup.inputs.length,
+    confirmText:`This TRU is shared with ${label}: ${parts.join(' and ')} there. Continue?`};
+}
+function truMirrorApply(m,primary,created,activeInputs) {
+  const {otherNodes,pPrimary}=m;
+  const survivors=Object.values(otherNodes).filter(i=>i.convRole==='in'&&i.convGroupId===pPrimary.convGroupId);
+  const n1=survivors.length+created.length;
+  // The TRU's totals carry on, so each input's per-phase share changes as the number of inputs does.
+  const scale=m.n0/n1;
+  const scalePow=q=>{ if (!q) return q; const r={...q}; ['a','va','w','var'].forEach(k=>{ if (typeof r[k]==='number') r[k]*=scale; }); return r; };
+  if (n1!==m.n0) survivors.forEach(i=>{ i.existingLoad=scalePow(i.existingLoad); });
+  created.forEach(node=>{
+    const par=state.nodes[node.parentId];
+    const parPeer=par&&par.sharedPeerId?otherNodes[par.sharedPeerId]:null;
+    if (!parPeer) return;
+    const twinId=withOtherAnalysis(()=>addNode(parPeer.id,{type:'TRU',description:node.description,refDes:node.refDes,
+      status:pPrimary.status,acDc:node.acDc,voltage:node.voltage,sharedPeerId:node.id,convRole:'in',convGroupId:pPrimary.convGroupId,
+      efficiency:node.efficiency,convPf:node.convPf,phaseOrder:node.phaseOrder,netChangeOverride:null,
+      capacity:node.capacity?{...node.capacity}:null,existingLoad:pPrimary.existingLoad?{...pPrimary.existingLoad}:mkPow(0,0,0,0,1),
+      phase:node.phase||null,phaseGroupId:node.phase?pPrimary.phaseGroupId:null,phaseSeq:node.phaseSeq||0}));
+    node.sharedPeerId=twinId;
+  });
+  // The inputs' order follows the edited side's.
+  activeInputs.forEach(i=>{ const t=i.sharedPeerId&&otherNodes[i.sharedPeerId]; if (t) { t.phaseOrder=i.phaseOrder; t.phaseSeq=i.phaseSeq||0; } });
 }
 
 function doEditSave() {
@@ -10121,6 +10249,7 @@ async function runLaunchDialog(){
       try{validateImport(saved);state=saved;reportCfg=saved.reportCfg||defaultPrintCfg();}
       catch(e){state=freshState();reportCfg=null;}
       collapsed=new Set();recalc();renderAll();
+      reportImportRepairs();
       return;
     }
   }

@@ -5909,6 +5909,45 @@ and fewer columns, so one label width doesn't suit both. Design interview, all f
 - Verified: label 30 % at 2 and 6 value columns, 12 % at 12 (AC), parsed XML shows `AC Bus B<br>[B2]`, `AC Bus C<br>Installed`,
   `DC CB 0<br>[D0] (20 A)`, plain names unbroken; the generated document opens in Word.
 
+## 84. Version 0.9.4 — Shared-TRU Phase Add/Remove, Load-Time Repair, Vertical Report Phase Tables
+
+Two problems reported 2026-10-19 on a real project (Bombardier, "GEX SN 9090") saved by 0.9.3 that would not reopen. Diagnosed
+with a loop built first: (a) the loader itself — `migrateLegacy` + `validateImport` on the saved JSON/Word file — which went red with
+"the phases of "TRU 1 (ØA)" are only partly shared with the other analysis"; (b) a vertical-report scan for tables whose members have
+different parents without being phase-mates of each other, which found "AC Generator 3 > AC Bus 3 (ØB) > AC 3 Cabin Feed (ØB)"
+holding three phase-B breakers and "Fwd Lav Lights (ØC)" (under the phase C feeder). Regression loops: `tools/regression-checks.js`.
+
+### 84.1 Cause and fix — TRU input phases on a shared TRU
+- **Cause.** `doEditSaveTru` created and deleted additional TRU inputs (the "+ Parent" phases) on the current analysis only; a new
+  input had no twin, a removed shared input merely un-linked its twin (which stayed behind). The TRU became "partly shared", which
+  §76's import rule rejects; and Share can't repair it (the primary is already shared). In the user's file the phases had been added
+  on both sides separately, so every TRU (TRU 1, TRU 2, Completion TRU) had only its phase A linked.
+- **Fix.** `truMirrorPlan` / `truMirrorApply`: for a shared TRU, new input phases are created as twins in the other analysis (under the
+  twin of the chosen bus, in the twin group, same label/order; per-phase Existing Load of every twin input rescaled so the totals
+  carry on, as the dialog does on its own side); removed inputs are removed on both sides. Planned and refused up front when the new
+  bus has no twin, or the twin bus already feeds an input of that TRU; one confirmation names what happens on the other side.
+  Works from either analysis.
+- **Repair on load.** `repairPartlySharedGroups` (end of `migrateLegacy`): for each phase group (TRU input phases included) that is
+  only partly linked, link the unlinked phases to the unlinked phases of the other side's group with the same label and type under
+  the twin of the same parent; if that doesn't make both groups whole, un-link the group on both sides (both copies stay). The
+  user is told (`reportImportRepairs`: JSON, Word, Resume Previous) and must save again. Applied to the user's Word report:
+  TRU 1, TRU 2 and Completion TRU relinked by label, zero phase violations.
+
+### 84.2 Cause and fix — vertical report mixes phases
+- **Cause.** `ladSiblingPlan`'s `processSet` built the next level's set from the children of every member of a unit, so lone
+  items under different phases' parents (not phase-mates of each other) landed in one table whose path header names only the first
+  member's parents.
+- **Fix.** Children now go into a set per parent, except true phase-mate groups of children (a unit of several), which stay together
+  in one table across the phases as before. Both the screen and the Word report use the plan.
+
+### 84.3 Verification
+Loops went red then green: adding phases B and C to a shared TRU through the real Edit dialog (both analyses `A,B,C` all linked,
+no phase violations, twin parents A/B/C, total per-phase Existing Load equal on both sides), removing C (both `A,B`, output still
+linked), adding C again from PCM; a damaged (B and C unlinked) file repaired on load; the vertical scan on a synthetic tree
+(`CB B1, CB B2` under ØB and `CB C1` under ØC now separate tables, a three-phase "Sub Bus" group still one table). The user's real
+saved Word report loads (3 repairs reported), 0 violations, no mixed vertical tables; the earlier JSON export (where the two sides
+had different phase counts) loads with its TRUs un-shared. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

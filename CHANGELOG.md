@@ -9,6 +9,20 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.4 — 2026-10-19 (testing build)
+
+Fixes.
+
+- **Shared TRU, adding or removing input phases:** in the Edit dialog, adding an input phase to a TRU that is shared with the
+  other analysis now adds the matching phase there too (and removing one removes it there too), after a confirmation. Before, only
+  the side being edited changed, which left the TRU "partly shared" and made the saved file impossible to reopen.
+- **Opening a file with a partly shared TRU (or other phase group):** instead of refusing, the program links the unlinked phases to
+  their matching phases (same label, same bus) in the other analysis, or — when they don't match up — un-shares that item, and says
+  what it did. Save the file again to keep the repair.
+- **Vertical Load Analysis Detail:** a breaker under the phase C feeder no longer appears in the table headed by the phase B feeder's
+  path. Items under different phases' parents now get a table of their own (with their own path); true phase groups still sit side
+  by side in one table.
+
 ## 0.9.3 — 2026-10-18 (testing build)
 
 - **Vertical Load Analysis Detail, Word:** the label column is now 30 % of the table when the section's widest table has 6 or

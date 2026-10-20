@@ -172,7 +172,9 @@ content.
 Items that exist in both can be **shared**: a shared item keeps its key fields in step in both analyses, and the
 Active Project's existing load for such an item can be taken from the other analysis' new load. Use **Share** /
 **Unshare** in a grid for items, and the Share buttons on the Document tab for references and notes.
-A shared item (or a shared ancestor) cannot be deleted until it is unshared.
+A shared item (or a shared ancestor) cannot be deleted until it is unshared. For a shared TRU, input phases you add or
+remove in its Edit dialog are added or removed in the other analysis as well (after a confirmation); a new input phase needs a
+shared bus to sit under.
 
 ### 4.5 Three-phase systems
 An AC item can be split into up to three **phase-mates** so the phases of one real item stay together in the
@@ -307,6 +309,7 @@ a `.docx` or `.json`.
 | Word functions say JSZip is not loaded | Reload the page while online. |
 | Warning W3 on an item | The new load exceeds the capacity. Check the capacity entry, the loads below it, or any override. |
 | A number you typed "disappeared" | If it began with `=` and contained anything but digits and `+ - * / . ( )`, it is left as typed; check for stray letters or commas. |
+| "This file was repaired as it opened" | An older version let a shared TRU's phases get out of step between the two analyses. The program linked the matching phases (or un-shared that item) so the file could open. Save the file again to keep the repair. |
 | Work is missing after reopening the browser | The auto-save is per browser and may have been cleared. Keep an exported `.json` or a connected Word report. |
 | The Open/Save dialogs look different | You are in a browser without file-system access; files are downloaded instead. Use Chrome or Edge for the full feature set. |
 
