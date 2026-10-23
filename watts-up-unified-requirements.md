@@ -5948,6 +5948,46 @@ linked), adding C again from PCM; a damaged (B and C unlinked) file repaired on 
 saved Word report loads (3 repairs reported), 0 violations, no mixed vertical tables; the earlier JSON export (where the two sides
 had different phase counts) loads with its TRUs un-shared. Clean console.
 
+## 85. Revision 84 — Word Notes, Horizontal Detail, DC Accent, Presets, Dynamic Rounding, TRU Note (version 0.9.5)
+
+Source: the Revision 84 request list (messages, 2026-10-22), items 1–6 (item 7, change tracking, is designed separately — see below). Design interview
+2026-10-22; every proposal accepted, with one change to the DC accent.
+
+1. **Hanging indent on Word row notes** (`wxNoteLine`, `wxPar` `hanging`): 0.15 inch (216 twips) — enough for a two-digit number at 8-9 pt; number, a
+   tab, then the text; wrapped lines align under the text. All three Word note lists (Summary tables' notes rows, horizontal and vertical
+   detail). General Notes keep their own indent. Verified in Word: left 10.8 pt, first line −10.8 pt.
+2. **Horizontal detail, loads under Net Change** (screen `buildRptRow` 7th parameter `loadsInNc`, Word `buildWordDataRow` option `loadsInNc`): the
+   `added` ("Installed (Removed)") group is filtered out of the horizontal columns; a Load's value shows in the Net Change columns (removed → parentheses,
+   existing → "—"). The Summary tables and the vertical report still use the group.
+3. **DC accent in the grids** (CSS `td.grid-col-type` gradient; `gridTypeCell` `--ind`): a 4 px square bar at the Type cell's far-left edge (every row now
+   has the 4 px, so alignment is unchanged), the indent space (depth × 10 px) tinted a step brighter (.38; .5 on hover) ending at the badge's left edge; no tint on
+   the identity columns. The tree pane is unchanged.
+4. **Presets** (`PO_PRESETS`, `poApplyPreset`, `poDetectPreset`): **VA** = all AC groups VA only + algebraic VA; **Vector** = the earlier AC defaults + vector.
+   The Settings dialog opens with the matching preset (or Custom); new projects (`freshState` `meta.vaMethod:'algebraic'`) and Reset to Defaults use VA;
+   existing projects are untouched. DC columns aren't part of a preset.
+5. **Dynamic rounding** (`fmtSig(n,digits,lower,upper)`; `rounding:{mode:'sig',digits,lower,upper}`): the "Significant digits" mode is labelled **Dynamic**.
+   Below 10^digits the value keeps its significant digits but no finer than `lower` (0.001/0.01/0.1); from 10^digits up it is rounded to the nearest `upper`
+   (1/10/100). New default 0.001 / 1; a stored rounding setting without `upper` (saved by Revision 78–0.9.4) reads as upper 10, so those reports are unchanged
+   (checked against the old formula on 60,000 random values); ratings still use 4 digits, nearest 10.
+6. **TRU transfer note** (`truXferNoteText`, `ensureTruNote`, `truNoteAttach`, `refreshNoteTemplates`, `fixTruNoteRefs`): a row-note bank entry
+   `{tpl:'tru',cg:<convGroupId>}` whose text is regenerated on every `recalc()`: "<out name> DC loads transferred to <in names> using the formula VA = Wdc /
+   (<efficiency> x <pf> x <number of inputs>)" (the " (IN)"/" (OUT)" suffixes are dropped; phased inputs read "TRU 1 (ØA, ØB, ØC)"; an output already named "… DC"
+   isn't given a second "DC"). Created by the Add Item(s) dialog when a TRU is added and attached to every input and the output (Net Change, or New Load for an Installed
+   TRU); input phases added in the Edit dialog (and their twins) get it too; a TRU received by sharing gets its own note in the other analysis; a duplicate gets a fresh one.
+   Editing the note text in the Document tab or the Edit dialog drops the template (`tpl`/`cg`) so it becomes ordinary text. Existing TRUs don't get one automatically.
+
+### 85.1 Item 7 — change tracking (designed, not yet built)
+Agreed in outline (all accepted): a **project-wide baseline** of the inputs, taken at "Start tracking"; every reported number whose displayed (rounded) text differs from what
+the baseline would produce is underlined (all four Word reports and their screen/Print counterparts); new items, renamed items and changed CB ratings underlined; deleted
+items listed in the Document tab. **Pause**: edits made while paused are folded into the baseline (not marked), existing marks stay; **Resume**; **Accept All** (baseline := current);
+**Revert All** (restore the baseline, after confirmation); **Stop** (discard). First version: All only; per-item Accept/Revert later; hovering a marked number on screen shows the
+baseline value for manual undo. Still to decide: where the controls live and how the guide explains accept/undo. Delivery in stages after 0.9.5.
+
+Verified: rounding examples (12,345.6 → 12,346 / 12,350 / 12,300 for upper 1/10/100; 0.01234 → 0.012 / 0.01 / 0 for lower 0.001/0.01/0.1); Settings dialog preset detection both
+ways, Custom on a hand change, Reset → VA, Dynamic limit selectors shown/hidden with the mode; the Add dialog creates the TRU note (inputs and output) and it follows renaming,
+efficiency and added phases (both analyses after sharing), a duplicate gets its own, hand-editing detaches it; horizontal detail on screen and in Word has no "Installed (Removed)" group
+and loads under Net Change; grid screenshot shows the square bar, tinted indent and untinted identity columns; Word opens the generated report with the hanging indent. Clean console.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

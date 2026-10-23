@@ -72,7 +72,9 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
   loads): Capacity, Net Change, New Load and Remaining.
 - **Load Analysis Detail** — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A **Vertical / Horizontal** toggle chooses the
-  layout (Vertical places sibling items side by side; see §5 for the options that control it).
+  layout (Vertical places sibling items side by side; see §5 for the options that control it). In the Horizontal
+  layout a load's value is shown under **Net Change** (a removed load in parentheses); there is no separate
+  "Installed (Removed)" column group there.
 
 These on-screen reports use the same column choices and rounding as the printed and Word reports (§5).
 
@@ -106,7 +108,10 @@ Report information that is not part of the power tree:
 - **References** — the documents the analysis relies on (title, organization, document number, and so on).
   Reference entries can be reordered and, where two analyses exist, shared.
 - **Row Notes** — reusable notes that you attach to items from the Edit dialog. Edit the text here and it
-  changes everywhere it is used. Buttons share or copy all of them to the other analysis.
+  changes everywhere it is used. Buttons share or copy all of them to the other analysis. Adding a TRU also
+  creates a row note, attached to its inputs and output, that explains how the TRU's DC loads were transferred to its
+  inputs (the formula with the TRU's own names, efficiency, power factor and number of input phases). It fills in
+  and updates by itself; edit its text and it becomes an ordinary note.
 
 ## 4. Building an analysis
 
@@ -213,6 +218,7 @@ the **Word report**, and they are saved with the project.
 
 | Setting | What it does |
 |---|---|
+| **Report preset** | **VA** (the default for new projects): the AC reports show VA only and VA is summed algebraically. **Vector**: VA, W, VAR and pf, with vector sums (the earlier default). **Custom** appears when you change an AC column or the VA calculation by hand. DC columns are not part of the preset. |
 | **AC Summary — Columns to Include** | For each group (Capacity, Existing Load, Installed (Removed), Net Change, New Load, Reserve) tick the units to show: A, VA, W, VAR, pf. The **Select All** row toggles a whole unit column. |
 | **DC Summary — Columns to Include** | The same for DC: A and W. |
 | **Show conversion input (IN) side with Net Change only** | By default a converter's input side shows values only under Net Change. Untick to show all columns. |
@@ -220,8 +226,8 @@ the **Word report**, and they are saved with the project.
 | **…treat TRU outputs as siblings** | Show the DC outputs of several TRUs side by side in one table. |
 | **…treat multiple top-level items as siblings** | Show several root items side by side. |
 | **Table for each TRU output / top-level item** | Shown when there are at least two such items. For each one choose *Default* (follow the two options above), *Own table*, or *Group 1–4*; items given the same group number are shown side by side in one table. |
-| **Report rounding** | *Significant digits* (3, 4 or 5; the default is 4) or *Fixed decimal* (nearest 0.001, 0.01, 0.1, 1 or 10). The smallest reported value is 0.001. Breaker/fuse ratings and power factors are not affected. |
-| **VA calculation (whole project)** | *Vector sum* (default): VA is derived from the summed W and VAR. *Algebraic sum*: the VA of children is added directly. |
+| **Report rounding** | *Dynamic* (3, 4 or 5 significant digits; the default is 4) with a **lower limit** (the finest rounding, 0.001, 0.01 or 0.1; default 0.001) and an **upper limit** (values from 10^digits up are rounded to the nearest 1, 10 or 100; default 1), or *Fixed decimal* (nearest 0.001, 0.01, 0.1, 1 or 10). Projects saved before the limits existed open with an upper limit of 10, so their reports don't change. Breaker/fuse ratings and power factors are not affected. |
+| **VA calculation (whole project)** | *Algebraic sum* (the default for new projects): the VA of children is added directly. *Vector sum*: VA is derived from the summed W and VAR. |
 
 **Reset to Defaults** restores all settings (and clears the per-item sibling choices); **Cancel** discards your edits;
 **Done** applies and saves them.

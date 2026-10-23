@@ -299,21 +299,11 @@
     .data-grid .grid-refdes-readonly{font-family:monospace;font-size:.61rem;color:var(--text-muted)}
     .data-grid .grid-col-refdes input{font-family:monospace;font-size:.61rem}
     .data-grid .grid-col-phase input{font-family:monospace;font-size:.61rem;width:100%}
-    /* DC tint covers the identity columns (Type through AC/DC) and stops before the editable
-       numeric groups, so it doesn't compete with the disabled-cell fill further right. Explicit
-       classes, not nth-child, so column order can change safely. */
-    .data-grid tbody tr.row-dc .grid-col-type,.data-grid tbody tr.row-dc .grid-col-desc,
-    .data-grid tbody tr.row-dc .grid-col-refdes,.data-grid tbody tr.row-dc .grid-col-status,
-    .data-grid tbody tr.row-dc .grid-col-phase,
-    .data-grid tbody tr.row-dc .grid-col-v,.data-grid tbody tr.row-dc .grid-col-acdc{background:rgba(88,166,255,.22)}
-    .data-grid tbody tr.row-dc:hover .grid-col-type,.data-grid tbody tr.row-dc:hover .grid-col-desc,
-    .data-grid tbody tr.row-dc:hover .grid-col-refdes,.data-grid tbody tr.row-dc:hover .grid-col-status,
-    .data-grid tbody tr.row-dc:hover .grid-col-phase,
-    .data-grid tbody tr.row-dc:hover .grid-col-v,.data-grid tbody tr.row-dc:hover .grid-col-acdc{background:rgba(88,166,255,.32)}
-    /* Lives on the inner (already depth-indented) flex div, not the <td> itself, so the bar
-       starts at the badge's actual position (matching the LH tree pane's indented look) instead
-       of the cell's outer left edge; border-radius gives it the tree's same rounded-row look. */
-    .data-grid tbody tr.row-dc .grid-type-cell{box-shadow:inset 4px 0 0 var(--accent-blue);border-radius:4px}
+    /* DC rows (version 0.9.5): a square accent bar at the Type cell's far-left edge, then the indent space
+       (depth * 10px, --ind) tinted a step brighter, ending at the left edge of the type badge — nothing else in the
+       row is tinted. A hard-stop gradient paints all three, so the bar runs the full row height. */
+    .data-grid tbody tr.row-dc td.grid-col-type{background:linear-gradient(to right,var(--accent-blue) 0,var(--accent-blue) 4px,rgba(88,166,255,.38) 4px,rgba(88,166,255,.38) var(--ind,4px),transparent var(--ind,4px))}
+    .data-grid tbody tr.row-dc:hover td.grid-col-type{background:linear-gradient(to right,var(--accent-blue) 0,var(--accent-blue) 4px,rgba(88,166,255,.5) 4px,rgba(88,166,255,.5) var(--ind,4px),transparent var(--ind,4px))}
     .data-grid .grid-actions{display:flex;gap:.2rem;white-space:nowrap}
     .data-grid .grid-actions button{padding:.09rem .29rem;font-size:.61rem;background:var(--bg-elevated);
       color:var(--text-secondary);border:1px solid var(--border);border-radius:4px}
@@ -1138,7 +1128,9 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
   loads): Capacity, Net Change, New Load and Remaining.</li>
 <li><strong>Load Analysis Detail</strong> — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A <strong>Vertical / Horizontal</strong> toggle chooses the
-  layout (Vertical places sibling items side by side; see §5 for the options that control it).</li>
+  layout (Vertical places sibling items side by side; see §5 for the options that control it). In the Horizontal
+  layout a load's value is shown under <strong>Net Change</strong> (a removed load in parentheses); there is no separate
+  "Installed (Removed)" column group there.</li>
 </ul>
 <p>These on-screen reports use the same column choices and rounding as the printed and Word reports (§5).</p>
 <h3 id="32-existing-removed-and-installed-tabs">3.2 Existing / Removed and Installed tabs</h3>
@@ -1199,7 +1191,10 @@ with the project.</p>
 <li><strong>References</strong> — the documents the analysis relies on (title, organization, document number, and so on).
   Reference entries can be reordered and, where two analyses exist, shared.</li>
 <li><strong>Row Notes</strong> — reusable notes that you attach to items from the Edit dialog. Edit the text here and it
-  changes everywhere it is used. Buttons share or copy all of them to the other analysis.</li>
+  changes everywhere it is used. Buttons share or copy all of them to the other analysis. Adding a TRU also
+  creates a row note, attached to its inputs and output, that explains how the TRU's DC loads were transferred to its
+  inputs (the formula with the TRU's own names, efficiency, power factor and number of input phases). It fills in
+  and updates by itself; edit its text and it becomes an ordinary note.</li>
 </ul>
 <h2 id="4-building-an-analysis">4. Building an analysis</h2>
 <h3 id="41-item-types-and-statuses">4.1 Item types and statuses</h3>
@@ -1365,6 +1360,10 @@ the <strong>Word report</strong>, and they are saved with the project.</p>
 </thead>
 <tbody>
 <tr>
+<td><strong>Report preset</strong></td>
+<td><strong>VA</strong> (the default for new projects): the AC reports show VA only and VA is summed algebraically. <strong>Vector</strong>: VA, W, VAR and pf, with vector sums (the earlier default). <strong>Custom</strong> appears when you change an AC column or the VA calculation by hand. DC columns are not part of the preset.</td>
+</tr>
+<tr>
 <td><strong>AC Summary — Columns to Include</strong></td>
 <td>For each group (Capacity, Existing Load, Installed (Removed), Net Change, New Load, Reserve) tick the units to show: A, VA, W, VAR, pf. The <strong>Select All</strong> row toggles a whole unit column.</td>
 </tr>
@@ -1394,11 +1393,11 @@ the <strong>Word report</strong>, and they are saved with the project.</p>
 </tr>
 <tr>
 <td><strong>Report rounding</strong></td>
-<td><em>Significant digits</em> (3, 4 or 5; the default is 4) or <em>Fixed decimal</em> (nearest 0.001, 0.01, 0.1, 1 or 10). The smallest reported value is 0.001. Breaker/fuse ratings and power factors are not affected.</td>
+<td><em>Dynamic</em> (3, 4 or 5 significant digits; the default is 4) with a <strong>lower limit</strong> (the finest rounding, 0.001, 0.01 or 0.1; default 0.001) and an <strong>upper limit</strong> (values from 10^digits up are rounded to the nearest 1, 10 or 100; default 1), or <em>Fixed decimal</em> (nearest 0.001, 0.01, 0.1, 1 or 10). Projects saved before the limits existed open with an upper limit of 10, so their reports don't change. Breaker/fuse ratings and power factors are not affected.</td>
 </tr>
 <tr>
 <td><strong>VA calculation (whole project)</strong></td>
-<td><em>Vector sum</em> (default): VA is derived from the summed W and VAR. <em>Algebraic sum</em>: the VA of children is added directly.</td>
+<td><em>Algebraic sum</em> (the default for new projects): the VA of children is added directly. <em>Vector sum</em>: VA is derived from the summed W and VAR.</td>
 </tr>
 </tbody>
 </table>
@@ -1542,7 +1541,10 @@ a <code>.docx</code> or <code>.json</code>.</p>
         <button id="print-opts-close" style="background:none;border:none;color:var(--text-secondary);font-size:1.15rem;padding:.1rem .38rem;border-radius:4px;cursor:pointer">✕</button>
       </div>
       <div class="modal-body" style="overflow-y:auto">
-        <div class="section-label">AC Summary — Columns to Include</div>
+        <div class="section-label">Report preset</div>
+        <label class="po-chk" title="VA: the AC reports show VA only and VA is summed algebraically. Vector: the AC reports show VA, W, VAR and pf as before and VA comes from the summed W and VAR. Changing any AC column or the VA calculation by hand makes it Custom."><span>AC columns and VA calculation:</span>
+          <select id="po-preset" style="margin-left:.4rem"><option value="va">VA — VA only, algebraic sums</option><option value="vector">Vector — VA, W, VAR, pf; vector sums</option><option value="custom">Custom</option></select></label>
+        <div class="section-label" style="margin-top:.75rem">AC Summary — Columns to Include</div>
         <table style="font-size:.82rem;border-collapse:collapse;width:100%;margin-top:.3rem">
           <!-- Revision 70, item 5.4: checking/unchecking one of these toggles every checkbox in
                that column below (5.4.1: individual ones stay independently clickable too). -->
@@ -1574,9 +1576,11 @@ a <code>.docx</code> or <code>.json</code>.</p>
           <label class="po-chk" title="In the Vertical Load Analysis Detail, show the DC outputs of all TRUs side by side as sibling column groups of one table instead of one table each."><input type="checkbox" id="po-lad-tru-sib"> Vertical Load Analysis Detail — treat TRU outputs as siblings</label>
           <label class="po-chk" title="Show several top-level (root) items side by side as sibling column groups of one table instead of one table each."><input type="checkbox" id="po-lad-root-sib"> Vertical Load Analysis Detail — treat multiple top-level items as siblings</label>
           <div id="po-lad-entries" style="margin-top:.2rem"></div>
-          <label class="po-chk" title="How the numbers in the reports (Print, Word, and the on-screen Power Distribution Summary and Load Analysis Detail) are rounded. Significant digits: 3, 4 or 5 digits (never finer than 0.001; from 10^digits up, to the nearest 10). Fixed decimal: to the nearest step, shown with that many decimals. Protective-device ratings and power factors are not affected."><span>Report rounding:</span>
-            <select id="po-round-mode" style="margin-left:.4rem"><option value="sig">Significant digits</option><option value="fixed">Fixed decimal</option></select>
+          <label class="po-chk" title="How the numbers in the reports (Print, Word, and the on-screen Power Distribution Summary and Load Analysis Detail) are rounded. Dynamic: 3, 4 or 5 significant digits, but never finer than the lower limit (0.001, 0.01 or 0.1) and, from 10^digits up, rounded to the nearest upper limit (1, 10 or 100). Fixed decimal: to the nearest step, shown with that many decimals (trailing zeros kept). Protective-device ratings and power factors are not affected."><span>Report rounding:</span>
+            <select id="po-round-mode" style="margin-left:.4rem"><option value="sig">Dynamic</option><option value="fixed">Fixed decimal</option></select>
             <select id="po-round-digits"><option value="3">3 digits</option><option value="4">4 digits</option><option value="5">5 digits</option></select>
+            <select id="po-round-lower" title="Finest rounding step Dynamic may use"><option value="0.001">lower limit 0.001</option><option value="0.01">lower limit 0.01</option><option value="0.1">lower limit 0.1</option></select>
+            <select id="po-round-upper" title="Coarsest rounding step Dynamic uses for large values"><option value="1">upper limit 1</option><option value="10">upper limit 10</option><option value="100">upper limit 100</option></select>
             <select id="po-round-step"><option value="0.001">nearest 0.001</option><option value="0.01">nearest 0.01</option><option value="0.1">nearest 0.1</option><option value="1">nearest 1</option><option value="10">nearest 10</option></select></label>
           <label class="po-chk" title="How an AC item's VA is carried up the tree. Vector: derived from the summed W and VAR. Algebraic: the signed sum of the VA values of its children (New Load and Reserve are then worked from those VA values). A load's own VA, a TRU's VA and data entry still use W, VAR and power factor."><span>VA calculation (whole project):</span>
             <select id="po-va-method" style="margin-left:.4rem">
@@ -2064,7 +2068,7 @@ function freshAnalysis(label) {
 function freshState() {
   const st={meta:{make:'',model:'',marketingDesignation:'',serialNumber:'',flightPhase:'Cruise',interval:'Continuous',
     documentNumber:'',revisionLevel:'',preparedBy:'',revisionDate:'',revisionDescription:'Initial Release.',
-    complianceText:''},
+    complianceText:'',vaMethod:'algebraic'},
     analyses:{ap:freshAnalysis('Active Project'),pcm:null},
     currentAnalysis:'ap',lastSaved:null};
   installAnalysisView(st);
@@ -2402,6 +2406,9 @@ async function shareWithOther(nodeId) {
     Object.values(otherAn.nodes).forEach(nn=>{ if (nn.phaseGroupId===info.G&&!keep.has(nn.id)) { nn.phaseGroupId=uid(); nn.phaseSeq=0; } });
   });
   state.currentAnalysis=curId;
+  // The TRU groups the other analysis just received get a transfer note of their own there.
+  { const gids=new Set(createdTwins.map(t=>otherAn.nodes[t]).filter(t=>t&&t.convRole&&t.convGroupId).map(t=>t.convGroupId));
+    if (gids.size) withOtherAnalysis(()=>gids.forEach(g=>ensureTruNote(g))); }
   // recalc() always recomputes both analyses in dependency order (Phase 2c), so one call here
   // is enough regardless of which side was just touched.
   recalc();
@@ -2960,8 +2967,61 @@ function phaseUnbalanceWarnings(nodes) {
 // call sites no longer need to track which analysis they just touched or temporarily flip
 // state.currentAnalysis to recalculate the other one (Phase 2a/2b's shareWithOther/
 // syncSharedFields used to do exactly that; simplified once this landed).
+// ── TRU TRANSFER NOTE (version 0.9.5) ────────────────────────────────────────
+// A row note that explains how a TRU's DC loads reach its inputs. It is a "template" note: the bank entry
+// carries {tpl:'tru', cg:<conversion group id>} and its text is refilled from the TRU's own names, efficiency,
+// conversion pf and number of input phases whenever the project is recalculated. Editing the text by hand turns
+// it into an ordinary note (the template is dropped) — see the three note editors.
+function truXferNoteText(cg,nodes) {
+  const members=Object.values(nodes).filter(n=>n.convGroupId===cg&&n.convRole);
+  const ins=members.filter(n=>n.convRole==='in').sort((a,b)=>(a.phaseOrder||0)-(b.phaseOrder||0));
+  const out=members.find(n=>n.convRole==='out');
+  if (!ins.length||!out) return '';
+  const nm=n=>String(n.description||'TRU').replace(/\s*\((IN|OUT)\)\s*$/i,'').trim()||'TRU';
+  const num=v=>String(parseFloat((+v).toFixed(4)));
+  const names=ins.every(i=>i.phase)?`${nm(ins[0])} (${ins.map(i=>'Ø'+i.phase).join(', ')})`:ins.map(nm).join(', ');
+  const outName=nm(out);   // an output already named "... DC" isn't given a second "DC"
+  return `${/\bDC$/i.test(outName)?outName:outName+' DC'} loads transferred to ${names} using the formula VA = Wdc / (${num(ins[0].efficiency)} x ${num(ins[0].convPf)} x ${ins.length})`;
+}
+function refreshNoteTemplates() {
+  if (!state) return;
+  ['ap','pcm'].forEach(id=>{
+    const an=state.analyses[id]; if (!an||!Array.isArray(an.rowNoteDefs)) return;
+    an.rowNoteDefs.forEach(d=>{ if (d&&d.tpl==='tru'&&typeof d.cg==='string') d.text=truXferNoteText(d.cg,an.nodes); });
+  });
+}
+function truNoteDef(cg) { return (state.meta.rowNoteDefs||[]).find(d=>d.tpl==='tru'&&d.cg===cg)||null; }
+// Attaches the group's transfer note to one TRU member (under Net Change, or New Load for an Installed TRU).
+function truNoteAttach(n,def) {
+  def=def||truNoteDef(n.convGroupId); if (!def) return;
+  if (!Array.isArray(n.rowNotes)) n.rowNotes=[];
+  if (n.rowNotes.some(o=>o.key===def.key)) return;
+  const gs=noteGroupsFor(n);
+  n.rowNotes.push({key:def.key,group:gs.includes('nc')?'nc':gs.includes('newload')?'newload':null});
+}
+// Creates (once) the transfer note of a TRU group in the current analysis and attaches it to every member.
+function ensureTruNote(cg) {
+  const mem=Object.values(state.nodes).filter(n=>n.convGroupId===cg&&n.convRole);
+  if (!mem.length) return;
+  let def=truNoteDef(cg);
+  if (!def) { def={key:uid(),text:'',sharedPeerKey:null,tpl:'tru',cg}; if (!state.meta.rowNoteDefs) state.meta.rowNoteDefs=[]; state.meta.rowNoteDefs.push(def); }
+  mem.forEach(m=>truNoteAttach(m,def));
+  def.text=truXferNoteText(cg,state.nodes);
+}
+// After a duplicate: the copy's members still cite the original TRU's note; point them at a note of their own.
+function fixTruNoteRefs() {
+  const defs=state.meta.rowNoteDefs||[]; const bad=new Set();
+  Object.values(state.nodes).forEach(n=>{
+    if (!n.convRole||!n.convGroupId||!Array.isArray(n.rowNotes)) return;
+    const before=n.rowNotes.length;
+    n.rowNotes=n.rowNotes.filter(o=>{ const d=defs.find(x=>x.key===o.key); return !(d&&d.tpl==='tru'&&d.cg!==n.convGroupId); });
+    if (n.rowNotes.length!==before) bad.add(n.convGroupId);
+  });
+  bad.forEach(cg=>ensureTruNote(cg));
+}
 function recalc() {
   if (!state) return;
+  refreshNoteTemplates();
   const pcm=state.analyses.pcm;
   if (pcm) {
     recalcAnalysis(pcm);
@@ -2994,8 +3054,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.4';
-const APP_RELEASE_DATE='2026-10-19';
+const APP_VERSION='0.9.5';
+const APP_RELEASE_DATE='2026-10-22';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -3844,8 +3904,11 @@ function renderLoadAnalysisDetail() {
   if (!reportCfg) reportCfg=defaultPrintCfg();
   const cfg=reportCfg;
   const nodes=state.nodes;
-  const acCols=activeCols(AC_GROUPS,cfg.ac);
-  const dcCols=activeCols(DC_GROUPS,cfg.dc);
+  // Revision 83 follow-up (0.9.5): the horizontal detail has no "Installed (Removed)" column group — a Load's
+  // value shows under the Net Change columns instead (buildRptRow's loadsInNc), so a removed load is a
+  // negative change just like any other.
+  const acCols=activeCols(AC_GROUPS,cfg.ac).filter(c=>c.group!=='added');
+  const dcCols=activeCols(DC_GROUPS,cfg.dc).filter(c=>c.group!=='added');
 
   // Local note/reference numbering, restarted and assigned in this report's own top-to-bottom
   // presentation order (rather than reusing the global buildAnnotationMap's full-tree order).
@@ -3913,7 +3976,7 @@ function renderLoadAnalysisDetail() {
     const annotMapArg=hasAnyAnnot?am:null;
     const rows=[];
     if (n.status==='new') rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}">Installed</td></tr>`);
-    rows.push(buildRptRow(n,0,cols,cfg,false,annotMapArg));
+    rows.push(buildRptRow(n,0,cols,cfg,false,annotMapArg,true));
     // If the subject itself is already under an "Installed" label, an all-new set of children
     // doesn't need it repeated — mirrors how Print/Word already suppress this via their
     // recursive inAdd tracking.
@@ -3921,7 +3984,7 @@ function renderLoadAnalysisDetail() {
     kids.forEach(k=>{
       if (k.status==='removed'&&!seenRemoved) { rows.push(`<tr class="rpt-lbl-removed"><td colspan="${ncols}" style="padding-left:14px">Removed</td></tr>`); seenRemoved=true; }
       else if (k.status==='new'&&!seenAdded) { rows.push(`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:14px">Installed</td></tr>`); seenAdded=true; }
-      rows.push(buildRptRow(k,1,cols,cfg,false,annotMapArg));
+      rows.push(buildRptRow(k,1,cols,cfg,false,annotMapArg,true));
     });
 
     // Numbers are assigned in whole-report order (not reset per table), so a table can end up
@@ -4640,7 +4703,9 @@ function gridPhaseCell(n,editable) {
 }
 function gridTypeCell(n,depth,editable=true){
   // 10px/level (was 14px) so deep nesting leaves more of the Type column for the badge+select.
-  const indent=`style="padding-left:${depth*10}px"`;
+  // 4px of bar space at the left edge of every row (so rows stay aligned), then 10px per level (--ind marks where
+  // the badge starts, for the DC accent).
+  const indent=`style="padding-left:${depth*10+4}px;--ind:${depth*10+4}px"`;
   if (!editable) return `<td class="grid-col-type" ${indent}><div class="grid-type-cell">${badgeHtml(n)}</div></td>`;
   const shapes=gridAvailableTypes(n);
   const typeOpts=shapes.map(t=>`<option value="${esc(t)}"${t===n.type?' selected':''}>${esc(typeOptionLabel(t))}</option>`).join('');
@@ -5388,14 +5453,14 @@ function renderRowNoteList() {
       :(otherExists?`<button class="rownote-share" title="Share this note with ${state.analyses[otherId].label}">Share</button>`:'');
     item.innerHTML=`<div class="doc-list-item-row">
       <span class="doc-item-num">${i+1}.</span>
-      <textarea rows="2" placeholder="Note text" style="flex:1">${esc(def.text)}</textarea>
+      <textarea rows="2" placeholder="Note text" style="flex:1"${def.tpl?' title="Fills in automatically from the TRU. Edit the text to turn it into an ordinary note."':''}>${esc(def.text)}</textarea>
       <div class="doc-list-btns">
         <button class="rownote-up">↑</button><button class="rownote-dn">↓</button>
         ${shareBtnHtml}
         <button class="rownote-del" style="color:var(--accent-red)">✕</button>
       </div></div>`;
     const inp=item.querySelector('textarea');
-    inp.addEventListener('input',()=>{def.text=inp.value;syncSharedNoteEntryFields('rowNoteDefs',def);persist();});
+    inp.addEventListener('input',()=>{def.text=inp.value;if(def.tpl){def.tpl=null;def.cg=null;}syncSharedNoteEntryFields('rowNoteDefs',def);persist();});
     item.querySelector('.rownote-up').addEventListener('click',()=>{if(i===0)return;[defs[i-1],defs[i]]=[defs[i],defs[i-1]];persist();renderRowNoteList();});
     item.querySelector('.rownote-dn').addEventListener('click',()=>{if(i>=defs.length-1)return;[defs[i],defs[i+1]]=[defs[i+1],defs[i]];persist();renderRowNoteList();});
     const shareBtn=item.querySelector('.rownote-share');
@@ -5499,7 +5564,7 @@ function renderEfNotesRefs(n) {
       chk.addEventListener('change',()=>{ if(sel) sel.style.display=chk.checked?'':'none'; });
       div.querySelector('.nr-note-text-input').addEventListener('input',e=>{
         const d=state.meta.rowNoteDefs.find(x=>x.key===def.key);
-        if(d){d.text=e.target.value;syncSharedNoteEntryFields('rowNoteDefs',d);persist();}
+        if(d){d.text=e.target.value;if(d.tpl){d.tpl=null;d.cg=null;}syncSharedNoteEntryFields('rowNoteDefs',d);persist();}
       });
       div.querySelector('button').addEventListener('click',()=>{
         // Revision 47: a shared row note can't be deleted here at all — unshare it from the
@@ -6315,7 +6380,7 @@ function duplicateNodeById(id,allPhases=false) {
   // Revision 57: a TRU's conversion group (up to 3 input phases + 1 output) is duplicated as a
   // whole — reconcileConvGroups clones whatever group members this single-node copy didn't reach
   // (in practice, always all of them) and relinks the full set under a fresh convGroupId.
-  if (n.convRole) reconcileConvGroups({[id]:copy.id},[id]);
+  if (n.convRole) { reconcileConvGroups({[id]:copy.id},[id]); fixTruNoteRefs(); }
   return copy.id;
 }
 function duplicateBranch(rootId,allPhases=false) {
@@ -7342,6 +7407,7 @@ function doEditSaveTru(n) {
         acDc:CONV_IN_ACDC.TRU,voltage:inV,netChangeOverride:null});
       node=state.nodes[newId];
       createdInputs.push(node);
+      truNoteAttach(node);
     }
     node.description=aware?primaryDesc:(slot.description||'');
     node.refDes=aware?primaryRefDes:(slot.refDes||'');
@@ -7483,6 +7549,7 @@ function truMirrorApply(m,primary,created,activeInputs) {
       capacity:node.capacity?{...node.capacity}:null,existingLoad:pPrimary.existingLoad?{...pPrimary.existingLoad}:mkPow(0,0,0,0,1),
       phase:node.phase||null,phaseGroupId:node.phase?pPrimary.phaseGroupId:null,phaseSeq:node.phaseSeq||0}));
     node.sharedPeerId=twinId;
+    withOtherAnalysis(()=>truNoteAttach(state.nodes[twinId]));
   });
   // The inputs' order follows the edited side's.
   activeInputs.forEach(i=>{ const t=i.sharedPeerId&&otherNodes[i.sharedPeerId]; if (t) { t.phaseOrder=i.phaseOrder; t.phaseSeq=i.phaseSeq||0; } });
@@ -7944,6 +8011,7 @@ function doAddSave() {
       const inId=addNode(pid,inData);
       addNode(inId,{type,status,convRole:'out',description:desc+' (OUT)',refDes,voltage:outVoltage,acDc:outAcDc,
         capacity:mkCap(capRow.out,outAcDc),existingLoad:mkLd(ldRow.out,outAcDc,outV2,outAcDc==='ac'?cpf:1.0),netChangeOverride:null,convGroupId:gid});
+      ensureTruNote(gid);   // version 0.9.5: the TRU's transfer note, on its inputs and output
     } else if (isLoad(type)) {
       let lv;
       if (acDc==='ac') lv=calcAcPowerGroup({a:getN('load_a'),va:getN('load_va'),w:getN('load_w'),var:getN('load_var'),pf:getN('load_pf')},v);
@@ -8056,11 +8124,12 @@ let reportCfg=null;
 function defaultPrintCfg(){
   return {
     ac:{
+      // Version 0.9.5: the default AC report is the "VA" preset (VA only; new projects also sum VA algebraically)
       cap:    {a:false,va:true, w:false,var:false,pf:false},
-      exload: {a:false,va:true, w:true, var:true, pf:true},
-      added:  {a:false,va:false,w:true, var:true, pf:false},
-      nc:     {a:false,va:false,w:true, var:true, pf:false},
-      newload:{a:false,va:true, w:true, var:true, pf:true},
+      exload: {a:false,va:true, w:false,var:false,pf:false},
+      added:  {a:false,va:true, w:false,var:false,pf:false},
+      nc:     {a:false,va:true, w:false,var:false,pf:false},
+      newload:{a:false,va:true, w:false,var:false,pf:false},
       rem:    {a:false,va:true, w:false,var:false,pf:false},
     },
     dc:{cap:{a:true,w:true},exload:{a:true,w:true},added:{a:true,w:true},nc:{a:true,w:true},newload:{a:true,w:true},rem:{a:true,w:true}},
@@ -8068,7 +8137,7 @@ function defaultPrintCfg(){
     ladSiblings:'auto',   // Revision 77: siblings per table in the Vertical Load Analysis Detail ('auto' or 1-4)
     ladTruSiblings:true,  // Vertical report: TRU outputs as siblings of one table (default on)
     ladRootSiblings:false,// Vertical report: multiple top-level items as siblings (default off)
-    rounding:{mode:'sig',digits:4,step:0.01},   // Revision 78: report rounding (see fmtRpt)
+    rounding:{mode:'sig',digits:4,step:0.01,lower:0.001,upper:1},   // report rounding (see fmtRpt); 'sig' is the Dynamic mode
   };
 }
 // A genuine zero is a real value and renders as "0" — only a missing/inapplicable value (val==null,
@@ -8078,11 +8147,14 @@ function defaultPrintCfg(){
 // significant digits, never more than 3 decimals (0.001 is the smallest reported value) and from 10^N up
 // rounded to the nearest 10 — or {mode:'fixed',step:0.001|0.01|0.1|1|10} — nearest step, shown with that
 // many decimals (trailing zeros kept). The default, 4 significant digits, is the original behaviour.
-function fmtSig(n,digits){
+function fmtSig(n,digits,lower=0.001,upper=10){
   const abs=Math.abs(n);
-  if (abs>=Math.pow(10,digits)) return (Math.round(n/10)*10).toLocaleString('en-US');
+  // From 10^digits up the value is rounded to the nearest `upper` (1, 10 or 100)...
+  if (abs>=Math.pow(10,digits)) return (Math.round(n/upper)*upper).toLocaleString('en-US');
   const intDigits=abs<1?1:Math.floor(Math.log10(abs))+1;
-  const dec=Math.max(0,Math.min(3,digits-intDigits));
+  // ...and below that it keeps `digits` significant digits but never finer than `lower` (0.001, 0.01 or 0.1).
+  const maxDec=Math.max(0,Math.round(-Math.log10(lower)));
+  const dec=Math.max(0,Math.min(maxDec,digits-intDigits));
   const r=parseFloat(n.toFixed(dec));
   return abs>=1000?r.toLocaleString('en-US',{maximumFractionDigits:dec}):String(r);
 }
@@ -8096,14 +8168,18 @@ function fmtRpt(v){
   const n=+v;if(isNaN(n))return null;
   const r=reportCfg&&reportCfg.rounding;
   if (r&&r.mode==='fixed'&&[0.001,0.01,0.1,1,10].includes(+r.step)) return fmtFixed(n,+r.step);
-  return fmtSig(n,(r&&r.mode==='sig'&&[3,4,5].includes(+r.digits))?+r.digits:4);
+  // Limits: a project saved before they existed (rounding set, no `upper`) keeps its old behaviour (nearest 10);
+  // with no rounding setting at all the new defaults (0.001 / 1) apply.
+  const lower=(r&&[0.001,0.01,0.1].includes(+r.lower))?+r.lower:0.001;
+  const upper=(r&&[1,10,100].includes(+r.upper))?+r.upper:(r&&r.upper===undefined?10:1);
+  return fmtSig(n,(r&&r.mode==='sig'&&[3,4,5].includes(+r.digits))?+r.digits:4,lower,upper);
 }
 // Protective-device ratings ("(45 A)") are always shown at the default 4 significant digits, whatever
 // the report rounding setting — a rating rounded to the nearest 10 would misreport a breaker.
 function fmtRating(v){
   if(v===null||v===undefined)return null;
   const n=+v;if(isNaN(n))return null;
-  return fmtSig(n,4);
+  return fmtSig(n,4,0.001,10);
 }
 // Revision 70 (Phase G): explicit null/undefined guard added, matching fmtRpt's own — without it,
 // JS's unary-plus coerces null to 0 (`+null===0`, not NaN), so a genuinely missing pf value was
@@ -8247,7 +8323,7 @@ function buildRptHeader(cols,hasAnnot,leftCellContent){
   return `<thead><tr><th class="rpt-left" rowspan="2">${leftCellContent||''}</th><th rowspan="2"></th>${annotTh}${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
 }
 
-function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
+function buildRptRow(n,depth,cols,cfg,topBorder,annotMap,loadsInNc){
   const isProt=NT.PROTECTION.includes(n.type);
   const isConvIn=n.convRole==='in';
   const isLd=isLoad(n.type);const hasC=hasCap(n.type);
@@ -8276,8 +8352,13 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap){
       if(!isLd||n.status==='existing')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
     }else if(group==='nc'){
+      if(isLd&&loadsInNc){
+        if(n.status==='existing')return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
+        val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
+      }else{
       if(isLd)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._netChange?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+      }
     }else if(group==='newload'){
       if(!hasC||removed)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
       val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
@@ -8396,18 +8477,24 @@ function wxRun(text,{b,i,sz,color}={}){
   return `<w:r>${rPr?`<w:rPr>${rPr}</w:rPr>`:''}<w:t xml:space="preserve">${wxEsc(text)}</w:t></w:r>`;
 }
 
-function wxPar(inner,{style,ind,before=40,after=40,jc,keepNext,markSz}={}){
+function wxPar(inner,{style,ind,hanging,before=40,after=40,jc,keepNext,markSz}={}){
   const pPr=[
     style?`<w:pStyle w:val="${style}"/>`:'',
     keepNext?'<w:keepNext/>':'',
     `<w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>`,
-    ind!=null?`<w:ind w:left="${ind}"/>`:'',
+    ind!=null?`<w:ind w:left="${ind}"${hanging?` w:hanging="${hanging}"`:''}/>`:'',
     jc?`<w:jc w:val="${jc}"/>`:'',
     markSz?`<w:rPr><w:sz w:val="${wxHpt(markSz)}"/><w:szCs w:val="${wxHpt(markSz)}"/></w:rPr>`:'',
   ].join('');
   return `<w:p><w:pPr>${pPr}</w:pPr>${inner||''}</w:p>`;
 }
 
+// Version 0.9.5: one row-note line — the number at the margin, a tab, then the text; wrapped lines hang under the
+// text (0.15 inch = 216 twips, enough for a two-digit number at 8-9 pt).
+const WX_NOTE_HANG=216;
+function wxNoteLine(num,text,sz){
+  return wxPar(wxRun(`${num}.`,{sz})+'<w:r><w:tab/></w:r>'+wxRun(text,{sz}),{ind:WX_NOTE_HANG,hanging:WX_NOTE_HANG,before:0,after:20,keepNext:true});
+}
 // Inline plain-text content control — placed inside a paragraph alongside other runs
 function wxSdtText(tag,runsXml){
   return `<w:sdt><w:sdtPr><w:tag w:val="${tag}"/><w:text/></w:sdtPr><w:sdtContent>${runsXml}</w:sdtContent></w:sdt>`;
@@ -8493,7 +8580,7 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths,hasRat
 // Revision 71, item 2.3: every cell's paragraph gets keepNext, so Word resists breaking the page
 // between this row and whichever one follows it (the chain of keepNext across every row in a
 // table discourages a page break landing anywhere inside the table body).
-function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWidths,hasAnnot,hasRating=true}){
+function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWidths,hasAnnot,hasRating=true,loadsInNc=false}){
   const isProt=NT.PROTECTION.includes(n.type);
   const isConvIn=n.convRole==='in';
   const isLd=isLoad(n.type);const hasC=hasCap(n.type);
@@ -8529,8 +8616,13 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
       if(!isLd||n.status==='existing'){emDash();return;}
       val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
     }else if(group==='nc'){
+      if(isLd&&loadsInNc){
+        if(n.status==='existing'){emDash();return;}
+        val=n.loadValue?.[k];if(n.status==='removed'&&val!=null)isNeg=true;
+      }else{
       if(isLd){emDash();return;}
       val=n._netChange?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
+      }
     }else if(group==='newload'){
       if(!hasC||removed){emDash();return;}
       val=n._newLoad?.[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
@@ -8583,7 +8675,7 @@ function assembleSplitTable(tblOpen,headerXml,chunks,totalW,totalCols){
     const cr=[...ch.rows];
     if(ch.notes.length){
       cr.push(wxTr(wxTc(wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true}),{w:totalW,span})));
-      ch.notes.forEach(({num,text})=>cr.push(wxTr(wxTc(wxPar(wxRun(`${num}. ${text}`,{sz:9}),{ind:360,before:0,after:20,keepNext:true}),{w:totalW,span}))));
+      ch.notes.forEach(({num,text})=>cr.push(wxTr(wxTc(wxNoteLine(num,text,9),{w:totalW,span}))));
     }
     if(i<chunks.length-1) cr.push(wxTr(wxTc(wxPar('',{before:0,after:0,keepNext:true,markSz:2}),{w:totalW,span}),{h:120,exact:true}));
     cr[cr.length-1]=noKeep(cr[cr.length-1]);
@@ -9010,7 +9102,7 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
   });
 
   blockNotes.sort((a,b)=>a.num-b.num);
-  const notesParas=blockNotes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
+  const notesParas=blockNotes.map(({num,text})=>wxNoteLine(num,text,8)).join('');
 
   return pathParaXml+wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
     buildWordTblHeader(cols,hasAnnot,colOpts,'')+
@@ -9021,8 +9113,9 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
 }
 function buildLadHorizontalWordContent(){
   const cfg=reportCfg||defaultPrintCfg();
-  const acCols=activeCols(AC_GROUPS,cfg.ac);
-  const dcCols=activeCols(DC_GROUPS,cfg.dc);
+  // Revision 83 follow-up (0.9.5): no "Installed (Removed)" group here; Load values show under Net Change.
+  const acCols=activeCols(AC_GROUPS,cfg.ac).filter(c=>c.group!=='added');
+  const dcCols=activeCols(DC_GROUPS,cfg.dc).filter(c=>c.group!=='added');
   const annotator=makeAnnotator();
   const hasAnyAnnot=Object.values(state.nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
 
@@ -9043,8 +9136,8 @@ function buildLadHorizontalWordContent(){
   const HSZ=7.5;
   const acLayout=layoutReportWidths(AC_GROUPS,acCols,TOTAL_W,DESC_W,RATING_W,hasAnyAnnot?NOTES_W:0,HSZ);
   const dcLayout=layoutReportWidths(DC_GROUPS,dcCols,TOTAL_W,DESC_W,RATING_W,hasAnyAnnot?NOTES_W:0,HSZ);
-  const acOpts={descW:pctW(acLayout.descW,TOTAL_W),ratingW:pctW(acLayout.ratingW,TOTAL_W),notesW:pctW(acLayout.notesW,TOTAL_W),colWidths:acLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot:hasAnyAnnot};
-  const dcOpts={descW:pctW(dcLayout.descW,TOTAL_W),ratingW:pctW(dcLayout.ratingW,TOTAL_W),notesW:pctW(dcLayout.notesW,TOTAL_W),colWidths:dcLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot:hasAnyAnnot};
+  const acOpts={descW:pctW(acLayout.descW,TOTAL_W),ratingW:pctW(acLayout.ratingW,TOTAL_W),notesW:pctW(acLayout.notesW,TOTAL_W),colWidths:acLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot:hasAnyAnnot,loadsInNc:true};
+  const dcOpts={descW:pctW(dcLayout.descW,TOTAL_W),ratingW:pctW(dcLayout.ratingW,TOTAL_W),notesW:pctW(dcLayout.notesW,TOTAL_W),colWidths:dcLayout.colWidths.map(w=>pctW(w,TOTAL_W)),hasAnnot:hasAnyAnnot,loadsInNc:true};
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const acIds=eligibleIds('ac'), dcIds=eligibleIds('dc');
@@ -9188,7 +9281,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
     rows.push(wxTr(wxTc(wp(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW})+ratingCell(k,7.5)+markerCell(r.marker)+cells));
   });
 
-  const notesParas=t.notes.map(({num,text})=>wxPar(wxRun(`${num}. ${text}`,{sz:8}),{ind:360,before:0,after:20,keepNext:true})).join('');
+  const notesParas=t.notes.map(({num,text})=>wxNoteLine(num,text,8)).join('');
   return pathParaXml+wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)],Math.min(5000,Math.round(tblPct)))+
     header+rows.join('')+`</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
 }
@@ -9755,12 +9848,15 @@ function openPrintOpts(){
   { const sel=document.getElementById('po-lad-siblings'); if(sel) sel.value=(Number.isInteger(+c.ladSiblings)&&+c.ladSiblings>=1&&+c.ladSiblings<=4)?String(+c.ladSiblings):'auto'; }
   chk('po-lad-tru-sib',c.ladTruSiblings!==false); chk('po-lad-root-sib',c.ladRootSiblings===true);
   { const sel=document.getElementById('po-va-method'); if(sel) sel.value=vaAlgebraic()?'algebraic':'vector'; }
-  { const r=c.rounding||{mode:'sig',digits:4,step:0.01};
+  { const r=c.rounding||{mode:'sig',digits:4,step:0.01,lower:0.001,upper:1};
+    document.getElementById('po-round-lower').value=[0.001,0.01,0.1].includes(+r.lower)?String(+r.lower):'0.001';
+    document.getElementById('po-round-upper').value=[1,10,100].includes(+r.upper)?String(+r.upper):(r.upper===undefined?'10':'1');
     document.getElementById('po-round-mode').value=r.mode==='fixed'?'fixed':'sig';
     document.getElementById('po-round-digits').value=[3,4,5].includes(+r.digits)?String(+r.digits):'4';
     document.getElementById('po-round-step').value=[0.001,0.01,0.1,1,10].includes(+r.step)?String(+r.step):'0.01';
     syncRoundingControls(); }
   fillLadEntryList();
+  poDetectPreset();
   ['a','va','w','var','pf'].forEach(col=>chk(`po-ac-col-${col}`,false));
   ['a','w'].forEach(col=>chk(`po-dc-col-${col}`,false));
   document.getElementById('print-opts').classList.remove('hidden');
@@ -9786,17 +9882,41 @@ function applyPrintOpts(){
   c.ladTruSiblings=get('po-lad-tru-sib'); c.ladRootSiblings=get('po-lad-root-sib');
   { const sel=document.getElementById('po-va-method'); if(sel&&state) state.meta.vaMethod=sel.value==='algebraic'?'algebraic':'vector'; }
   { const fixed=document.getElementById('po-round-mode').value==='fixed';
-    c.rounding={mode:fixed?'fixed':'sig',digits:+document.getElementById('po-round-digits').value||4,step:+document.getElementById('po-round-step').value||0.01}; }
+    c.rounding={mode:fixed?'fixed':'sig',digits:+document.getElementById('po-round-digits').value||4,step:+document.getElementById('po-round-step').value||0.01,
+      lower:+document.getElementById('po-round-lower').value||0.001,upper:+document.getElementById('po-round-upper').value||1}; }
   // Per-item choice for each TRU output / top-level item of the current analysis.
   document.querySelectorAll('#po-lad-entries select[data-nid]').forEach(sel=>{
     const n=state&&state.nodes[sel.dataset.nid]; if(!n) return;
     if (sel.value==='default') delete n.ladGroup; else n.ladGroup=sel.value;
   });
 }
-// Shows the digits choice for "Significant digits" and the step choice for "Fixed decimal".
+// Report presets (version 0.9.5): the AC columns plus the VA calculation. "VA" is the default for new projects.
+const PO_GROUP_IDS=['cap','exload','added','nc','newload','rem'];
+const PO_AC_KEYS=['a','va','w','var','pf'];
+const PO_PRESETS={
+  va:    {method:'algebraic',ac:{cap:['va'],exload:['va'],added:['va'],nc:['va'],newload:['va'],rem:['va']}},
+  vector:{method:'vector',ac:{cap:['va'],exload:['va','w','var','pf'],added:['w','var'],nc:['w','var'],newload:['va','w','var','pf'],rem:['va']}}
+};
+function poApplyPreset(name) {
+  const sp=PO_PRESETS[name]; if (!sp) return;
+  PO_GROUP_IDS.forEach(g=>PO_AC_KEYS.forEach(k=>{ const el=document.getElementById(`po-ac-${g}-${k}`); if (el) el.checked=sp.ac[g].includes(k); }));
+  const m=document.getElementById('po-va-method'); if (m) m.value=sp.method;
+}
+// Sets the preset choice to whichever preset the dialog's AC checkboxes and VA calculation match, or Custom.
+function poDetectPreset() {
+  const sel=document.getElementById('po-preset'); if (!sel) return;
+  const m=document.getElementById('po-va-method');
+  const cur=m?m.value:'vector';
+  const matches=name=>{ const sp=PO_PRESETS[name]; if (sp.method!==cur) return false;
+    return PO_GROUP_IDS.every(g=>PO_AC_KEYS.every(k=>{ const el=document.getElementById(`po-ac-${g}-${k}`); return !!(el&&el.checked)===sp.ac[g].includes(k); })); };
+  sel.value=matches('va')?'va':matches('vector')?'vector':'custom';
+}
+// Shows the digits and limit choices for "Dynamic" and the step choice for "Fixed decimal".
 function syncRoundingControls() {
   const fixed=document.getElementById('po-round-mode').value==='fixed';
   document.getElementById('po-round-digits').style.display=fixed?'none':'';
+  document.getElementById('po-round-lower').style.display=fixed?'none':'';
+  document.getElementById('po-round-upper').style.display=fixed?'none':'';
   document.getElementById('po-round-step').style.display=fixed?'':'none';
 }
 // Settings dialog: one dropdown per TRU output / top-level item of the current analysis that can start a
@@ -9884,11 +10004,13 @@ function initEvents() {
     e.returnValue='';
   });
   document.getElementById('po-round-mode').addEventListener('change',syncRoundingControls);
+  document.getElementById('po-preset').addEventListener('change',e=>{ if (e.target.value!=='custom') poApplyPreset(e.target.value); });
+  document.getElementById('print-opts').addEventListener('change',e=>{ const id=e.target.id||''; if (id.startsWith('po-ac-')||id==='po-va-method') poDetectPreset(); });
   document.getElementById('print-opts-close' ).addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-cancel').addEventListener('click',()=>document.getElementById('print-opts').classList.add('hidden'));
   document.getElementById('print-opts-reset' ).addEventListener('click',()=>{
     reportCfg=defaultPrintCfg();
-    if (state) Object.values(state.nodes).forEach(n=>{ delete n.ladGroup; });   // per-item Vertical report table choices
+    if (state) { state.meta.vaMethod='algebraic'; Object.values(state.nodes).forEach(n=>{ delete n.ladGroup; }); }   // the VA preset's calculation; per-item Vertical report table choices
     openPrintOpts();
   });
   // Revision 70, item 5.3: no more Print/Export action here — "Done" just applies the checkbox

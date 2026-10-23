@@ -9,6 +9,24 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.5 — 2026-10-22 (testing build)
+
+Revision 84 (items 1–6 of the next round of requests).
+
+- **Word row notes** use a hanging indent (0.15 inch): the number at the margin, a tab, and wrapped lines under the text.
+- **Horizontal Load Analysis Detail** (screen and Word): the "Installed (Removed)" column group is gone; a Load's value shows under
+  **Net Change** (a removed load in parentheses). The Summary tables and the vertical report are unchanged.
+- **DC rows in the Existing / Removed and Installed grids:** a square accent bar at the left edge, the indent space tinted a step
+  brighter and ending at the item-type badge; the identity columns are no longer tinted.
+- **Report presets** in Settings: **VA** (VA only, algebraic sums) is now the default for new projects and for Reset to Defaults;
+  **Vector** is the previous AC default (VA, W, VAR, pf with vector sums); **Custom** shows when you change either by hand. Existing
+  projects keep their settings.
+- **Report rounding:** "Significant digits" is now **Dynamic**, with a lower limit (0.001 / 0.01 / 0.1) and an upper limit
+  (1 / 10 / 100). New projects use 0.001 and 1; projects saved earlier keep their old result (upper limit 10).
+- **TRU transfer note:** adding a TRU creates a row note on its inputs and output — "[TRU out] DC loads transferred to [TRU in]
+  using the formula VA = Wdc / (efficiency x pf x number of input phases)" — that updates with the TRU's names, efficiency, pf and
+  phases; editing its text makes it an ordinary note. Shared and duplicated TRUs get their own copy.
+
 ## 0.9.4 — 2026-10-19 (testing build)
 
 Fixes.
