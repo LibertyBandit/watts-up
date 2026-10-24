@@ -1144,7 +1144,7 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
 <li><strong>Load Analysis Summary</strong> — the whole tree as one table (AC and DC sections): Capacity, Existing Load,
   Load, Net Change, New Load and Reserve.</li>
 <li><strong>Power Distribution Summary</strong> — generation, conversion and distribution items only (no breakers, fuses or
-  loads): Capacity, Net Change, New Load and Remaining.</li>
+  loads): Capacity, Net Change, New Load and Remaining. It carries no row notes.</li>
 <li><strong>Load Analysis Detail</strong> — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A <strong>Vertical / Horizontal</strong> toggle chooses the
   layout (Vertical places sibling items side by side; see §5 for the options that control it). In the Horizontal
@@ -1212,7 +1212,8 @@ with the project.</p>
 <li><strong>Row Notes</strong> — reusable notes that you attach to items from the Edit dialog. Edit the text here and it
   changes everywhere it is used. Buttons share or copy all of them to the other analysis. Adding a TRU also
   creates a row note, attached to its inputs and output, that explains how the TRU's DC loads were transferred to its
-  inputs (the formula with the TRU's own names, efficiency, power factor and number of input phases). It fills in
+  inputs (the formula with the TRU's own names, efficiency, power factor and, when the TRU has more than one input phase, the
+  number of phases — for example "VA = Wdc / (0.85 eff. x 0.95 pf x 3 Ø)"). It fills in
   and updates by itself; edit its text and it becomes an ordinary note.</li>
 </ul>
 <h2 id="4-building-an-analysis">4. Building an analysis</h2>
@@ -1537,7 +1538,8 @@ the items, values, row notes and references taken when you turn tracking on — 
 <li><strong>Tracking On</strong> (first time): takes the baseline and starts marking. From then on every number in the reports that differs from
   the baseline is underlined — including totals, new loads and reserves that changed <em>because</em> of an edit — and so is the name of
   every item that is new, renamed, moved, or has a different status or type. A row note or reference that is new or whose text
-  changed is underlined in the notes and references lists, and a note marker is underlined on an item that newly has that note or
+  changed is underlined in the notes and references lists (a changed reference is underlined in the References list, but a row
+  note that merely cites it is underlined only when the citation comment is new or changed), and a note marker is underlined on an item that newly has that note or
   reference. This works in the Load Analysis Summary tab, the Power Distribution Summary, both Load Analysis Detail layouts, the
   Print Report and the Word report. On screen, hover over an underlined number to see what the baseline showed (or what an
   underlined name used to be). A small chip beside the version number shows <strong>Tracking On</strong>
@@ -3068,7 +3070,7 @@ function truXferNoteText(cg,nodes) {
   const num=v=>String(parseFloat((+v).toFixed(4)));
   const names=ins.every(i=>i.phase)?`${nm(ins[0])} (${ins.map(i=>'Ø'+i.phase).join(', ')})`:ins.map(nm).join(', ');
   const outName=nm(out);   // an output already named "... DC" isn't given a second "DC"
-  return `${/\bDC$/i.test(outName)?outName:outName+' DC'} loads transferred to ${names} using the formula VA = Wdc / (${num(ins[0].efficiency)} x ${num(ins[0].convPf)} x ${ins.length})`;
+  return `${/\bDC$/i.test(outName)?outName:outName+' DC'} loads transferred to ${names} using the formula VA = Wdc / (${num(ins[0].efficiency)} eff. x ${num(ins[0].convPf)} pf${ins.length>1?` x ${ins.length} Ø`:''})`;
 }
 function refreshNoteTemplates() {
   if (!state) return;
@@ -3524,8 +3526,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.8';
-const APP_RELEASE_DATE='2026-10-23';
+const APP_VERSION='0.9.9';
+const APP_RELEASE_DATE='2026-10-24';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -4282,7 +4284,8 @@ function renderPowerDistSummary() {
   // Detail report, not the Alternate report's per-group rows. One combined footnote list for the
   // whole report (not per-table) since PDS only ever renders two tables total, not one per node.
   const annotator=makeAnnotator();
-  const hasAnyAnnot=allIds.some(id=>annotator.hasText(state.nodes[id].rowNotes,state.nodes[id].rowRefs));
+  // Version 0.9.9: the Power Distribution Summary carries no row notes (no Notes column, no notes list).
+  const hasAnyAnnot=false;
 
   const acFirst=state.nodes[state.rootIds[0]]?.acDc==='ac';
   const dcLbl=acDcVoltageLabel('dc'), acLbl=acDcVoltageLabel('ac');
@@ -4290,7 +4293,6 @@ function renderPowerDistSummary() {
   const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${pdsThead(acCols,hasAnyAnnot)}<tbody>${pdsRows(acIds,acCols,acDm,annotator,hasAnyAnnot)}</tbody></table>`:'';
   let html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No Generation, Conversion, or Distribution items to summarize.</div>';
-  else if (annotator.notesList.length) html+=`<ol class="rpt-detail-notes">${annotator.notesList.map(({num,text,chg})=>`<li value="${num}">${chgHtml(text,chg)}</li>`).join('')}</ol>`;
   el.innerHTML=html;
 }
 
@@ -4334,7 +4336,7 @@ function makeAnnotator() {
       const text=`ref [${refNum}]${docNo?' '+docNo:''}: ${comment}`;
       const dedupeKey='ref:'+r.key+'|'+comment;
       let num=seen.get(dedupeKey);
-      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text,chg:on&&(chgRefBankChanged(refs.find(x=>x.key===r.key))||chgRefComment(r.key,comment))}); }
+      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text,chg:on&&chgRefComment(r.key,comment)}); }
       tokens.push(String(num)); entries.push(notesList.find(e=>e.num===num));
     });
     if (!tokens.length) return null;
@@ -4763,7 +4765,7 @@ function renderLoadAnalysisDetailAlt() {
       return `<th class="rpt-grp${w?' rpt-'+w+'-th':''}" colspan="${cols.length}">${label}${note}</th>`;
     }).join('');
     const unitHdr=t.members.map(()=>cols.map((c,i)=>`<th class="rpt-sub${i===0?' rpt-grp-first':''}">${c.l}</th>`).join('')).join('');
-    const notesTh=hasAnyAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
+    const notesTh=hasAnyAnnot?'<th class="rpt-notes-col" rowspan="2">Notes<br>[Ref.]</th>':'';
     const thead=`<thead><tr><th class="rpt-left" rowspan="2"></th><th rowspan="2"></th>${notesTh}${grpHdr}</tr><tr>${unitHdr}</tr></thead>`;
     const parentFs='8.5pt',childFs='7.5pt';
     const body=t.rows.map(r=>{
@@ -8800,7 +8802,7 @@ function buildAnnotationMap() {
 function buildRptHeader(cols,hasAnnot,leftCellContent){
   const runs=[];
   cols.forEach(c=>{if(!runs.length||runs[runs.length-1].label!==c.groupLabel)runs.push({label:c.groupLabel,count:1});else runs[runs.length-1].count++;});
-  const annotTh=hasAnnot?'<th class="rpt-notes-col" rowspan="2">Notes</th>':'';
+  const annotTh=hasAnnot?'<th class="rpt-notes-col" rowspan="2">Notes<br>[Ref.]</th>':'';
   return `<thead><tr><th class="rpt-left" rowspan="2">${leftCellContent||''}</th><th rowspan="2"></th>${annotTh}${runs.map(g=>`<th class="rpt-grp" colspan="${g.count}">${g.label}</th>`).join('')}</tr><tr>${cols.map(c=>`<th class="rpt-sub${c.isGroupFirst?' rpt-grp-first':''}">${c.l}</th>`).join('')}</tr></thead>`;
 }
 
@@ -9045,7 +9047,7 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths,hasRat
   let r1='';
   r1+=wxTc(wxPar(leftCellContentXml||'',{before:0,after:0,keepNext:true}),{w:descW,vm:'start'});
   if(hasRating)r1+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:ratingW,vm:'start'});
-  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
+  if(hasAnnot)r1+=wxTc(wxPar(wxRun('Notes',{b:true,sz:HSZ})+'<w:r><w:br/></w:r>'+wxRun('[Ref.]',{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   runs.forEach(g=>{
     r1+=wxTc(wxPar(wxRun(g.label,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),
       {w:g.w,span:g.count>1?g.count:undefined,leftBdr:true});
@@ -9467,9 +9469,7 @@ function buildPdsWordTables(ids,cols,dm,cfg,annotator,am,opts){
     const pushEntries=entries=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
     groupIds.forEach(id=>{
       const n=state.nodes[id]; if(!n) return;
-      const a=annotator.annotate(n.rowNotes,n.rowRefs,n);
-      if(a) pushEntries(a.entries);
-      const pid=n.parentId??'__root__';
+      const pid=n.parentId??'__root__';   // (version 0.9.9: no row notes in this report)
       const depth=dm[id]||0;
       const labelSz=Math.max(6.5,8.5-depth*0.5);
       if(n.status==='removed'&&!emRem.has(pid)){
@@ -9505,14 +9505,10 @@ function buildPdsWordContent(){
   // renderPowerDistSummary's own fresh makeAnnotator() call exactly (not the shared
   // buildAnnotationMap whole-document numbering the Load Analysis Summary table uses).
   const annotator=makeAnnotator();
+  // Version 0.9.9: no row notes in the Power Distribution Summary (no Notes column, no notes under the tables).
   const am={};
-  allIds.forEach(id=>{
-    const n=state.nodes[id];
-    const a=annotator.annotate(n.rowNotes,n.rowRefs,n);
-    if (a) am[id]={marker:a.marker,chg:a.chg};
-  });
-  const hasAnnot=Object.keys(am).length>0;
-  const amArg=hasAnnot?am:null;
+  const hasAnnot=false;
+  const amArg=null;
 
   // Revision 71, item 3.1: no Rating column, so its width is reclaimed into the value columns
   // instead of the Rating column now being an unused, no-longer-blank width.
@@ -9700,7 +9696,7 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   // Revision 78: the path is its own paragraph above the table (bold italic, 10 pt), kept with the table.
   const pathParaXml=t.path?wxPar(wxRun(t.path.join(' > ')+' >',{b:true,i:true,sz:10}),{before:100,after:40,keepNext:true}):'';
   let h1=wxTc(kp(''),{w:labelW,vm:'start'})+wxTc(kp(''),{w:cbW,vm:'start'});
-  if(hasAnnot) h1+=wxTc(wp(wxRun('Notes',{b:true,sz:7}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
+  if(hasAnnot) h1+=wxTc(wp(wxRun('Notes',{b:true,sz:7})+'<w:r><w:br/></w:r>'+wxRun('[Ref.]',{b:true,sz:7}),{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,vm:'start',leftBdr:true});
   t.members.forEach(m=>{
     const n=m.node;
     // Revision 83 follow-up (0.9.3): the item's name on the first line; whatever else the header carries

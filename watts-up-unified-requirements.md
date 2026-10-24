@@ -6048,6 +6048,16 @@ accepting a new item adds it to the baseline (parent's child list too) and a lat
 Restore brought a deleted item back at its place and Accept deletion removed it from the baseline; with items shared between the analyses, Reject All restored both analyses with all links
 reciprocal, and with the second analysis created after the baseline it was left alone and its stale links were dropped; the project then reloads without errors. Change tracking is now complete.
 
+## 87. Version 0.9.9 — Five Follow-Up Changes
+
+Requested 2026-10-24 (all implemented as asked, no design questions needed):
+1. **No row notes in the Power Distribution Summary** (screen `renderPowerDistSummary` `hasAnyAnnot=false`, no notes list; Word `buildPdsWordContent` `hasAnnot=false`/no `am`, `buildPdsWordTables` no longer annotates).
+2. **TRU transfer note wording** (`truXferNoteText`): "… VA = Wdc / (0.85 eff. x 0.95 pf x 3 Ø)".
+3. **Single input phase:** the "x N Ø" term is omitted when the TRU has one input ("… (0.85 eff. x 0.95 pf)").
+4. **"Notes [Ref.]" heading** (two lines) in the Load Analysis Summary, the horizontal and vertical Load Analysis Detail and Print — screen (`buildRptHeader`, the vertical `notesTh`) and Word (`buildWordTblHeader`, the vertical header); not the Power Distribution Summary (which no longer has the column).
+5. **Change tracking and references:** a row-note line that cites a reference with a comment is underlined only when the (reference, comment) citation is new or changed since the baseline (`chgRefComment`); a changed reference record no longer underlines it (the References list still does, via `chgRefBankChanged`).
+Verified: PDS screen and Word have no Notes column/list while the other reports keep theirs; headings read "Notes" / "[Ref.]" in screen, Print and Word; single-input and three-input note text; a changed reference title/number leaves the row-note line plain and underlines the References list entry, and a new comment underlines the line.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

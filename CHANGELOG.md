@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.9 — 2026-10-24 (testing build)
+
+- **Power Distribution Summary:** no row notes (no Notes column and no notes under the tables), on screen and in Word.
+- **TRU transfer note:** the formula now reads "VA = Wdc / (0.85 eff. x 0.95 pf x 3 Ø)", and for a TRU with a single input phase the
+  number of phases is left out: "VA = Wdc / (0.85 eff. x 0.95 pf)".
+- **Notes column heading** in the Load Analysis Summary, both Load Analysis Detail layouts and Print (screen and Word): "Notes" over "[Ref.]".
+- **Change tracking:** when a reference is changed, a row note that only cites it (with a comment) is no longer underlined; it is underlined
+  only when the citation comment itself is new or changed. The change still shows in the References list.
+
 ## 0.9.8 — 2026-10-23 (testing build)
 
 Revision 84, item 7 (change tracking), final stage.

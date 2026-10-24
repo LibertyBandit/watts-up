@@ -69,7 +69,7 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
 - **Load Analysis Summary** — the whole tree as one table (AC and DC sections): Capacity, Existing Load,
   Load, Net Change, New Load and Reserve.
 - **Power Distribution Summary** — generation, conversion and distribution items only (no breakers, fuses or
-  loads): Capacity, Net Change, New Load and Remaining.
+  loads): Capacity, Net Change, New Load and Remaining. It carries no row notes.
 - **Load Analysis Detail** — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A **Vertical / Horizontal** toggle chooses the
   layout (Vertical places sibling items side by side; see §5 for the options that control it). In the Horizontal
@@ -110,7 +110,8 @@ Report information that is not part of the power tree:
 - **Row Notes** — reusable notes that you attach to items from the Edit dialog. Edit the text here and it
   changes everywhere it is used. Buttons share or copy all of them to the other analysis. Adding a TRU also
   creates a row note, attached to its inputs and output, that explains how the TRU's DC loads were transferred to its
-  inputs (the formula with the TRU's own names, efficiency, power factor and number of input phases). It fills in
+  inputs (the formula with the TRU's own names, efficiency, power factor and, when the TRU has more than one input phase, the
+  number of phases — for example "VA = Wdc / (0.85 eff. x 0.95 pf x 3 Ø)"). It fills in
   and updates by itself; edit its text and it becomes an ordinary note.
 
 ## 4. Building an analysis
@@ -327,7 +328,8 @@ the items, values, row notes and references taken when you turn tracking on — 
 - **Tracking On** (first time): takes the baseline and starts marking. From then on every number in the reports that differs from
   the baseline is underlined — including totals, new loads and reserves that changed *because* of an edit — and so is the name of
   every item that is new, renamed, moved, or has a different status or type. A row note or reference that is new or whose text
-  changed is underlined in the notes and references lists, and a note marker is underlined on an item that newly has that note or
+  changed is underlined in the notes and references lists (a changed reference is underlined in the References list, but a row
+  note that merely cites it is underlined only when the citation comment is new or changed), and a note marker is underlined on an item that newly has that note or
   reference. This works in the Load Analysis Summary tab, the Power Distribution Summary, both Load Analysis Detail layouts, the
   Print Report and the Word report. On screen, hover over an underlined number to see what the baseline showed (or what an
   underlined name used to be). A small chip beside the version number shows **Tracking On**
