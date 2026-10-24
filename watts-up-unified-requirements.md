@@ -5988,6 +5988,33 @@ ways, Custom on a hand change, Reset → VA, Dynamic limit selectors shown/hidde
 efficiency and added phases (both analyses after sharing), a duplicate gets its own, hand-editing detaches it; horizontal detail on screen and in Word has no "Installed (Removed)" group
 and loads under Net Change; grid screenshot shows the square bar, tinted indent and untinted identity columns; Word opens the generated report with the hanging indent. Clean console.
 
+## 86. Change Tracking — Stage 1 (version 0.9.6)
+
+Design interview 2026-10-22/23 (item 7 of the Revision 84 list); all proposals accepted, with the user's terminology and changes: buttons are
+**Tracking On / Tracking Off / Accept All / Reject All** (no Stop Tracking — Accept All + Tracking Off covers it); no "changed since" legend in the Word
+reports (screen only); row notes and references are tracked and restored too; Reject All warns what it can't restore (document properties,
+Settings, general notes, the Word connection); overwriting an entry while Tracking is Off clears its mark and the marks of values recalculated from it.
+
+**Model.** `state.track = {on, takenAt, baseline:{ap,pcm}}`, each baseline analysis `{nodes (inputs only), rootIds, rowNoteDefs, references}`
+(`trackSnapAn`); saved in `snapshotState` and the Word hidden JSON (`track`). No marks are stored: `trackBaseView()` recalculates a copy of the baseline
+(`recalcCore` on a swapped `state`, cached until the next `recalc`) so computed values compare like for like. `chgItem(n)` = new, or description / ref des /
+status / type / parent differ; `chgCell(n,group,key,isPf,loadsInNc,fmtFn)` = the displayed text (`fmtRpt`, or `fmtN` on the Load Analysis Summary tab) differs from the
+baseline's; compared on displayed text so invisible changes aren't marked.
+**Tracking Off.** `recalc()` = `recalcCore()` + `trackFold()`: whatever changed since the previous recalculation is folded into the baseline (changed/added nodes copied,
+deleted nodes removed, root order, note and reference lists by key) — so a new edit is never marked, an overwritten marked entry's mark and its dependents' marks clear, other
+marks stay. The "previous recalculation" snapshot lives only in memory (`trackSeen`, tied to the project object so another project's snapshot is never used).
+**Buttons.** `trackOn` (first time: takes the baseline), `trackOff`, `trackAcceptAll`; the Changes dialog shows counts (new / changed items, items with a changed number, deleted).
+**Marks drawn in** (this stage): Word `buildWordDataRow` (Load Analysis Summary, Power Distribution Summary, horizontal detail; `wxRun` `u`), on-screen `buildRptRow` (horizontal
+detail, Print) with class `rpt-chg`, and the Load Analysis Summary tab (`chgMarkCells`, `data-chg`).
+**Import safety.** `sanitizeTrack` (end of `migrateLegacy`): shape, ids, item types, parents and node fields are checked like the project; damaged tracking data is removed with a
+message (tracking off) rather than refusing the file.
+
+Verified: no marks without a baseline; none right after Tracking On; an edit marks the item and its ancestors' totals (screen tab, Word summary and horizontal, Print, horizontal screen);
+typing the old value back clears them; a new item and a rename are counted and marked; Tracking Off absorbs edits and clears the marks of an overwritten entry and its dependents while a
+different tracked change keeps its marks; Tracking On keeps earlier marks; Accept All clears; JSON and Word round trips keep the baseline; damaged baselines (bad type, parent, root id,
+field, date) are dropped with a note; the Word document opens with 32 underlined cells in the test. Not yet: vertical detail and PDS marks, note/reference marks and the baseline-value tooltip
+(0.9.7); Reject All, per-item controls and the deleted-items list (0.9.8).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

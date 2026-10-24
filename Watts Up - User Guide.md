@@ -37,7 +37,7 @@ the auto-save belongs to one browser on one computer, and clearing the browser's
 
 From top to bottom:
 
-1. **Toolbar** — New, Open, Export JSON, Print Report, Word Report, Settings, Help, Exit (§6, §7, §5, §9). The program version is shown beside the title.
+1. **Toolbar** — New, Open, Export JSON, Print Report, Word Report, Changes, Settings, Help, Exit (§6, §7, §9, §5, §10). The program version is shown beside the title.
 2. **Analysis switch and aircraft details** — choose **Active Project** or **Previous & Concurrent
    Modifications** (§4.4); type the aircraft **Make, Model, Designation, Serial #, Flight Phase** and
    **Interval**. These appear on the reports.
@@ -319,7 +319,31 @@ a `.docx` or `.json`.
 | Work is missing after reopening the browser | The auto-save is per browser and may have been cleared. Keep an exported `.json` or a connected Word report. |
 | The Open/Save dialogs look different | You are in a browser without file-system access; files are downloaded instead. Use Chrome or Edge for the full feature set. |
 
-## 9. Versions and getting help
+## 9. Tracking changes
+
+Use **Changes** on the toolbar to see what a revision has changed. Watts Up compares the project with a **baseline** — a copy of
+the items, values, row notes and references taken when you turn tracking on — and **underlines** everything that differs from it.
+
+- **Tracking On** (first time): takes the baseline and starts marking. From then on every number in the reports that differs from
+  the baseline is underlined — including totals, new loads and reserves that changed *because* of an edit — and so is the name of
+  every item that is new, renamed, moved, or has a different status or type. This works in the Load Analysis Summary tab, the
+  horizontal Load Analysis Detail, the Print Report and the Word report. A small chip beside the version number shows **Tracking On**
+  or **Tracking Off**, and a line above the on-screen reports says what the underlines mean.
+- **Tracking Off**: stops marking new edits — they are accepted as you make them. Marks that already exist stay. If you overwrite an
+  entry that was marked, its mark goes away, and so do the marks on the values that were recalculated because of it; other marks
+  stay. Use it for tidying that should not be flagged.
+- **Tracking On** (again): keeps the earlier marks and resumes marking.
+- **Accept All**: clears every underline and makes the current state the new baseline. Use it when the revision is approved.
+- **Undoing a change:** type the old value back — the underline disappears by itself once a number matches the baseline again.
+  (A **Reject All** that puts everything back to the baseline, and a pop-up showing each marked number's baseline value, are planned.)
+
+Notes:
+- The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
+  Changes is not used.
+- Row notes, references, document properties and report settings are not marked yet (marks for notes and references are planned).
+- The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.
+
+## 10. Versions and getting help
 
 - **Version.** The version number (for example `v1.0.0`) is shown beside the title on the toolbar; hover over it for the
   release date. The printed report shows it in its header, and a Word report records it in its document properties

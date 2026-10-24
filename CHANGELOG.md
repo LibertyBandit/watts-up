@@ -9,6 +9,22 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.6 — 2026-10-23 (testing build)
+
+Revision 84, item 7 (change tracking), first stage.
+
+- **Changes** button (toolbar) with **Tracking On / Off** and **Accept All**; a **Tracking On / Tracking Off** chip beside the version
+  number; a legend line above the on-screen reports.
+- **Underlines for what changed since the baseline** in the Load Analysis Summary tab, the horizontal Load Analysis Detail, the Print
+  Report and the Word report: any number whose displayed value differs from the baseline (including recalculated totals), and the
+  name of any item that is new, renamed, moved, or changed in status or type.
+- While Tracking is Off, edits are accepted as you make them (no marks); overwriting a marked entry clears its mark and the marks on
+  values recalculated from it. Tracking On resumes and keeps the earlier marks. Accept All clears all marks.
+- The baseline is saved in project files and Word reports (it roughly doubles the item data); damaged tracking data in a file is dropped
+  with a message.
+- Coming next: the vertical detail and Power Distribution Summary, marks for row notes and references, a pop-up with each baseline value
+  (0.9.7); Reject All and per-item accept/reject (0.9.8).
+
 ## 0.9.5 — 2026-10-22 (testing build)
 
 Revision 84 (items 1–6 of the next round of requests).

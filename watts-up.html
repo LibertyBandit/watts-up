@@ -23,6 +23,13 @@
     .app-title{font-size:1.1rem;font-weight:700;color:var(--accent-blue);letter-spacing:1px}
     .app-version{font-size:.72rem;color:var(--text-muted);font-weight:600;margin-left:.1rem}
     .save-indicator{font-size:.72rem;color:var(--text-muted)}
+    .track-chip{font-size:.68rem;font-weight:700;padding:.05rem .4rem;border-radius:999px;margin-left:.2rem}
+    .track-chip.track-on{background:rgba(63,185,80,.18);color:var(--accent-green)}
+    .track-chip.track-off{background:rgba(210,153,34,.18);color:#d29922}
+    .chg-legend{font-size:.72rem;color:var(--text-secondary);padding:.15rem .6rem;border-bottom:1px solid var(--border)}
+    #track-close{background:none;color:var(--text-secondary);font-size:1.15rem;padding:.1rem .38rem;border-radius:4px}
+    #track-close:hover{background:var(--bg-hover);color:var(--text-primary)}
+    .rpt-chg,#table-container td[data-chg],#table-container span[data-chg]{text-decoration:underline}
     .header-right{display:flex;gap:.4rem}
     button{cursor:pointer;border:none;border-radius:6px;padding:.3rem .7rem;font-size:.82rem;
       font-family:inherit;transition:background .12s,opacity .12s}
@@ -419,6 +426,7 @@
     <div class="header-left">
       <span class="app-title">⚡ Watts Up</span>
       <span id="app-version" class="app-version"></span>
+      <span id="track-chip" class="track-chip hidden"></span>
       <span id="save-indicator" class="save-indicator"></span>
     </div>
     <div class="header-right">
@@ -429,6 +437,7 @@
       <button id="btn-print"  class="btn-default">Print Report</button>
       <button id="btn-word"   class="btn-default">Word Report</button>
       <span id="word-doc-indicator" class="hidden" style="font-size:.78rem;font-weight:600;color:var(--accent-green);margin-left:.3rem"></span>
+      <button id="btn-changes" class="btn-default" title="Track changes: underline what differs from a baseline">Changes</button>
       <button id="btn-settings" class="btn-default">Settings</button>
       <button id="btn-help"   class="btn-default" title="Open the user guide in a new tab">Help</button>
       <button id="btn-exit"   class="btn-default">Exit</button>
@@ -555,6 +564,7 @@
           <button id="lad-layout-horizontal" class="lad-layout-btn">Horizontal</button>
         </div>
       </div>
+      <div id="chg-legend" class="chg-legend hidden"></div>
       <div id="table-container"><div class="empty-state">No data to display.</div></div>
       <div id="pds-container" class="hidden rpt-onscreen"><div class="empty-state">No data to display.</div></div>
       <div id="lad-container" class="hidden rpt-onscreen"><div class="empty-state">No data to display.</div></div>
@@ -1025,7 +1035,8 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
 </ul>
 </li>
 <li><a href="#8-tips-and-troubleshooting">8. Tips and troubleshooting</a></li>
-<li><a href="#9-versions-and-getting-help">9. Versions and getting help</a></li>
+<li><a href="#9-tracking-changes">9. Tracking changes</a></li>
+<li><a href="#10-versions-and-getting-help">10. Versions and getting help</a></li>
 </ul>
 </div>
 
@@ -1075,7 +1086,7 @@ the auto-save belongs to one browser on one computer, and clearing the browser's
 <h2 id="2-the-main-screen">2. The main screen</h2>
 <p>From top to bottom:</p>
 <ol>
-<li><strong>Toolbar</strong> — New, Open, Export JSON, Print Report, Word Report, Settings, Help, Exit (§6, §7, §5, §9). The program version is shown beside the title.</li>
+<li><strong>Toolbar</strong> — New, Open, Export JSON, Print Report, Word Report, Changes, Settings, Help, Exit (§6, §7, §9, §5, §10). The program version is shown beside the title.</li>
 <li><strong>Analysis switch and aircraft details</strong> — choose <strong>Active Project</strong> or <strong>Previous &amp; Concurrent
    Modifications</strong> (§4.4); type the aircraft <strong>Make, Model, Designation, Serial #, Flight Phase</strong> and
    <strong>Interval</strong>. These appear on the reports.</li>
@@ -1511,7 +1522,29 @@ a <code>.docx</code> or <code>.json</code>.</p>
 </tr>
 </tbody>
 </table>
-<h2 id="9-versions-and-getting-help">9. Versions and getting help</h2>
+<h2 id="9-tracking-changes">9. Tracking changes</h2>
+<p>Use <strong>Changes</strong> on the toolbar to see what a revision has changed. Watts Up compares the project with a <strong>baseline</strong> — a copy of
+the items, values, row notes and references taken when you turn tracking on — and <strong>underlines</strong> everything that differs from it.</p>
+<ul>
+<li><strong>Tracking On</strong> (first time): takes the baseline and starts marking. From then on every number in the reports that differs from
+  the baseline is underlined — including totals, new loads and reserves that changed <em>because</em> of an edit — and so is the name of
+  every item that is new, renamed, moved, or has a different status or type. This works in the Load Analysis Summary tab, the
+  horizontal Load Analysis Detail, the Print Report and the Word report. A small chip beside the version number shows <strong>Tracking On</strong>
+  or <strong>Tracking Off</strong>, and a line above the on-screen reports says what the underlines mean.</li>
+<li><strong>Tracking Off</strong>: stops marking new edits — they are accepted as you make them. Marks that already exist stay. If you overwrite an
+  entry that was marked, its mark goes away, and so do the marks on the values that were recalculated because of it; other marks
+  stay. Use it for tidying that should not be flagged.</li>
+<li><strong>Tracking On</strong> (again): keeps the earlier marks and resumes marking.</li>
+<li><strong>Accept All</strong>: clears every underline and makes the current state the new baseline. Use it when the revision is approved.</li>
+<li><strong>Undoing a change:</strong> type the old value back — the underline disappears by itself once a number matches the baseline again.
+  (A <strong>Reject All</strong> that puts everything back to the baseline, and a pop-up showing each marked number's baseline value, are planned.)</li>
+</ul>
+<p>Notes:
+- The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
+  Changes is not used.
+- Row notes, references, document properties and report settings are not marked yet (marks for notes and references are planned).
+- The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.</p>
+<h2 id="10-versions-and-getting-help">10. Versions and getting help</h2>
 <ul>
 <li><strong>Version.</strong> The version number (for example <code>v1.0.0</code>) is shown beside the title on the toolbar; hover over it for the
   release date. The printed report shows it in its header, and a Word report records it in its document properties
@@ -1593,6 +1626,16 @@ a <code>.docx</code> or <code>.json</code>.</p>
         <div class="spacer"></div>
         <button id="print-opts-cancel" class="btn-default">Cancel</button>
         <button id="print-opts-go" class="btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="track-dialog" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="choice-modal">
+      <div class="modal-header"><h2>Track Changes</h2><button id="track-close" aria-label="Close">✕</button></div>
+      <div class="modal-body">
+        <div id="track-body"></div>
+        <div class="choice-btns"><button id="track-accept" class="btn-default">Accept All</button><button id="track-toggle" class="btn-primary">Tracking On</button></div>
       </div>
     </div>
   </div>
@@ -2737,7 +2780,27 @@ function migrateLegacy(p) {
     syncAllPhaseGroups(an.nodes);
   });
   repairPartlySharedGroups(p);
+  sanitizeTrack(p);
   installAnalysisView(p);
+}
+// Change-tracking data in a file is checked like the rest of it; damaged data is dropped (tracking just stops).
+function sanitizeTrack(p) {
+  if (p.track===undefined||p.track===null) { p.track=null; return; }
+  try {
+    const T=p.track;
+    if (typeof T!=='object'||typeof T.on!=='boolean'||typeof T.takenAt!=='string'||T.takenAt.length>40||!T.baseline||typeof T.baseline!=='object'||!T.baseline.ap) throw new Error('shape');
+    ['ap','pcm'].forEach(id=>{
+      const b=T.baseline[id]; if (b==null) { T.baseline[id]=null; return; }
+      if (!b.nodes||typeof b.nodes!=='object'||!Array.isArray(b.rootIds)) throw new Error('shape');
+      b.rootIds.forEach(r=>{ if (typeof r!=='string'||!IMPORT_ID_RE.test(r)) throw new Error('ids'); });
+      Object.values(b.nodes).forEach(n=>{
+        if (!n||typeof n!=='object'||!ALL_TYPES.includes(n.type)) throw new Error('type');
+        if (n.parentId!==null&&(typeof n.parentId!=='string'||!IMPORT_ID_RE.test(n.parentId))) throw new Error('parent');
+      });
+      checkImportFields(b.nodes,'change-tracking baseline');
+      ['rowNoteDefs','references'].forEach(list=>{ if (!Array.isArray(b[list])) b[list]=[]; b[list].forEach(e=>{ if (!e||typeof e.key!=='string'||!IMPORT_ID_RE.test(e.key)) throw new Error('keys'); }); });
+    });
+  } catch(e) { p.track=null; importRepairNotes.push('the change-tracking data in this file was damaged and was removed (tracking is off)'); }
 }
 // Revision 83 follow-up (0.9.4): a phase group (including a TRU's input phases) must be shared with the
 // other analysis as a whole or not at all. Earlier versions let input phases be added to a shared TRU on
@@ -3019,7 +3082,176 @@ function fixTruNoteRefs() {
   });
   bad.forEach(cg=>ensureTruNote(cg));
 }
+// ── CHANGE TRACKING (version 0.9.6) ──────────────────────────────────────────
+// state.track = {on, takenAt, baseline:{ap,pcm}} where each baseline analysis is {nodes,rootIds,rowNoteDefs,references}
+// (inputs only, no computed values). Marks are never stored: a report cell is underlined when its displayed text
+// differs from what the baseline would have shown (the baseline is recalculated like the project, see trackBaseView),
+// and an item is underlined when it is new or its name / ref des / status / type / parent changed. While Tracking is
+// Off, edits are folded into the baseline as they happen (trackFold), so they are never marked — and overwriting a
+// marked entry clears its mark and those of the values recalculated from it — while other marks stay.
+let trackBusy=false, trackView=null, trackSeen=null, trackSeenOwner=null;
+function trackCloneNodes(nodes) {
+  const o={};
+  Object.keys(nodes).forEach(id=>{ const n={}; Object.keys(nodes[id]).forEach(k=>{ if (k.charAt(0)!=='_') n[k]=nodes[id][k]; }); o[id]=JSON.parse(JSON.stringify(n)); });
+  return o;
+}
+function trackSnapAn(an) {
+  if (!an) return null;
+  return {nodes:trackCloneNodes(an.nodes),rootIds:[...an.rootIds],
+    rowNoteDefs:JSON.parse(JSON.stringify(an.rowNoteDefs||[])),references:JSON.parse(JSON.stringify(an.references||[]))};
+}
+function trackSnapBoth() { return {ap:trackSnapAn(state.analyses.ap),pcm:trackSnapAn(state.analyses.pcm)}; }
+function trackOn() {
+  if (!state) return;
+  if (!state.track) state.track={on:true,takenAt:new Date().toISOString(),baseline:trackSnapBoth()};
+  else state.track.on=true;
+  trackSeen=null; trackView=null;
+}
+function trackOff() {
+  if (!state||!state.track) return;
+  state.track.on=false; trackView=null;
+  trackSeen=trackSnapBoth(); trackSeenOwner=state;   // edits from here on are measured against this and absorbed into the baseline
+}
+function trackAcceptAll() {
+  if (!state||!state.track) return;
+  state.track.baseline=trackSnapBoth(); state.track.takenAt=new Date().toISOString();
+  trackSeen=null; trackView=null;
+}
+// Tracking Off: fold whatever changed since the previous recalculation into the baseline.
+function trackFold() {
+  const T=state&&state.track; if (!T||T.on||trackBusy) return;
+  if (trackSeenOwner!==state) { trackSeen=null; trackSeenOwner=state; }   // never measure against another project's snapshot
+  const cur=trackSnapBoth();
+  if (!trackSeen) { trackSeen=cur; return; }
+  ['ap','pcm'].forEach(id=>{
+    const c=cur[id], sn=trackSeen[id]; if (!c) return;
+    let b=T.baseline[id];
+    if (!b) { T.baseline[id]=JSON.parse(JSON.stringify(c)); return; }
+    Object.keys(c.nodes).forEach(nid=>{
+      const cj=JSON.stringify(c.nodes[nid]), sj=sn&&sn.nodes[nid]?JSON.stringify(sn.nodes[nid]):null;
+      if (cj!==sj) b.nodes[nid]=JSON.parse(cj);
+    });
+    if (sn) Object.keys(sn.nodes).forEach(nid=>{ if (!c.nodes[nid]) delete b.nodes[nid]; });
+    b.rootIds=[...c.rootIds];
+    ['rowNoteDefs','references'].forEach(list=>{
+      const cm=new Map(c[list].map(e=>[e.key,e])), sm=new Map(((sn&&sn[list])||[]).map(e=>[e.key,e]));
+      cm.forEach((e,key)=>{
+        if (sm.has(key)&&JSON.stringify(sm.get(key))===JSON.stringify(e)) return;
+        const copy=JSON.parse(JSON.stringify(e)), i=b[list].findIndex(x=>x.key===key);
+        if (i>=0) b[list][i]=copy; else b[list].push(copy);
+      });
+      sm.forEach((e,key)=>{ if (!cm.has(key)) b[list]=b[list].filter(x=>x.key!==key); });
+    });
+  });
+  trackSeen=cur;
+}
+// The baseline as a recalculated project, so its computed values (net change, new load, reserve) can be compared.
+function trackBaseView() {
+  const T=state&&state.track; if (!T||!T.baseline) return null;
+  if (trackView) return trackView;
+  const mk=(id,label)=>{ const b=T.baseline[id]; if (!b) return null;
+    return {label,introText:'',generalNotes:[],references:JSON.parse(JSON.stringify(b.references||[])),rowNoteDefs:JSON.parse(JSON.stringify(b.rowNoteDefs||[])),
+      nodes:JSON.parse(JSON.stringify(b.nodes)),rootIds:[...b.rootIds]}; };
+  const bs={meta:Object.assign({},state.meta),analyses:{ap:mk('ap','Active Project'),pcm:mk('pcm','Previous and Concurrent Modifications')},currentAnalysis:'ap',lastSaved:null};
+  if (!bs.analyses.ap) return null;
+  installAnalysisView(bs);
+  const saved=state; trackBusy=true; state=bs;
+  try { recalcCore(); } finally { state=saved; trackBusy=false; }
+  trackView=bs;
+  return bs;
+}
+function chgOn() { return !!(state&&state.track&&state.track.baseline&&!trackBusy); }
+function chgBase(n) {
+  const v=trackBaseView(); if (!v) return null;
+  const an=v.analyses[state.currentAnalysis];
+  return (an&&an.nodes[n.id])||null;
+}
+// New item, or its name / ref des / status / type / parent changed.
+function chgItem(n) {
+  const bn=chgBase(n);
+  return !bn||bn.description!==n.description||(bn.refDes||'')!==(n.refDes||'')||bn.status!==n.status||bn.type!==n.type||(bn.parentId||null)!==(n.parentId||null);
+}
+function chgRaw(node,group,k,loadsInNc) {
+  if (group==='cap') return node.capacity?node.capacity[k]:null;
+  if (group==='exload') return node.existingLoad?node.existingLoad[k]:null;
+  if (group==='added') return node.loadValue?node.loadValue[k]:null;
+  if (group==='nc') return (loadsInNc&&isLoad(node.type))?(node.loadValue?node.loadValue[k]:null):(node._netChange?node._netChange[k]:null);
+  if (group==='newload') return node._newLoad?node._newLoad[k]:null;
+  if (group==='rem') return node._remainingCapacity?node._remainingCapacity[k]:null;
+  return null;
+}
+function chgSig(v,isPf,fmtFn) {
+  if (v==null||isNaN(+v)) return '—';
+  const n=+v, t=fmtFn?fmtFn(Math.abs(n)):(isPf?fmtPfRpt(n):fmtRpt(Math.abs(n)));
+  return (t==null?'—':t)+(n<0?'-':'');
+}
+// Does this cell's displayed text differ from the baseline's? (a new item's cells all do)
+function chgCell(n,group,k,isPf,loadsInNc,fmtFn) {
+  const bn=chgBase(n); if (!bn) return true;
+  return chgSig(chgRaw(n,group,k,loadsInNc),isPf,fmtFn)!==chgSig(chgRaw(bn,group,k,loadsInNc),isPf,fmtFn);
+}
+// The on-screen Load Analysis Summary tab builds its row cells as HTML strings; this marks the changed ones
+// (slots[i] = [group,key] for cellsHtml[i]) with data-chg, which the CSS underlines.
+function chgMarkCells(n,slots,cellsHtml) {
+  if (!chgOn()) return cellsHtml.join('');
+  return cellsHtml.map((h,i)=>{
+    if (h.indexOf('class="v-na"')>=0) return h;
+    const [g,k]=slots[i];
+    return chgCell(n,g,k,k==='pf',false,v=>String(fmtN(v)))?h.replace('<td','<td data-chg="1"'):h;
+  }).join('');
+}
+// Counts for the Changes dialog: new items, items whose identity changed, items with a changed number, items gone.
+function trackSummary() {
+  const v=trackBaseView(); const out={newItems:0,changedItems:0,changedValues:0,deleted:0};
+  if (!v) return out;
+  const keysFor=n=>n.acDc==='ac'?['a','va','w','var','pf']:['a','w'];
+  const groups=['cap','exload','added','nc','newload','rem'];
+  ['ap','pcm'].forEach(id=>{
+    const cur=state.analyses[id], base=v.analyses[id]; if (!cur) return;
+    Object.values(cur.nodes).forEach(n=>{
+      const bn=base&&base.nodes[n.id];
+      if (!bn) { out.newItems++; return; }
+      if (bn.description!==n.description||(bn.refDes||'')!==(n.refDes||'')||bn.status!==n.status||bn.type!==n.type||(bn.parentId||null)!==(n.parentId||null)) out.changedItems++;
+      if (groups.some(g=>keysFor(n).some(k=>chgSig(chgRaw(n,g,k,false),k==='pf')!==chgSig(chgRaw(bn,g,k,false),k==='pf')))) out.changedValues++;
+    });
+    if (base) Object.keys(base.nodes).forEach(nid=>{ if (!cur.nodes[nid]) out.deleted++; });
+  });
+  return out;
+}
+function updateTrackUI() {
+  const chip=document.getElementById('track-chip'), leg=document.getElementById('chg-legend');
+  const T=state&&state.track;
+  if (chip) {
+    chip.classList.toggle('hidden',!T||!T.baseline);
+    if (T&&T.baseline) { chip.textContent=T.on?'Tracking On':'Tracking Off'; chip.className='track-chip '+(T.on?'track-on':'track-off'); }
+  }
+  if (leg) {
+    const show=!!(T&&T.baseline);
+    leg.classList.toggle('hidden',!show);
+    if (show) { const d=new Date(T.takenAt); leg.textContent=`Underlined = changed since ${isNaN(d)?'the baseline':d.toLocaleDateString()}${T.on?'':' (Tracking Off: new edits are not marked)'}`; }
+  }
+}
+function openTrackDialog() {
+  if (!state) return;
+  const T=state.track, el=document.getElementById('track-body');
+  const sum=T&&T.baseline?trackSummary():null;
+  const since=T&&T.baseline?(()=>{ const d=new Date(T.takenAt); return isNaN(d)?'the baseline':d.toLocaleString(); })():'';
+  el.innerHTML=!T||!T.baseline
+    ?'<p>Tracking has not been started. <strong>Tracking On</strong> takes a baseline of the items, values, row notes and references as they are now, then underlines everything that differs from it in the reports.</p>'
+    :`<p><strong>${T.on?'Tracking On':'Tracking Off'}</strong> — baseline taken ${esc(since)}.</p>
+       <p>Since the baseline: <strong>${sum.newItems}</strong> new item${sum.newItems===1?'':'s'}, <strong>${sum.changedItems}</strong> item${sum.changedItems===1?'':'s'} renamed, moved or changed in status or type, <strong>${sum.changedValues}</strong> item${sum.changedValues===1?'':'s'} with a changed number, <strong>${sum.deleted}</strong> deleted.</p>
+       <p style="color:var(--text-secondary);font-size:.8rem">${T.on?'New edits are underlined. <strong>Tracking Off</strong> stops marking new edits (they are accepted as you make them); earlier marks stay.':'New edits are accepted as you make them and are not marked; earlier marks stay. <strong>Tracking On</strong> resumes marking.'} <strong>Accept All</strong> clears every mark and makes the current state the new baseline.</p>`;
+  const tog=document.getElementById('track-toggle'), acc=document.getElementById('track-accept');
+  tog.textContent=T&&T.baseline&&T.on?'Tracking Off':'Tracking On';
+  acc.style.display=T&&T.baseline?'':'none';
+  document.getElementById('track-dialog').classList.remove('hidden');
+}
+function trackAfterChange() { recalc(); renderAll(); persist(); }
 function recalc() {
+  recalcCore();
+  if (!trackBusy) { trackView=null; trackFold(); }
+}
+function recalcCore() {
   if (!state) return;
   refreshNoteTemplates();
   const pcm=state.analyses.pcm;
@@ -3054,8 +3286,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.5';
-const APP_RELEASE_DATE='2026-10-22';
+const APP_VERSION='0.9.6';
+const APP_RELEASE_DATE='2026-10-23';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -3100,7 +3332,7 @@ function snapshotState() {
   // Revision 72 Follow-Up: report column-selection settings (reportCfg) travel with the project
   // now, instead of resetting to defaults every time a file is loaded — see doImport/importDocx
   // below for the read-back half, and writeWattsUpMetaParts for the Word-file equivalent.
-  return {appVersion:APP_VERSION,meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved,reportCfg};
+  return {appVersion:APP_VERSION,meta:state.meta,analyses:{ap:an('ap'),pcm:an('pcm')},currentAnalysis:state.currentAnalysis,lastSaved:state.lastSaved,reportCfg,track:state.track||null};
 }
 
 function persist() {
@@ -3628,10 +3860,10 @@ function renderTable() {
       const remW=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'w',false):naTd();
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
-        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
+        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?' data-chg="1"':''}${dCls}>${dl}</span></div></td>
         <td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td>
         <td style="text-align:right">${vStr}</td>
-        ${capA}${capW}${exA}${exW}${ldA}${ldW}${ncA}${ncW}${nlA}${nlW}${remA}${remW}
+        ${chgMarkCells(n,[['cap','a'],['cap','w'],['exload','a'],['exload','w'],['added','a'],['added','w'],['nc','a'],['nc','w'],['newload','a'],['newload','w'],['rem','a'],['rem','w']],[capA,capW,exA,exW,ldA,ldW,ncA,ncW,nlA,nlW,remA,remW])}
         <td>${flag}</td></tr>`;
     }).join('');
   }
@@ -3668,14 +3900,13 @@ function renderTable() {
       const remVA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'va',false):naTd();
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
-        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>
+        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?' data-chg="1"':''}${dCls}>${dl}</span></div></td>
         <td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td>
         <td style="text-align:right">${vStr}</td>
-        ${capA}${capVA}${exA}${exVA}${exW}${exVAR}${exPF}
-        ${ldA}${ldVA}${ldW}${ldVAR}${ldPF}
-        ${ncA}${ncVA}${ncW}${ncVAR}${ncPF}
-        ${nlA}${nlVA}${nlW}${nlVAR}${nlPF}
-        ${remA}${remVA}<td>${flag}</td></tr>`;
+        ${chgMarkCells(n,[['cap','a'],['cap','va'],['exload','a'],['exload','va'],['exload','w'],['exload','var'],['exload','pf'],
+          ['added','a'],['added','va'],['added','w'],['added','var'],['added','pf'],['nc','a'],['nc','va'],['nc','w'],['nc','var'],['nc','pf'],
+          ['newload','a'],['newload','va'],['newload','w'],['newload','var'],['newload','pf'],['rem','a'],['rem','va']],
+          [capA,capVA,exA,exVA,exW,exVAR,exPF,ldA,ldVA,ldW,ldVAR,ldPF,ncA,ncVA,ncW,ncVAR,ncPF,nlA,nlVA,nlW,nlVAR,nlPF,remA,remVA])}<td>${flag}</td></tr>`;
     }).join('');
   }
 
@@ -5494,7 +5725,7 @@ function updateSaveEl() {
   if (!state?.lastSaved){el.textContent='';return;}
   el.textContent=`Saved ${new Date(state.lastSaved).toLocaleTimeString()}`;
 }
-function renderAll(){renderDocPanel();renderTree();renderTable();renderPowerDistSummary();renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();renderExRemGrid();renderNewGrid();renderWarnings();updateSaveEl();updateAnalysisSwitchUI();}
+function renderAll(){updateTrackUI();renderDocPanel();renderTree();renderTable();renderPowerDistSummary();renderLoadAnalysisDetail();renderLoadAnalysisDetailAlt();renderExRemGrid();renderNewGrid();renderWarnings();updateSaveEl();updateAnalysisSwitchUI();}
 function updateAnalysisSwitchUI() {
   if (!state) return;
   const apBtn=document.getElementById('analysis-btn-ap'), pcmBtn=document.getElementById('analysis-btn-pcm');
@@ -8189,7 +8420,7 @@ function fmtRating(v){
 // can.
 function fmtPfRpt(v){if(v===null||v===undefined)return null;const n=+v;if(isNaN(n))return null;return n.toFixed(2);}
 function rptTxt(val,isPf,isNeg){const s=isPf?fmtPfRpt(val):fmtRpt(val);if(s===null)return'—';return isNeg?`(${s})`:s;}
-function rptTd(val,isPf,isNeg,ec,gf){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}">${rptTxt(val,isPf,isNeg)}</td>`;}
+function rptTd(val,isPf,isNeg,ec,gf,u){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}${u?' rpt-chg':''}">${rptTxt(val,isPf,isNeg)}</td>`;}
 
 const AC_ALL_KEYS=[{k:'a',l:'A'},{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}];
 const AC_GROUPS=[
@@ -8337,7 +8568,9 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap,loadsInNc){
   // that already motivated the Analysis Detail – Alternate report's own Rating column.
   const ratingVal=(isProt&&n.capacity?.a!=null)?fmtRating(n.capacity.a):null;
   const ratingCell=`<td class="rpt-num">${ratingVal!=null?`(${ratingVal} A)`:''}</td>`;
-  const descWrap=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
+  const chg=chgOn(), itemU=chg&&chgItem(n);   // version 0.9.6: change tracking underlines
+  const descBase=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
+  const descWrap=itemU?`<span class="rpt-chg">${descBase}</span>`:descBase;
   const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
   const cls=[];if(ov)cls.push('rpt-over');else if(wn)cls.push('rpt-warn');if(topBorder)cls.push('rpt-parent-sep');
   const rowCls=cls.length?` class="${cls.join(' ')}"`:'';
@@ -8369,7 +8602,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap,loadsInNc){
       val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }
     if(val==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
-    return rptTd(val,isPf||false,isNeg,ec,gf);
+    return rptTd(val,isPf||false,isNeg,ec,gf,chg&&chgCell(n,group,k,isPf,loadsInNc));
   });
   const annotCell=annotMap
     ?(annotMap[n.id]?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annotMap[n.id].marker)}</span></td>`:`<td class="rpt-notes-col"></td>`)
@@ -8469,10 +8702,11 @@ const DOCX_TEMPLATE_B64='UEsDBBQABgAIAAAAIQDvISWY6QEAAPcNAAATAAgCW0NvbnRlbnRfVHl
 function wxEsc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function wxHpt(pt){return String(Math.round(pt*2));}
 
-function wxRun(text,{b,i,sz,color}={}){
+function wxRun(text,{b,i,sz,color,u}={}){
   const rPr=[b?'<w:b/><w:bCs/>':'',i?'<w:i/><w:iCs/>':'',
     sz?`<w:sz w:val="${wxHpt(sz)}"/><w:szCs w:val="${wxHpt(sz)}"/>`:'',
-    color?`<w:color w:val="${color}"/>`:''
+    color?`<w:color w:val="${color}"/>`:'',
+    u?'<w:u w:val="single"/>':''
   ].join('');
   return `<w:r>${rPr?`<w:rPr>${rPr}</w:rPr>`:''}<w:t xml:space="preserve">${wxEsc(text)}</w:t></w:r>`;
 }
@@ -8588,7 +8822,8 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   const mainDesc=dispName(n)+(n.refDes?` [${n.refDes}]`:'');
   const sz=Math.max(6.5,8.5-depth*0.5);
   const indDxa=depth*200;
-  const descRun=removed?wxRun(mainDesc,{i:true,sz}):n.status==='new'?wxRun(mainDesc,{b:true,sz}):wxRun(mainDesc,{sz});
+  const chg=chgOn(), itemU=chg&&chgItem(n);   // version 0.9.6: change tracking underlines
+  const descRun=removed?wxRun(mainDesc,{i:true,sz,u:itemU}):n.status==='new'?wxRun(mainDesc,{b:true,sz,u:itemU}):wxRun(mainDesc,{sz,u:itemU});
   const descCell=wxTc(wxPar(descRun,{ind:indDxa,before:20,after:20,keepNext:true}),{w:descW,topBdr});
   // Revision 42: dedicated Rating column (CB/fuse amps) alongside the description column.
   // Revision 71, item 3.1: omitted entirely for Power Distribution Summary (hasRating:false).
@@ -8634,7 +8869,7 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
     const fmtd=isPf?fmtPfRpt(val):fmtRpt(val);
     if(fmtd==null){emDash();return;}
     const txt=isNeg?`(${fmtd})`:fmtd;
-    numCells+=wxTc(wxPar(wxRun(txt,{sz}),{before:20,after:20,jc:'right',keepNext:true}),{w,topBdr,leftBdr:lB});
+    numCells+=wxTc(wxPar(wxRun(txt,{sz,u:chg&&chgCell(n,group,k,isPf,loadsInNc)}),{before:20,after:20,jc:'right',keepNext:true}),{w,topBdr,leftBdr:lB});
   });
   return wxTr(descCell+ratingCell+notesCell+numCells);
 }
@@ -9991,6 +10226,17 @@ function initEvents() {
   // Revision 70, item 5.2: the only way left to reach the settings dialog, now that Print
   // Report/Word Report both act directly (items 4.1/5.3).
   document.getElementById('btn-settings').addEventListener('click',()=>openPrintOpts());
+  document.getElementById('btn-changes').addEventListener('click',openTrackDialog);
+  document.getElementById('track-close').addEventListener('click',()=>document.getElementById('track-dialog').classList.add('hidden'));
+  document.getElementById('track-toggle').addEventListener('click',()=>{
+    const T=state&&state.track;
+    if (T&&T.baseline&&T.on) trackOff(); else trackOn();
+    trackAfterChange(); openTrackDialog();
+  });
+  document.getElementById('track-accept').addEventListener('click',()=>{
+    if (!confirm('Accept all tracked changes? Every underline is cleared and the current items, values, row notes and references become the new baseline.')) return;
+    trackAcceptAll(); trackAfterChange(); openTrackDialog();
+  });
   document.getElementById('btn-help').addEventListener('click',openUserGuide);
   document.getElementById('btn-exit'  ).addEventListener('click',attemptExitApp);
   updateWordDocUI();
