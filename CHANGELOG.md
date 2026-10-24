@@ -9,6 +9,18 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.7 — 2026-10-24 (testing build)
+
+Revision 84, item 7 (change tracking), second stage.
+
+- **More reports show the marks:** the vertical Load Analysis Detail (screen and Word) and the Power Distribution Summary (screen).
+- **Row notes and references are tracked:** a note or reference that is new or whose text changed is underlined in the notes and
+  references lists (Word, on-screen reports and Print), and a note marker is underlined on an item that newly has that note or
+  reference.
+- **Hover tooltips** on screen: an underlined number shows "Baseline: …" (the value it had), an underlined name shows what it was,
+  and a new item says "New item".
+- Still to come in 0.9.8: Reject All, the list of deleted items, per-item accept and reject.
+
 ## 0.9.6 — 2026-10-23 (testing build)
 
 Revision 84, item 7 (change tracking), first stage.

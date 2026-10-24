@@ -6015,6 +6015,21 @@ different tracked change keeps its marks; Tracking On keeps earlier marks; Accep
 field, date) are dropped with a note; the Word document opens with 32 underlined cells in the test. Not yet: vertical detail and PDS marks, note/reference marks and the baseline-value tooltip
 (0.9.7); Reject All, per-item controls and the deleted-items list (0.9.8).
 
+### 86.1 Stage 2 (version 0.9.7)
+
+- **Vertical detail (screen + Word) and Power Distribution Summary (screen)** now mark cells (`chgTip`/`chgCell` per member and value group, per child and `added`/`nc`
+  group; `chgMarkTd` for the PDS cells), plus the sibling header and the child names. The Word Power Distribution Summary already marked via `buildWordDataRow`.
+- **Notes and references:** `makeAnnotator.annotate(rowNotes,rowRefs,node,group)` now returns `chg` (a note or reference newly attached to that item/group, `chgAttach`)
+  and each list entry carries `chg` (a note whose text differs from the baseline's by key — `chgNoteChanged`; a reference entry whose bank record is new/changed —
+  `chgRefBankChanged` — or whose comment is new — `chgRefComment`). Lists (screen `chgHtml`, Word `wxNoteLine(...,u)`), markers (`rpt-chg`, Word `u`) and the References lists
+  (Word `buildRefsParas`, Print) underline accordingly. The vertical plan rows/members carry `markerChg`. Removed attachments aren't shown (no row to show them in; planned for the deleted list).
+- **Tooltips (screen only):** `chgTip` ("Baseline: <displayed value>"), `chgItemTip` ("New item" / "Baseline: name "…", status …"), applied through `rptTd`, `chgMarkCells`/`chgMarkTd`
+  (`data-chg` + `title`) and item spans.
+Verified: no marks before tracking or right after Tracking On; an edit marks the vertical report (screen 11, Word 11), the PDS, the Load Analysis Summary tab and the horizontal detail with
+the right tooltips; a rename shows the old name; editing a note's text underlines the list entry but not the marker; attaching a note to another item underlines that item's marker; a new
+reference with a comment underlines its References entry and its note-list line (Word and Print); Accept All clears everything. Remaining: Reject All, deleted-items list, per-item
+accept/reject (0.9.8).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

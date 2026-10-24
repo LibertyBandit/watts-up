@@ -326,21 +326,25 @@ the items, values, row notes and references taken when you turn tracking on — 
 
 - **Tracking On** (first time): takes the baseline and starts marking. From then on every number in the reports that differs from
   the baseline is underlined — including totals, new loads and reserves that changed *because* of an edit — and so is the name of
-  every item that is new, renamed, moved, or has a different status or type. This works in the Load Analysis Summary tab, the
-  horizontal Load Analysis Detail, the Print Report and the Word report. A small chip beside the version number shows **Tracking On**
+  every item that is new, renamed, moved, or has a different status or type. A row note or reference that is new or whose text
+  changed is underlined in the notes and references lists, and a note marker is underlined on an item that newly has that note or
+  reference. This works in the Load Analysis Summary tab, the Power Distribution Summary, both Load Analysis Detail layouts, the
+  Print Report and the Word report. On screen, hover over an underlined number to see what the baseline showed (or what an
+  underlined name used to be). A small chip beside the version number shows **Tracking On**
   or **Tracking Off**, and a line above the on-screen reports says what the underlines mean.
 - **Tracking Off**: stops marking new edits — they are accepted as you make them. Marks that already exist stay. If you overwrite an
   entry that was marked, its mark goes away, and so do the marks on the values that were recalculated because of it; other marks
   stay. Use it for tidying that should not be flagged.
 - **Tracking On** (again): keeps the earlier marks and resumes marking.
 - **Accept All**: clears every underline and makes the current state the new baseline. Use it when the revision is approved.
-- **Undoing a change:** type the old value back — the underline disappears by itself once a number matches the baseline again.
-  (A **Reject All** that puts everything back to the baseline, and a pop-up showing each marked number's baseline value, are planned.)
+- **Undoing a change:** hover over the underlined number to see the baseline value and type it back — the underline disappears by
+  itself once a number matches the baseline again. (A **Reject All** that puts everything back to the baseline is planned.)
 
 Notes:
 - The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
   Changes is not used.
-- Row notes, references, document properties and report settings are not marked yet (marks for notes and references are planned).
+- Document properties, general notes and report settings are not tracked. Notes or references that were removed since the baseline
+  can't be shown in a row; a list of everything deleted is planned.
 - The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.
 
 ## 10. Versions and getting help

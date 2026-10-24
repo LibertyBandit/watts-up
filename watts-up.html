@@ -29,7 +29,7 @@
     .chg-legend{font-size:.72rem;color:var(--text-secondary);padding:.15rem .6rem;border-bottom:1px solid var(--border)}
     #track-close{background:none;color:var(--text-secondary);font-size:1.15rem;padding:.1rem .38rem;border-radius:4px}
     #track-close:hover{background:var(--bg-hover);color:var(--text-primary)}
-    .rpt-chg,#table-container td[data-chg],#table-container span[data-chg]{text-decoration:underline}
+    .rpt-chg,td[data-chg],span[data-chg]{text-decoration:underline}
     .header-right{display:flex;gap:.4rem}
     button{cursor:pointer;border:none;border-radius:6px;padding:.3rem .7rem;font-size:.82rem;
       font-family:inherit;transition:background .12s,opacity .12s}
@@ -1528,21 +1528,25 @@ the items, values, row notes and references taken when you turn tracking on — 
 <ul>
 <li><strong>Tracking On</strong> (first time): takes the baseline and starts marking. From then on every number in the reports that differs from
   the baseline is underlined — including totals, new loads and reserves that changed <em>because</em> of an edit — and so is the name of
-  every item that is new, renamed, moved, or has a different status or type. This works in the Load Analysis Summary tab, the
-  horizontal Load Analysis Detail, the Print Report and the Word report. A small chip beside the version number shows <strong>Tracking On</strong>
+  every item that is new, renamed, moved, or has a different status or type. A row note or reference that is new or whose text
+  changed is underlined in the notes and references lists, and a note marker is underlined on an item that newly has that note or
+  reference. This works in the Load Analysis Summary tab, the Power Distribution Summary, both Load Analysis Detail layouts, the
+  Print Report and the Word report. On screen, hover over an underlined number to see what the baseline showed (or what an
+  underlined name used to be). A small chip beside the version number shows <strong>Tracking On</strong>
   or <strong>Tracking Off</strong>, and a line above the on-screen reports says what the underlines mean.</li>
 <li><strong>Tracking Off</strong>: stops marking new edits — they are accepted as you make them. Marks that already exist stay. If you overwrite an
   entry that was marked, its mark goes away, and so do the marks on the values that were recalculated because of it; other marks
   stay. Use it for tidying that should not be flagged.</li>
 <li><strong>Tracking On</strong> (again): keeps the earlier marks and resumes marking.</li>
 <li><strong>Accept All</strong>: clears every underline and makes the current state the new baseline. Use it when the revision is approved.</li>
-<li><strong>Undoing a change:</strong> type the old value back — the underline disappears by itself once a number matches the baseline again.
-  (A <strong>Reject All</strong> that puts everything back to the baseline, and a pop-up showing each marked number's baseline value, are planned.)</li>
+<li><strong>Undoing a change:</strong> hover over the underlined number to see the baseline value and type it back — the underline disappears by
+  itself once a number matches the baseline again. (A <strong>Reject All</strong> that puts everything back to the baseline is planned.)</li>
 </ul>
 <p>Notes:
 - The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
   Changes is not used.
-- Row notes, references, document properties and report settings are not marked yet (marks for notes and references are planned).
+- Document properties, general notes and report settings are not tracked. Notes or references that were removed since the baseline
+  can't be shown in a row; a list of everything deleted is planned.
 - The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.</p>
 <h2 id="10-versions-and-getting-help">10. Versions and getting help</h2>
 <ul>
@@ -3190,6 +3194,52 @@ function chgCell(n,group,k,isPf,loadsInNc,fmtFn) {
   const bn=chgBase(n); if (!bn) return true;
   return chgSig(chgRaw(n,group,k,loadsInNc),isPf,fmtFn)!==chgSig(chgRaw(bn,group,k,loadsInNc),isPf,fmtFn);
 }
+// What the baseline showed for this cell (for the hover tooltip), as displayed ("(12)" for a negative).
+function chgBaseText(n,group,k,isPf,loadsInNc,fmtFn) {
+  const bn=chgBase(n); if (!bn) return 'new item';
+  const sig=chgSig(chgRaw(bn,group,k,loadsInNc),isPf,fmtFn);
+  return sig.slice(-1)==='-'?'('+sig.slice(0,-1)+')':sig;
+}
+// null when the cell is unchanged, else the tooltip "Baseline: …".
+function chgTip(n,group,k,isPf,loadsInNc,fmtFn) {
+  return chgCell(n,group,k,isPf,loadsInNc,fmtFn)?'Baseline: '+chgBaseText(n,group,k,isPf,loadsInNc,fmtFn):null;
+}
+// Tooltip for a changed item name: what it was.
+function chgItemTip(n) {
+  const bn=chgBase(n); if (!bn) return 'New item';
+  const bits=[];
+  if (bn.description!==n.description) bits.push(`name "${bn.description||''}"`);
+  if ((bn.refDes||'')!==(n.refDes||'')) bits.push(`ref des "${bn.refDes||''}"`);
+  if (bn.status!==n.status) bits.push(`status ${statusLabel(bn.status)}`);
+  if (bn.type!==n.type) bits.push(`type ${bn.type}`);
+  if ((bn.parentId||null)!==(n.parentId||null)) bits.push('under another item');
+  return bits.length?'Baseline: '+bits.join(', '):'Changed';
+}
+function chgAttrs(tip) { return tip?` data-chg="1" title="${esc(tip)}"`:''; }
+function chgHtml(text,chg) { return chg?`<span class="rpt-chg">${esc(text)}</span>`:esc(text); }
+// Row notes and references (compared by key, not by number).
+function chgBaseAn() { const v=trackBaseView(); return v?v.analyses[state.currentAnalysis]:null; }
+function chgNoteChanged(key,text) {
+  const b=chgBaseAn(); if (!b) return false;
+  const d=(b.rowNoteDefs||[]).find(x=>x.key===key);
+  return !d||String(d.text||'').trim()!==text;
+}
+function chgRefBankChanged(ref) {
+  const b=chgBaseAn(); if (!b||!ref) return false;
+  const d=(b.references||[]).find(x=>x.key===ref.key);
+  return !d||['organization','docNumber','title','revision','date'].some(f=>(d[f]||'')!==(ref[f]||''));
+}
+function chgRefComment(key,comment) {
+  const b=chgBaseAn(); if (!b) return false;
+  return !Object.values(b.nodes).some(n=>(n.rowRefs||[]).some(r=>r.key===key&&String(r.comment||'').trim()===comment));
+}
+// Was a note or reference newly attached to this item (optionally within one value group)?
+function chgAttach(node,rowNotes,rowRefs,group) {
+  const bn=chgBase(node); if (!bn) return true;
+  const bNotes=new Set((bn.rowNotes||[]).filter(o=>group===undefined||(o.group||null)===group).map(o=>o.key));
+  const bRefs=new Set((bn.rowRefs||[]).filter(r=>group===undefined||(r.group||null)===group).map(r=>r.key+'|'+String(r.comment||'').trim()));
+  return (rowNotes||[]).some(o=>!bNotes.has(o.key))||(rowRefs||[]).some(r=>!bRefs.has(r.key+'|'+String(r.comment||'').trim()));
+}
 // The on-screen Load Analysis Summary tab builds its row cells as HTML strings; this marks the changed ones
 // (slots[i] = [group,key] for cellsHtml[i]) with data-chg, which the CSS underlines.
 function chgMarkCells(n,slots,cellsHtml) {
@@ -3197,8 +3247,15 @@ function chgMarkCells(n,slots,cellsHtml) {
   return cellsHtml.map((h,i)=>{
     if (h.indexOf('class="v-na"')>=0) return h;
     const [g,k]=slots[i];
-    return chgCell(n,g,k,k==='pf',false,v=>String(fmtN(v)))?h.replace('<td','<td data-chg="1"'):h;
+    const tip=chgTip(n,g,k,k==='pf',false,v=>String(fmtN(v)));
+    return tip?h.replace('<td','<td'+chgAttrs(tip)):h;
   }).join('');
+}
+// Same for one cell built by a function that returns a "<td …>" string (Power Distribution Summary).
+function chgMarkTd(n,col,h) {
+  if (!chgOn()||h.indexOf('class="v-na"')>=0) return h;
+  const tip=chgTip(n,col.group,col.k,col.isPf||col.k==='pf',false,v=>String(fmtN(v)));
+  return tip?h.replace('<td','<td'+chgAttrs(tip)):h;
 }
 // Counts for the Changes dialog: new items, items whose identity changed, items with a changed number, items gone.
 function trackSummary() {
@@ -3286,8 +3343,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.6';
-const APP_RELEASE_DATE='2026-10-23';
+const APP_VERSION='0.9.7';
+const APP_RELEASE_DATE='2026-10-24';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -3860,7 +3917,7 @@ function renderTable() {
       const remW=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'w',false):naTd();
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
-        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?' data-chg="1"':''}${dCls}>${dl}</span></div></td>
+        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?chgAttrs(chgItemTip(n)):''}${dCls}>${dl}</span></div></td>
         <td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td>
         <td style="text-align:right">${vStr}</td>
         ${chgMarkCells(n,[['cap','a'],['cap','w'],['exload','a'],['exload','w'],['added','a'],['added','w'],['nc','a'],['nc','w'],['newload','a'],['newload','w'],['rem','a'],['rem','w']],[capA,capW,exA,exW,ldA,ldW,ncA,ncW,nlA,nlW,remA,remW])}
@@ -3900,7 +3957,7 @@ function renderTable() {
       const remVA=n._remainingCapacity!==null&&n.status!=='removed'?valPow(n._remainingCapacity,'va',false):naTd();
       const vStr=n.voltage!==null?fmtN(n.voltage):'—';
       return `<tr class="${rCls}">
-        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?' data-chg="1"':''}${dCls}>${dl}</span></div></td>
+        <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?chgAttrs(chgItemTip(n)):''}${dCls}>${dl}</span></div></td>
         <td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td>
         <td style="text-align:right">${vStr}</td>
         ${chgMarkCells(n,[['cap','a'],['cap','va'],['exload','a'],['exload','va'],['exload','w'],['exload','var'],['exload','pf'],
@@ -4014,11 +4071,11 @@ function pdsRows(ids,cols,dm,annotator,hasAnyAnnot) {
     const dCls=n.status==='removed'?' style="text-decoration:line-through;opacity:.55"':'';
     const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
     const dl=(esc(n.description)||'<em>unnamed</em>')+esc(phaseSuffix(n))+rdHtml;
-    const cells=cols.map(col=>pdsCellVal(n,col,ov)).join('');
-    const annot=annotator.annotate(n.rowNotes,n.rowRefs);
-    const annotCell=hasAnyAnnot?(annot?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>'):'';
+    const cells=cols.map(col=>chgMarkTd(n,col,pdsCellVal(n,col,ov))).join('');
+    const annot=annotator.annotate(n.rowNotes,n.rowRefs,n);
+    const annotCell=hasAnyAnnot?(annot?`<td class="rpt-notes-col"><span class="rpt-note-marker${annot.chg?' rpt-chg':''}">${esc(annot.marker)}</span></td>`:'<td class="rpt-notes-col"></td>'):'';
     out.push(`<tr class="${rCls}">
-      <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${dCls}>${dl}</span></div></td>${annotCell}${cells}</tr>`);
+      <td><div class="td-comp" style="padding-left:${d*16}px">${badgeHtml(n)}<span${chgOn()&&chgItem(n)?chgAttrs(chgItemTip(n)):''}${dCls}>${dl}</span></div></td>${annotCell}${cells}</tr>`);
   });
   return out.join('');
 }
@@ -4052,7 +4109,7 @@ function renderPowerDistSummary() {
   const acSection=acIds.length?`<div class="table-section-heading">${acLbl?`${acLbl} Summary`:'AC Summary'}</div><table class="summary-table">${pdsThead(acCols,hasAnyAnnot)}<tbody>${pdsRows(acIds,acCols,acDm,annotator,hasAnyAnnot)}</tbody></table>`:'';
   let html=acFirst?acSection+dcSection:dcSection+acSection;
   if (!html) html='<div class="empty-state">No Generation, Conversion, or Distribution items to summarize.</div>';
-  else if (annotator.notesList.length) html+=`<ol class="rpt-detail-notes">${annotator.notesList.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`;
+  else if (annotator.notesList.length) html+=`<ol class="rpt-detail-notes">${annotator.notesList.map(({num,text,chg})=>`<li value="${num}">${chgHtml(text,chg)}</li>`).join('')}</ol>`;
   el.innerHTML=html;
 }
 
@@ -4078,14 +4135,15 @@ function makeAnnotator() {
   // whichever subset applies to the row being annotated. Returns {marker, entries} or null.
   // `entries` ([{num,text}]) is only the subset newly touched by this call, for callers that
   // build their own per-table footer list and need to dedupe within that footer too.
-  function annotate(rowNotes,rowRefs) {
+  function annotate(rowNotes,rowRefs,node,group) {
     const tokens=[],entries=[];
+    const on=chgOn();   // version 0.9.7: entries carry `chg` (new / changed since the baseline); the result carries `chg` for the row's marker
     (rowNotes||[]).forEach(o=>{
       const text=(noteDefsByKey[o.key]||'').trim(); if (!text) return;
       const dedupeKey='note:'+o.key;
       let num=seen.get(dedupeKey);
-      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text}); }
-      tokens.push(String(num)); entries.push({num,text});
+      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text,chg:on&&chgNoteChanged(o.key,text)}); }
+      tokens.push(String(num)); entries.push(notesList.find(e=>e.num===num));
     });
     (rowRefs||[]).forEach(r=>{
       if (!r.key||refKeyToNum[r.key]===undefined) return;
@@ -4095,11 +4153,11 @@ function makeAnnotator() {
       const text=`ref [${refNum}]${docNo?' '+docNo:''}: ${comment}`;
       const dedupeKey='ref:'+r.key+'|'+comment;
       let num=seen.get(dedupeKey);
-      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text}); }
-      tokens.push(String(num)); entries.push({num,text});
+      if (num===undefined) { num=++noteCounter; seen.set(dedupeKey,num); notesList.push({num,text,chg:on&&(chgRefBankChanged(refs.find(x=>x.key===r.key))||chgRefComment(r.key,comment))}); }
+      tokens.push(String(num)); entries.push(notesList.find(e=>e.num===num));
     });
     if (!tokens.length) return null;
-    return {marker:tokens.join(','),entries};
+    return {marker:tokens.join(','),entries,chg:!!(on&&node&&chgAttach(node,rowNotes,rowRefs,group))};
   }
   function hasText(rowNotes,rowRefs) {
     return (rowNotes||[]).some(o=>(noteDefsByKey[o.key]||'').trim())||(rowRefs||[]).some(r=>r.key&&refKeyToNum[r.key]!==undefined);
@@ -4147,7 +4205,7 @@ function renderLoadAnalysisDetail() {
   // compatibility with this report's existing layout — only the Alternate report splits notes
   // out by group.
   const annotator=makeAnnotator();
-  function annotateNode(n) { return annotator.annotate(n.rowNotes,n.rowRefs); }
+  function annotateNode(n) { return annotator.annotate(n.rowNotes,n.rowRefs,n); }
   const hasAnyAnnot=Object.values(nodes).some(n=>annotator.hasText(n.rowNotes,n.rowRefs));
 
   const allOrdered=preOrder(state.rootIds,nodes);
@@ -4196,8 +4254,8 @@ function renderLoadAnalysisDetail() {
 
     const am={}; const blockNotes=[]; const blockSeenNums=new Set();
     const pushEntries=(entries)=>entries.forEach(e=>{ if (!blockSeenNums.has(e.num)) { blockSeenNums.add(e.num); blockNotes.push(e); } });
-    const selfAnnot=annotateNode(n); if (selfAnnot) { am[n.id]={marker:selfAnnot.marker}; pushEntries(selfAnnot.entries); }
-    kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker}; pushEntries(a.entries); } });
+    const selfAnnot=annotateNode(n); if (selfAnnot) { am[n.id]={marker:selfAnnot.marker,chg:selfAnnot.chg}; pushEntries(selfAnnot.entries); }
+    kids.forEach(k=>{ const a=annotateNode(k); if (a) { am[k.id]={marker:a.marker,chg:a.chg}; pushEntries(a.entries); } });
 
     // `am` is always a truthy object ({}) even when hasAnyAnnot is false, which previously made
     // buildRptRow render an empty Notes <td> on every row regardless — while buildRptHeader
@@ -4222,7 +4280,7 @@ function renderLoadAnalysisDetail() {
     // reusing an earlier, lower number after already having created a higher one of its own —
     // sort so the printed list still reads in ascending order.
     blockNotes.sort((a,b)=>a.num-b.num);
-    const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
+    const notesHtml=blockNotes.length?`<ol class="rpt-detail-notes">${blockNotes.map(({num,text,chg})=>`<li value="${num}">${chgHtml(text,chg)}</li>`).join('')}</ol>`:'';
     return `<div class="rpt-detail-block">${pathHtml}<table class="rpt-table">${colgroupHtml}${buildRptHeader(cols,hasAnyAnnot,'')}<tbody>${rows.join('')}</tbody></table>${notesHtml}</div>`;
   }
 
@@ -4300,7 +4358,7 @@ function ladSiblingPlan(section,maxSib,annotator) {
     }
     return chain.length?chain:null;
   }
-  const annotateGroup=(n,group)=>annotator.annotate((n.rowNotes||[]).filter(o=>(o.group||null)===group),(n.rowRefs||[]).filter(r=>(r.group||null)===group));
+  const annotateGroup=(n,group)=>annotator.annotate((n.rowNotes||[]).filter(o=>(o.group||null)===group),(n.rowRefs||[]).filter(r=>(r.group||null)===group),n,group);
   const tables=[];
 
   function buildTable(units) {
@@ -4310,7 +4368,7 @@ function ladSiblingPlan(section,maxSib,annotator) {
     const push=entries=>entries.forEach(e=>{ if (!seen.has(e.num)) { seen.add(e.num); blockNotes.push(e); } });
     const infos=members.map(m=>{
       const n=m.node, a=annotateGroup(n,null); if (a) push(a.entries);
-      return {node:n,unit:m.unit,marker:a?a.marker:null,
+      return {node:n,unit:m.unit,marker:a?a.marker:null,markerChg:!!(a&&a.chg),
         rating:(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?n.capacity.a:null};
     });
     // A shared row's notes: every sibling's note numbers for that value group, without repeats.
@@ -4342,7 +4400,7 @@ function ladSiblingPlan(section,maxSib,annotator) {
       if (!stRows.length) return;
       if (banner&&!(banner==='new'&&allNew)) rows.push({type:'banner',status:banner});
       stRows.forEach(row=>{
-        const ms=row.kids.map(({node:k})=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs); if (a) push(a.entries); return a?a.marker:null; });
+        const ms=row.kids.map(({node:k})=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs,k); if (a) push(a.entries); return a?a.marker:null; });
         row.marker=mergeMarkers(ms);
         // A phase-labeled child of a phase-labeled parent is named without its Ø tag: the column group
         // it sits under (the parent's phase) already says which phase it is.
@@ -4354,6 +4412,11 @@ function ladSiblingPlan(section,maxSib,annotator) {
     if (anyNotNew) rows.push({type:'value',group:'nc',label:'NET CHANGE',srcs:mnodes.map(m=>m.status!=='new'?m._netChange:undefined),marker:groupMarker('nc')});
     rows.push({type:'value',group:'newload',label:'NEW LOAD',srcs:mnodes.map(m=>m._newLoad),marker:groupMarker('newload')});
     rows.push({type:'value',group:'rem',label:'RESERVE',srcs:mnodes.map(m=>m._remainingCapacity),marker:groupMarker('rem')});
+    // version 0.9.7: whether a row's note marker is new (notes/references newly attached since the baseline)
+    rows.forEach(r=>{
+      if (r.type==='value') r.markerChg=mnodes.some(n=>{ const a=annotateGroup(n,r.group); return !!(a&&a.chg); });
+      else if (r.type==='child') r.markerChg=r.kids.some(({node:k})=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs,k); return !!(a&&a.chg); });
+    });
     blockNotes.sort((a,b)=>a.num-b.num);
     return {path:pathFor(mnodes[0],units.some(u=>u.length>1)),members:infos,rows,notes:blockNotes};
   }
@@ -4443,9 +4506,9 @@ function renderLoadAnalysisDetailAlt() {
     const ws=node._warnings||[]; const ov=ws.some(w=>w.code==='W3'); const wn=ws.length>0&&!ov;
     return ov?'over':wn?'warn':'';
   }
-  function annotCellHtml(marker) {
+  function annotCellHtml(marker,chg) {
     if (!hasAnyAnnot) return '';
-    return marker?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(marker)}</span></td>`:'<td class="rpt-notes-col"></td>';
+    return marker?`<td class="rpt-notes-col"><span class="rpt-note-marker${chg?' rpt-chg':''}">${esc(marker)}</span></td>`:'<td class="rpt-notes-col"></td>';
   }
   // CB/fuse rating gets its own dedicated column, shown whether amps was selected or not.
   function cbCellHtml(n) {
@@ -4455,20 +4518,20 @@ function renderLoadAnalysisDetailAlt() {
   }
   // Capacity/Existing Load are always non-negative magnitudes; only Net Change/New Load/Reserve ever
   // go negative (shown as a positive value in parens), matching the existing report's convention.
-  function valueCell(val,col,i,isNeg) {
+  function valueCell(val,col,i,isNeg,u) {
     const gf=i===0?'rpt-grp-first':'';
     if (val==null) return `<td class="rpt-num ${gf}">${val===null?'—':''}</td>`;
-    return rptTd(val,col.isPf||false,isNeg,'',gf);
+    return rptTd(val,col.isPf||false,isNeg,'',gf,u);
   }
   function blankCells(cols) { return cols.map((c,i)=>`<td class="rpt-num${i===0?' rpt-grp-first':''}"></td>`).join(''); }
-  function valueRowCells(row,cols,activeSet) {
-    return row.srcs.map(src=>{
+  function valueRowCells(row,cols,activeSet,members) {
+    return row.srcs.map((src,si)=>{
       if (src===undefined) return blankCells(cols);       // not applicable (e.g. Existing Load of an Installed item)
       return cols.map((col,i)=>{
         if (!activeSet.has(col.k)) return `<td class="rpt-num${i===0?' rpt-grp-first':''}"></td>`;
         let val=src?src[col.k]:null,isNeg=false;
         if ((row.group==='nc'||row.group==='newload'||row.group==='rem')&&val!=null&&val<0) {isNeg=true;val=Math.abs(val);}
-        return valueCell(val==null?null:val,col,i,isNeg);
+        return valueCell(val==null?null:val,col,i,isNeg,chgOn()&&chgTip(members[si].node,row.group,col.k,col.isPf||false,false));
       }).join('');
     }).join('');
   }
@@ -4485,7 +4548,7 @@ function renderLoadAnalysisDetailAlt() {
         let val,isNeg=false;
         if (isLd) { val=k.loadValue?.[col.k]; if (k.status==='removed'&&val!=null) isNeg=true; }
         else { val=k._netChange?.[col.k]; if (val!=null&&val<0) {isNeg=true;val=Math.abs(val);} }
-        return valueCell(val==null?null:val,col,i,isNeg);
+        return valueCell(val==null?null:val,col,i,isNeg,chgOn()&&chgTip(k,isLd?'added':'nc',col.k,col.isPf||false,false));
       }).join('');
     }
     return html;
@@ -4514,7 +4577,8 @@ function renderLoadAnalysisDetailAlt() {
       const n=mi.node, w=warnLevel(n);
       let label=esc(dispName(n)+(n.refDes?` [${n.refDes}]`:''))+(mi.rating!=null?` (${fmtRating(mi.rating)} A)`:'');
       if (n.status==='new') label=`<strong>${label} — Installed</strong>`;
-      const note=mi.marker?`<br><span class="rpt-note-marker">(Note: ${esc(mi.marker)})</span>`:'';
+      if (chgOn()&&chgItem(n)) label=`<span class="rpt-chg" title="${esc(chgItemTip(n))}">${label}</span>`;
+      const note=mi.marker?`<br><span class="rpt-note-marker${mi.markerChg?' rpt-chg':''}">(Note: ${esc(mi.marker)})</span>`:'';
       return `<th class="rpt-grp${w?' rpt-'+w+'-th':''}" colspan="${cols.length}">${label}${note}</th>`;
     }).join('');
     const unitHdr=t.members.map(()=>cols.map((c,i)=>`<th class="rpt-sub${i===0?' rpt-grp-first':''}">${c.l}</th>`).join('')).join('');
@@ -4528,7 +4592,7 @@ function renderLoadAnalysisDetailAlt() {
           :`<tr class="rpt-lbl-added"><td colspan="${ncols}" style="padding-left:28px">Installed</td></tr>`;
       }
       if (r.type==='value') {
-        return `<tr style="font-size:${parentFs}"><td style="padding-left:17px">${r.label}</td><td class="rpt-num"></td>${annotCellHtml(r.marker)}${valueRowCells(r,cols,sets[r.group])}</tr>`;
+        return `<tr style="font-size:${parentFs}"><td style="padding-left:17px">${r.label}</td><td class="rpt-num"></td>${annotCellHtml(r.marker,r.markerChg)}${valueRowCells(r,cols,sets[r.group],t.members)}</tr>`;
       }
       // A row shared by the phase-mates of a phase set is named once, without a Ø tag (each phase's
       // values are under its own column group).
@@ -4538,10 +4602,11 @@ function renderLoadAnalysisDetailAlt() {
       // non-load existing children.
       const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
       const kDesc=esc((shared?(k.description||'unnamed'):dispName(k))+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix);
-      const kWrap=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
-      return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker)}${childRowCells(r.kids,nm,cols,ncSet,addedSet)}</tr>`;
+      const kWrap0=k.status==='removed'?`<em>${kDesc}</em>`:k.status==='new'?`<strong>${kDesc}</strong>`:kDesc;
+      const kWrap=(chgOn()&&r.kids.some(x=>chgItem(x.node)))?`<span class="rpt-chg" title="${esc(chgItemTip(k))}">${kWrap0}</span>`:kWrap0;
+      return `<tr${w?` class="rpt-${w}"`:''} style="font-size:${childFs}"><td style="padding-left:31px">${kWrap}</td>${cbCellHtml(k)}${annotCellHtml(r.marker,r.markerChg)}${childRowCells(r.kids,nm,cols,ncSet,addedSet)}</tr>`;
     }).join('');
-    const notesHtml=t.notes.length?`<ol class="rpt-detail-notes">${t.notes.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol>`:'';
+    const notesHtml=t.notes.length?`<ol class="rpt-detail-notes">${t.notes.map(({num,text,chg})=>`<li value="${num}">${chgHtml(text,chg)}</li>`).join('')}</ol>`:'';
     return `<div class="rpt-detail-block">${pathHtml}<table class="rpt-table" style="width:${tablePct}%">${colgroup}${thead}<tbody>${body}</tbody></table>${notesHtml}</div>`;
   }
 
@@ -8420,7 +8485,7 @@ function fmtRating(v){
 // can.
 function fmtPfRpt(v){if(v===null||v===undefined)return null;const n=+v;if(isNaN(n))return null;return n.toFixed(2);}
 function rptTxt(val,isPf,isNeg){const s=isPf?fmtPfRpt(val):fmtRpt(val);if(s===null)return'—';return isNeg?`(${s})`:s;}
-function rptTd(val,isPf,isNeg,ec,gf,u){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}${u?' rpt-chg':''}">${rptTxt(val,isPf,isNeg)}</td>`;}
+function rptTd(val,isPf,isNeg,ec,gf,u){return `<td class="rpt-num${ec?' '+ec:''}${gf?' '+gf:''}${u?' rpt-chg':''}"${typeof u==='string'?` title="${esc(u)}"`:''}>${rptTxt(val,isPf,isNeg)}</td>`;}
 
 const AC_ALL_KEYS=[{k:'a',l:'A'},{k:'va',l:'VA'},{k:'w',l:'W'},{k:'var',l:'VAR'},{k:'pf',l:'pf',isPf:true}];
 const AC_GROUPS=[
@@ -8541,8 +8606,8 @@ function buildAnnotationMap() {
   const annotMap={};  // nodeId → {marker}
   preOrder(state.rootIds,state.nodes).forEach(id=>{
     const n=state.nodes[id];if(!n)return;
-    const a=annotator.annotate(n.rowNotes,n.rowRefs);
-    if(a) annotMap[id]={marker:a.marker};
+    const a=annotator.annotate(n.rowNotes,n.rowRefs,n);
+    if(a) annotMap[id]={marker:a.marker,chg:a.chg};
   });
   return{annotMap,notesList:annotator.notesList};
 }
@@ -8570,7 +8635,7 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap,loadsInNc){
   const ratingCell=`<td class="rpt-num">${ratingVal!=null?`(${ratingVal} A)`:''}</td>`;
   const chg=chgOn(), itemU=chg&&chgItem(n);   // version 0.9.6: change tracking underlines
   const descBase=removed?`<em>${mainDesc}</em>`:n.status==='new'?`<strong>${mainDesc}</strong>`:mainDesc;
-  const descWrap=itemU?`<span class="rpt-chg">${descBase}</span>`:descBase;
+  const descWrap=itemU?`<span class="rpt-chg" title="${esc(chgItemTip(n))}">${descBase}</span>`:descBase;
   const fs=Math.max(6.5,8.5-depth*0.5).toFixed(1);
   const cls=[];if(ov)cls.push('rpt-over');else if(wn)cls.push('rpt-warn');if(topBorder)cls.push('rpt-parent-sep');
   const rowCls=cls.length?` class="${cls.join(' ')}"`:'';
@@ -8602,10 +8667,10 @@ function buildRptRow(n,depth,cols,cfg,topBorder,annotMap,loadsInNc){
       val=n._remainingCapacity[k];if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}
     }
     if(val==null)return`<td class="rpt-num${gf?' '+gf:''}">—</td>`;
-    return rptTd(val,isPf||false,isNeg,ec,gf,chg&&chgCell(n,group,k,isPf,loadsInNc));
+    return rptTd(val,isPf||false,isNeg,ec,gf,chg&&chgTip(n,group,k,isPf,loadsInNc));
   });
   const annotCell=annotMap
-    ?(annotMap[n.id]?`<td class="rpt-notes-col"><span class="rpt-note-marker">${esc(annotMap[n.id].marker)}</span></td>`:`<td class="rpt-notes-col"></td>`)
+    ?(annotMap[n.id]?`<td class="rpt-notes-col"><span class="rpt-note-marker${annotMap[n.id].chg?' rpt-chg':''}">${esc(annotMap[n.id].marker)}</span></td>`:`<td class="rpt-notes-col"></td>`)
     :'';
   return `<tr${rowCls} style="font-size:${fs}pt"><td style="padding-left:${depth*14+3}px">${descWrap}</td>${ratingCell}${annotCell}${cells.join('')}</tr>`;
 }
@@ -8672,11 +8737,12 @@ function buildPrintR10(){
   const refs=m.references||[];
   const refSec=refs.length?`<div class="rpt-annot-section"><h3>References</h3><ol>${refs.map(r=>{
     const parts=[r.organization?esc(r.organization):null,r.docNumber?esc(r.docNumber):null,r.title?`<em>${esc(r.title)}</em>`:null,r.revision?`Revision ${esc(r.revision)}`:null,r.date?esc(r.date):null];
-    return `<li>${parts.filter(Boolean).join('. ')}.</li>`;
+    const li=`${parts.filter(Boolean).join('. ')}.`;
+    return `<li>${chgOn()&&chgRefBankChanged(r)?`<span class="rpt-chg">${li}</span>`:li}</li>`;
   }).join('')}</ol></div>`:'';
 
   // Row notes section
-  const notesSec=notesList.length?`<div class="rpt-annot-section"><h3>Notes</h3><ol>${notesList.map(({num,text})=>`<li value="${num}">${esc(text)}</li>`).join('')}</ol></div>`:'';
+  const notesSec=notesList.length?`<div class="rpt-annot-section"><h3>Notes</h3><ol>${notesList.map(({num,text,chg})=>`<li value="${num}">${chgHtml(text,chg)}</li>`).join('')}</ol></div>`:'';
 
   const ws=allWarnings();
   const warnSec=ws.length?`<div class="rpt-section-hdr">Warnings</div><ul class="rpt-warn-list">${ws.map(w=>`<li>${w.message}</li>`).join('')}</ul>`:'';
@@ -8726,8 +8792,8 @@ function wxPar(inner,{style,ind,hanging,before=40,after=40,jc,keepNext,markSz}={
 // Version 0.9.5: one row-note line — the number at the margin, a tab, then the text; wrapped lines hang under the
 // text (0.15 inch = 216 twips, enough for a two-digit number at 8-9 pt).
 const WX_NOTE_HANG=216;
-function wxNoteLine(num,text,sz){
-  return wxPar(wxRun(`${num}.`,{sz})+'<w:r><w:tab/></w:r>'+wxRun(text,{sz}),{ind:WX_NOTE_HANG,hanging:WX_NOTE_HANG,before:0,after:20,keepNext:true});
+function wxNoteLine(num,text,sz,u){
+  return wxPar(wxRun(`${num}.`,{sz})+'<w:r><w:tab/></w:r>'+wxRun(text,{sz,u}),{ind:WX_NOTE_HANG,hanging:WX_NOTE_HANG,before:0,after:20,keepNext:true});
 }
 // Inline plain-text content control — placed inside a paragraph alongside other runs
 function wxSdtText(tag,runsXml){
@@ -8835,7 +8901,7 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   let notesCell='';
   if(hasAnnot){
     const marker=am&&am[n.id]?am[n.id].marker:'';
-    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,topBdr,leftBdr:true});
+    notesCell=wxTc(wxPar(marker?wxRun(marker,{sz:6.5,u:am[n.id].chg}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,topBdr,leftBdr:true});
   }
   let numCells='';
   cols.forEach((col,i)=>{
@@ -8910,7 +8976,7 @@ function assembleSplitTable(tblOpen,headerXml,chunks,totalW,totalCols){
     const cr=[...ch.rows];
     if(ch.notes.length){
       cr.push(wxTr(wxTc(wxPar(wxRun('Notes',{b:true,sz:9}),{before:60,after:20,keepNext:true}),{w:totalW,span})));
-      ch.notes.forEach(({num,text})=>cr.push(wxTr(wxTc(wxNoteLine(num,text,9),{w:totalW,span}))));
+      ch.notes.forEach(({num,text,chg})=>cr.push(wxTr(wxTc(wxNoteLine(num,text,9,chg),{w:totalW,span}))));
     }
     if(i<chunks.length-1) cr.push(wxTr(wxTc(wxPar('',{before:0,after:0,keepNext:true,markSz:2}),{w:totalW,span}),{h:120,exact:true}));
     cr[cr.length-1]=noKeep(cr[cr.length-1]);
@@ -8948,8 +9014,8 @@ function buildWordSectionTables(acDc,cols,cfg,annotator,{descW,ratingW,notesW,co
     const pushEntries=entries=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
     function visit(id,depth,inRem,inAdd,topBdr,kidsOverride){
       const n=nodes[id];if(!n)return;
-      const a=annotator.annotate(n.rowNotes,n.rowRefs);
-      if(a){am[id]={marker:a.marker};pushEntries(a.entries);}
+      const a=annotator.annotate(n.rowNotes,n.rowRefs,n);
+      if(a){am[id]={marker:a.marker,chg:a.chg};pushEntries(a.entries);}
       const pid=n.parentId??'__root__';
       let nowInRem=inRem,nowInAdd=inAdd;
       if(prevDepth>depth)
@@ -9035,13 +9101,15 @@ function buildRefsParas(){
   // wrapped text as before, just with the whole block shifted right by a quarter inch instead of a
   // half inch.
   if(!refs.length)return`<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr></w:p>`;
-  return refs.map((r,i)=>
-    `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:ind w:left="720" w:hanging="360"/></w:pPr>`+
-    `<w:r><w:t xml:space="preserve">${i+1}. ${r.organization?xe(r.organization)+'.  ':''}${r.docNumber?xe(r.docNumber)+'.  ':''}</w:t></w:r>`+
-    (r.title?`<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${xe(r.title)}.  </w:t></w:r>`:'')+
-    ((r.revision||r.date)?`<w:r><w:t xml:space="preserve">${r.revision?'Rev. '+xe(r.revision)+'.  ':''}${r.date?xe(r.date)+'.':''}</w:t></w:r>`:'')+
-    `</w:p>`
-  ).join('');
+  return refs.map((r,i)=>{
+    // version 0.9.7: a reference that is new or changed since the change-tracking baseline is underlined
+    const u=chgOn()&&chgRefBankChanged(r)?'<w:u w:val="single"/>':'';
+    return `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:ind w:left="720" w:hanging="360"/></w:pPr>`+
+    `<w:r>${u?`<w:rPr>${u}</w:rPr>`:''}<w:t xml:space="preserve">${i+1}. ${r.organization?xe(r.organization)+'.  ':''}${r.docNumber?xe(r.docNumber)+'.  ':''}</w:t></w:r>`+
+    (r.title?`<w:r><w:rPr><w:i/>${u}</w:rPr><w:t xml:space="preserve">${xe(r.title)}.  </w:t></w:r>`:'')+
+    ((r.revision||r.date)?`<w:r>${u?`<w:rPr>${u}</w:rPr>`:''}<w:t xml:space="preserve">${r.revision?'Rev. '+xe(r.revision)+'.  ':''}${r.date?xe(r.date)+'.':''}</w:t></w:r>`:'')+
+    `</w:p>`;
+  }).join('');
 }
 // Revision 72 Follow-Up: every value column's own minimum — enough room for its group's longest
 // unbreakable header word (e.g. "Existing") AND its own worst-case VALUE, whichever is larger. A
@@ -9214,7 +9282,7 @@ function buildPdsWordTables(ids,cols,dm,cfg,annotator,am,opts){
     const pushEntries=entries=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
     groupIds.forEach(id=>{
       const n=state.nodes[id]; if(!n) return;
-      const a=annotator.annotate(n.rowNotes,n.rowRefs);
+      const a=annotator.annotate(n.rowNotes,n.rowRefs,n);
       if(a) pushEntries(a.entries);
       const pid=n.parentId??'__root__';
       const depth=dm[id]||0;
@@ -9255,8 +9323,8 @@ function buildPdsWordContent(){
   const am={};
   allIds.forEach(id=>{
     const n=state.nodes[id];
-    const a=annotator.annotate(n.rowNotes,n.rowRefs);
-    if (a) am[id]={marker:a.marker};
+    const a=annotator.annotate(n.rowNotes,n.rowRefs,n);
+    if (a) am[id]={marker:a.marker,chg:a.chg};
   });
   const hasAnnot=Object.keys(am).length>0;
   const amArg=hasAnnot?am:null;
@@ -9305,9 +9373,9 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
   const kids=children(n.id,state.nodes);
   const am={}; const blockNotes=[]; const seenNums=new Set();
   const pushEntries=(entries)=>entries.forEach(e=>{ if(!seenNums.has(e.num)){seenNums.add(e.num);blockNotes.push(e);} });
-  const selfAnnot=annotator.annotate(n.rowNotes,n.rowRefs);
-  if(selfAnnot){am[n.id]={marker:selfAnnot.marker};pushEntries(selfAnnot.entries);}
-  kids.forEach(k=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs); if(a){am[k.id]={marker:a.marker};pushEntries(a.entries);} });
+  const selfAnnot=annotator.annotate(n.rowNotes,n.rowRefs,n);
+  if(selfAnnot){am[n.id]={marker:selfAnnot.marker,chg:selfAnnot.chg};pushEntries(selfAnnot.entries);}
+  kids.forEach(k=>{ const a=annotator.annotate(k.rowNotes,k.rowRefs,k); if(a){am[k.id]={marker:a.marker,chg:a.chg};pushEntries(a.entries);} });
   const amArg=hasAnnot?am:null;
 
   // Revision 71, item 4.2: bold (was plain) and larger (was 7pt) — italic retained.
@@ -9337,7 +9405,7 @@ function buildLadWordBlock(n,cols,cfg,annotator,colOpts){
   });
 
   blockNotes.sort((a,b)=>a.num-b.num);
-  const notesParas=blockNotes.map(({num,text})=>wxNoteLine(num,text,8)).join('');
+  const notesParas=blockNotes.map(({num,text,chg})=>wxNoteLine(num,text,8,chg)).join('');
 
   return pathParaXml+wxTableOpen([descW,ratingW,...(hasAnnot?[notesW]:[]),...colWidths])+
     buildWordTblHeader(cols,hasAnnot,colOpts,'')+
@@ -9455,9 +9523,9 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
     // awkward wraps. No second line (and no break) when there is nothing more to say.
     const extra=[n.refDes?`[${n.refDes}]`:'',m.rating!=null?`(${fmtRating(m.rating)} A)`:''].filter(Boolean).join(' ');
     const line2=n.status==='new'?(extra?extra+' — Installed':'Installed'):extra;
-    const hr={b:true,sz:HSZ+1};
+    const hr={b:true,sz:HSZ+1,u:chgOn()&&chgItem(n)};
     let inner=wp(wxRun(dispName(n),hr)+(line2?'<w:r><w:br/></w:r>'+wxRun(line2,hr):''),{before:20,after:m.marker?0:20,jc:'center',keepNext:true});
-    if(m.marker) inner+=wp(wxRun(`(Note: ${m.marker})`,{sz:6.5}),{before:0,after:20,jc:'center',keepNext:true});
+    if(m.marker) inner+=wp(wxRun(`(Note: ${m.marker})`,{sz:6.5,u:m.markerChg}),{before:0,after:20,jc:'center',keepNext:true});
     h1+=wxTc(inner,{w:numW*nc,span:nc,leftBdr:true});
   });
   let h2=wxTc(kp(''),{w:labelW,vm:'cont',bottomBdr:true})+wxTc(kp(''),{w:cbW,vm:'cont',bottomBdr:true});
@@ -9470,8 +9538,8 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   // ── body
   const blank=(first)=>wxTc(wp('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:first});
   const blanks=()=>cols.map((c,i)=>blank(i===0)).join('');
-  const valCell=(val,c,i,isNeg)=>wxTc(wp(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
-  const markerCell=(marker)=>hasAnnot?wxTc(wp(marker?wxRun(marker,{sz:6.5}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
+  const valCell=(val,c,i,isNeg,u)=>wxTc(wp(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5,u}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
+  const markerCell=(marker,chg)=>hasAnnot?wxTc(wp(marker?wxRun(marker,{sz:6.5,u:chg}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
   const ratingCell=(n,sz)=>{
     const a=(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?fmtRating(n.capacity.a):null;
     return wxTc(wp(a!=null?wxRun(`(${a} A)`,{sz}):'',{before:20,after:20,jc:'right',keepNext:true}),{w:cbW});
@@ -9482,24 +9550,25 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
     if(r.type==='banner'){ rows.push(bannerRow(r.status==='removed'?'Removed':'Installed',r.status==='new')); return; }
     if(r.type==='value'){
       const set=sets[r.group];
-      const cells=r.srcs.map(src=>{
+      const cells=r.srcs.map((src,si)=>{
         if(src===undefined) return blanks();
         return cols.map((c,i)=>{
           if(!set.has(c.k)) return blank(i===0);
           let val=src?src[c.k]:null,isNeg=false;
           if((r.group==='nc'||r.group==='newload'||r.group==='rem')&&val!=null&&val<0){isNeg=true;val=Math.abs(val);}
-          return valCell(val,c,i,isNeg);
+          return valCell(val,c,i,isNeg,chgOn()&&chgCell(t.members[si].node,r.group,c.k,c.isPf||false,false));
         }).join('');
       }).join('');
       rows.push(wxTr(wxTc(wp(wxRun(r.label,{sz:8.5}),{ind:0,before:20,after:20,keepNext:true}),{w:labelW})+
-        wxTc(kp(''),{w:cbW})+markerCell(r.marker)+cells));
+        wxTc(kp(''),{w:cbW})+markerCell(r.marker,r.markerChg)+cells));
       return;
     }
     // child row (one or, for phase-mates of a phase set, several kids sharing the row)
     const k=r.kids[0].node, shared=r.plainName;
     const modifierSuffix=(k.status==='existing'&&!isLoad(k.type))?' (Net Change)':'';
     const kDesc=(shared?(k.description||'unnamed'):dispName(k))+(k.refDes?` [${k.refDes}]`:'')+modifierSuffix;
-    const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5}):wxRun(kDesc,{sz:7.5});
+    const kU=chgOn()&&r.kids.some(x=>chgItem(x.node));
+    const descRun=k.status==='removed'?wxRun(kDesc,{i:true,sz:7.5,u:kU}):k.status==='new'?wxRun(kDesc,{b:true,sz:7.5,u:kU}):wxRun(kDesc,{sz:7.5,u:kU});
     let cells='';
     for(let m=0;m<nm;m++){
       const kid=r.kids.find(x=>x.memberIdx===m);
@@ -9510,13 +9579,13 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
         let val,isNeg=false;
         if(isLd){val=kk.loadValue?.[c.k]; if(kk.status==='removed'&&val!=null)isNeg=true;}
         else{val=kk._netChange?.[c.k]; if(val!=null&&val<0){isNeg=true;val=Math.abs(val);}}
-        return valCell(val,c,i,isNeg);
+        return valCell(val,c,i,isNeg,chgOn()&&chgCell(kk,isLd?'added':'nc',c.k,c.isPf||false,false));
       }).join('');
     }
-    rows.push(wxTr(wxTc(wp(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW})+ratingCell(k,7.5)+markerCell(r.marker)+cells));
+    rows.push(wxTr(wxTc(wp(descRun,{ind:200,before:20,after:20,keepNext:true}),{w:labelW})+ratingCell(k,7.5)+markerCell(r.marker,r.markerChg)+cells));
   });
 
-  const notesParas=t.notes.map(({num,text})=>wxNoteLine(num,text,8)).join('');
+  const notesParas=t.notes.map(({num,text,chg})=>wxNoteLine(num,text,8,chg)).join('');
   return pathParaXml+wxTableOpen([labelW,cbW,...(hasAnnot?[notesW]:[]),...Array(nm*nc).fill(numW)],Math.min(5000,Math.round(tblPct)))+
     header+rows.join('')+`</w:tbl>`+notesParas+wxPar('',{before:100,after:0});
 }

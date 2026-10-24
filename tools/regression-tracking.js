@@ -25,3 +25,17 @@ window.__chgCount=function(){
   return {screenLAS:scr,wordLAS:wu,wordHoriz:hu};
 };
 'trk loaded'
+
+// Notes and references (0.9.7): marks in the notes lists / markers / References list
+window.__trkNotesRefs=function(){
+  const o={}; const ids=window.__trkBuild();
+  state.meta.rowNoteDefs.push({key:'n1',text:'Original note',sharedPeerKey:null});
+  state.meta.references.push({key:'r0',organization:'FAA',docNumber:'AC 25.1351',title:'Electrical Systems',revision:'',date:'',sharedPeerKey:null});
+  state.nodes[ids.l1].rowNotes=[{key:'n1',group:null}]; state.nodes[ids.l1].rowRefs=[{key:'r0',comment:'see para 3',group:null}];
+  recalc(); trackOn(); trackAfterChange();
+  state.meta.rowNoteDefs[0].text='Edited note'; recalc(); renderAll();
+  o.noteEntry=[...document.querySelectorAll('#lad-container .rpt-detail-notes li')].map(li=>li.textContent+(li.querySelector('.rpt-chg')?' [chg]':''));
+  state.nodes[ids.l2].rowNotes=[{key:'n1',group:null}]; recalc(); renderAll();
+  o.markers=[...document.querySelectorAll('#lad-container tr')].filter(r=>r.querySelector('.rpt-note-marker.rpt-chg')).map(r=>r.cells[0].textContent.trim());
+  return o;   // expect: the edited note is [chg] but not the unchanged ref line; the marker on Load 2 only
+};
