@@ -9,7 +9,19 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
-## 0.9.7 — 2026-10-24 (testing build)
+## 0.9.8 — 2026-10-23 (testing build)
+
+Revision 84, item 7 (change tracking), final stage.
+
+- **Reject All** (Changes dialog): puts items, values, names, statuses, row notes and references in both analyses back to the baseline.
+  The confirmation counts what it will remove, restore and reset and lists what it does not revert (document properties, Settings
+  and the VA method, general notes, the Word connection).
+- **Per item:** the Edit dialog has **Accept Change** and **Reject Change** for an item that differs from the baseline (a new item
+  has Accept only).
+- **Tracked Changes** section in the Document tab: items deleted since the baseline (**Restore** or **Accept deletion**) and notes and
+  references removed from items.
+
+## 0.9.7 — 2026-10-23 (testing build)
 
 Revision 84, item 7 (change tracking), second stage.
 

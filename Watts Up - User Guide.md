@@ -337,14 +337,26 @@ the items, values, row notes and references taken when you turn tracking on — 
   stay. Use it for tidying that should not be flagged.
 - **Tracking On** (again): keeps the earlier marks and resumes marking.
 - **Accept All**: clears every underline and makes the current state the new baseline. Use it when the revision is approved.
-- **Undoing a change:** hover over the underlined number to see the baseline value and type it back — the underline disappears by
-  itself once a number matches the baseline again. (A **Reject All** that puts everything back to the baseline is planned.)
+- **Reject All**: puts the items and their values, names, statuses, row notes and references back to the baseline, in both
+  analyses: items added since are removed, items deleted since come back. A confirmation first says how many items it will remove,
+  restore and reset, and what it does **not** revert: document properties (number, revision, date), report Settings and the VA
+  calculation method, general notes, and the Word-file connection. If the Previous and Concurrent Modifications analysis was created
+  after the baseline, it is left as it is.
+- **One item at a time:** in an item's Edit dialog, **Accept Change** makes that item's current values (and the notes and references it
+  cites) part of the baseline, and **Reject Change** puts that item's values, name, status and notes back to the baseline (not its
+  place in the tree or its type). A new item has only **Accept Change** (to undo a new item, delete it), and an item can only be
+  accepted after the item it sits under. A TRU is accepted or rejected together with its inputs and output. Totals follow from the
+  items beneath them, so accept or reject those items.
+- **Undoing a change by hand:** hover over the underlined number to see the baseline value and type it back — the underline
+  disappears by itself once a number matches the baseline again.
+- **Deleted items:** the **Document** tab has a **Tracked Changes** section listing what was deleted since the baseline, with
+  **Restore** (puts the item and what was under it back, when it is a plain item) and **Accept deletion**, and the notes and
+  references that were removed from items. A TRU, a set of phases or a shared item can only be brought back with Reject All.
 
 Notes:
 - The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
   Changes is not used.
-- Document properties, general notes and report settings are not tracked. Notes or references that were removed since the baseline
-  can't be shown in a row; a list of everything deleted is planned.
+- Document properties, general notes and report settings are not tracked, and Reject All does not change them.
 - The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.
 
 ## 10. Versions and getting help

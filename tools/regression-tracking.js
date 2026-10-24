@@ -39,3 +39,14 @@ window.__trkNotesRefs=function(){
   o.markers=[...document.querySelectorAll('#lad-container tr')].filter(r=>r.querySelector('.rpt-note-marker.rpt-chg')).map(r=>r.cells[0].textContent.trim());
   return o;   // expect: the edited note is [chg] but not the unchanged ref line; the marker on Load 2 only
 };
+
+// Reject All / per-item (0.9.8): after changing a value, adding, renaming and deleting items, trackRejectAll() must put the
+// project back exactly (compare trackStable of every node and the computed totals before and after).
+window.__trkReject=function(){
+  const ids=window.__trkBuild(); const sig=()=>JSON.stringify(Object.values(state.nodes).map(n=>[n.id,trackStable(n),n._newLoad&&n._newLoad.va]).sort());
+  const before=sig(); trackOn(); trackAfterChange();
+  state.nodes[ids.l1].loadValue=pw(900,100); addNode(ids.bB,{type:'Load',description:'Load 4',acDc:'ac',voltage:115,status:'new',loadValue:pw(300,30)});
+  state.nodes[ids.bB].description='Bus B renamed'; detachChild(ids.l3,state.nodes[ids.l3].parentId); delete state.nodes[ids.l3]; recalc();
+  const plan=trackPlan(); trackRejectAll(); trackAfterChange();
+  return {plan,restoredExactly:sig()===before,marks:trackSummary()};   // expect restoredExactly:true and all marks 0
+};

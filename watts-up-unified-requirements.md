@@ -6030,6 +6030,24 @@ the right tooltips; a rename shows the old name; editing a note's text underline
 reference with a comment underlines its References entry and its note-list line (Word and Print); Accept All clears everything. Remaining: Reject All, deleted-items list, per-item
 accept/reject (0.9.8).
 
+### 86.2 Stage 3 (version 0.9.8)
+
+- **Reject All** (`trackRejectAll`, with `trackPlan` for the confirmation): each analysis that has a baseline gets its nodes, root order, row-note bank and references replaced by clones of the
+  baseline; an analysis created after the baseline is left alone (the dialog says so); `trackFixLinks` then drops any item/note/reference link whose twin is gone or doesn't link back.
+  The confirmation counts items to remove / restore / reset and notes and references changed, and warns what isn't reverted: document properties, Settings and the VA method, general notes,
+  the Word connection. Tracking stays in whatever state it was in.
+- **Per item** (Edit dialog, `updateTrackItemButtons`): **Accept Change** (`trackAcceptItem`: baseline node := current node, the notes/references it cites accepted too, baseline child order
+  rebuilt by `trackRebuildStructure`; refused while the item's parent is itself new) and **Reject Change** (`trackRejectItem`: every non-structural field restored from the baseline — not
+  parent, type, links, TRU/phase membership — then `syncSharedFields`). A TRU's inputs and output are handled as a unit (`trackGroupIds`). A new item has Accept only.
+- **Tracked Changes panel** (Document tab, `renderTrackPanel`): the deleted items of the current analysis (top-most of each deleted branch, with a count below it) with **Restore**
+  (`trackRestoreDeleted`: plain items only — not TRU/phase/shared; needs the parent present) and **Accept deletion** (`trackAcceptDeletion`), and the notes/references removed from items or
+  deleted from the banks.
+Verified: a project with a changed value, a new item, a rename, a deleted item, an edited note and a detached note — Reject All restored node count, every node's inputs, computed totals and
+note text and attachment exactly, and all marks cleared; per-item Reject restored one item's value and closed the dialog, buttons were absent on unchanged items and Accept-only on new ones;
+accepting a new item adds it to the baseline (parent's child list too) and a later Reject All keeps it; accepting an item under an unaccepted new parent is refused with a message;
+Restore brought a deleted item back at its place and Accept deletion removed it from the baseline; with items shared between the analyses, Reject All restored both analyses with all links
+reciprocal, and with the second analysis created after the baseline it was left alone and its stale links were dropped; the project then reloads without errors. Change tracking is now complete.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

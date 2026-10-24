@@ -30,6 +30,8 @@
     #track-close{background:none;color:var(--text-secondary);font-size:1.15rem;padding:.1rem .38rem;border-radius:4px}
     #track-close:hover{background:var(--bg-hover);color:var(--text-primary)}
     .rpt-chg,td[data-chg],span[data-chg]{text-decoration:underline}
+    .doc-track-list{margin:.1rem 0 .3rem;padding-left:1.1rem;font-size:.78rem}
+    .doc-track-list li{margin:.15rem 0}
     .header-right{display:flex;gap:.4rem}
     button{cursor:pointer;border:none;border-radius:6px;padding:.3rem .7rem;font-size:.82rem;
       font-family:inherit;transition:background .12s,opacity .12s}
@@ -512,6 +514,10 @@
       <button id="doc-share-all-notes" class="btn-default doc-add-btn">Share All with Other Analysis</button>
       <button id="doc-copy-all-notes" class="btn-default doc-add-btn">Copy All to Other Analysis</button>
     </div>
+    <div id="doc-track-section" class="hidden">
+      <div class="doc-section-title">Tracked Changes</div>
+      <div id="doc-track-body"></div>
+    </div>
     <div>
       <div class="doc-section-title">Row Notes</div>
       <div class="doc-empty-hint" style="margin-bottom:.4rem">Shared notes that can be attached to multiple items or item value-groups from the Edit Item dialog's Notes &amp; References section — editing the text here updates it everywhere it's used.</div>
@@ -949,6 +955,8 @@
       <div class="modal-footer">
         <button id="btn-del"        class="btn-danger hidden">Delete</button>
         <div class="spacer"></div>
+        <button id="btn-trk-accept" class="btn-default" style="display:none">Accept Change</button>
+        <button id="btn-trk-reject" class="btn-default" style="display:none">Reject Change</button>
         <button id="btn-calculate"  class="btn-default" style="display:none">Calculate</button>
         <button id="btn-cancel"     class="btn-default">Cancel</button>
         <button id="btn-duplicate"  class="btn-default" style="display:none">Duplicate</button>
@@ -1539,14 +1547,26 @@ the items, values, row notes and references taken when you turn tracking on — 
   stay. Use it for tidying that should not be flagged.</li>
 <li><strong>Tracking On</strong> (again): keeps the earlier marks and resumes marking.</li>
 <li><strong>Accept All</strong>: clears every underline and makes the current state the new baseline. Use it when the revision is approved.</li>
-<li><strong>Undoing a change:</strong> hover over the underlined number to see the baseline value and type it back — the underline disappears by
-  itself once a number matches the baseline again. (A <strong>Reject All</strong> that puts everything back to the baseline is planned.)</li>
+<li><strong>Reject All</strong>: puts the items and their values, names, statuses, row notes and references back to the baseline, in both
+  analyses: items added since are removed, items deleted since come back. A confirmation first says how many items it will remove,
+  restore and reset, and what it does <strong>not</strong> revert: document properties (number, revision, date), report Settings and the VA
+  calculation method, general notes, and the Word-file connection. If the Previous and Concurrent Modifications analysis was created
+  after the baseline, it is left as it is.</li>
+<li><strong>One item at a time:</strong> in an item's Edit dialog, <strong>Accept Change</strong> makes that item's current values (and the notes and references it
+  cites) part of the baseline, and <strong>Reject Change</strong> puts that item's values, name, status and notes back to the baseline (not its
+  place in the tree or its type). A new item has only <strong>Accept Change</strong> (to undo a new item, delete it), and an item can only be
+  accepted after the item it sits under. A TRU is accepted or rejected together with its inputs and output. Totals follow from the
+  items beneath them, so accept or reject those items.</li>
+<li><strong>Undoing a change by hand:</strong> hover over the underlined number to see the baseline value and type it back — the underline
+  disappears by itself once a number matches the baseline again.</li>
+<li><strong>Deleted items:</strong> the <strong>Document</strong> tab has a <strong>Tracked Changes</strong> section listing what was deleted since the baseline, with
+  <strong>Restore</strong> (puts the item and what was under it back, when it is a plain item) and <strong>Accept deletion</strong>, and the notes and
+  references that were removed from items. A TRU, a set of phases or a shared item can only be brought back with Reject All.</li>
 </ul>
 <p>Notes:
 - The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
   Changes is not used.
-- Document properties, general notes and report settings are not tracked. Notes or references that were removed since the baseline
-  can't be shown in a row; a list of everything deleted is planned.
+- Document properties, general notes and report settings are not tracked, and Reject All does not change them.
 - The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.</p>
 <h2 id="10-versions-and-getting-help">10. Versions and getting help</h2>
 <ul>
@@ -1639,7 +1659,7 @@ the items, values, row notes and references taken when you turn tracking on — 
       <div class="modal-header"><h2>Track Changes</h2><button id="track-close" aria-label="Close">✕</button></div>
       <div class="modal-body">
         <div id="track-body"></div>
-        <div class="choice-btns"><button id="track-accept" class="btn-default">Accept All</button><button id="track-toggle" class="btn-primary">Tracking On</button></div>
+        <div class="choice-btns"><button id="track-reject" class="btn-default">Reject All</button><button id="track-accept" class="btn-default">Accept All</button><button id="track-toggle" class="btn-primary">Tracking On</button></div>
       </div>
     </div>
   </div>
@@ -3288,6 +3308,166 @@ function updateTrackUI() {
     if (show) { const d=new Date(T.takenAt); leg.textContent=`Underlined = changed since ${isNaN(d)?'the baseline':d.toLocaleDateString()}${T.on?'':' (Tracking Off: new edits are not marked)'}`; }
   }
 }
+// ── Reject All, per-item accept / reject, deleted items (version 0.9.8) ──────────────────────────
+const TRK_STRUCT=new Set(['id','parentId','childIds','sharedPeerId','convRole','convGroupId','phase','phaseGroupId','phaseSeq','phaseOrder','type']);
+function trackStable(o) {   // key-sorted JSON of a node's inputs (no computed fields, no child order)
+  const out={}; Object.keys(o).sort().forEach(k=>{ if (k.charAt(0)!=='_'&&k!=='childIds') out[k]=o[k]; });
+  return JSON.stringify(out);
+}
+function trackCloneNode(n) { const o={}; Object.keys(n).forEach(k=>{ if (k.charAt(0)!=='_') o[k]=n[k]; }); return JSON.parse(JSON.stringify(o)); }
+// After a structural restore: a shared item whose twin is gone is no longer shared.
+function trackFixLinks() {
+  ['ap','pcm'].forEach(id=>{
+    const an=state.analyses[id]; if (!an) return;
+    const other=state.analyses[id==='ap'?'pcm':'ap'];
+    Object.values(an.nodes).forEach(n=>{ if (n.sharedPeerId&&(!other||!other.nodes[n.sharedPeerId]||other.nodes[n.sharedPeerId].sharedPeerId!==n.id)) n.sharedPeerId=null; });
+    ['rowNoteDefs','references'].forEach(list=>(an[list]||[]).forEach(e=>{ if (e.sharedPeerKey&&(!other||!(other[list]||[]).some(x=>x.key===e.sharedPeerKey&&x.sharedPeerKey===e.key))) e.sharedPeerKey=null; }));
+  });
+}
+// What Reject All would do, for the confirmation.
+function trackPlan() {
+  const T=state.track, out={added:0,restored:0,reset:0,notes:0,pcmLeft:false};
+  ['ap','pcm'].forEach(id=>{
+    const an=state.analyses[id], b=T.baseline[id];
+    if (!an) return;
+    if (!b) { out.pcmLeft=true; return; }
+    Object.keys(an.nodes).forEach(nid=>{ if (!b.nodes[nid]) out.added++; else if (trackStable(an.nodes[nid])!==trackStable(b.nodes[nid])) out.reset++; });
+    Object.keys(b.nodes).forEach(nid=>{ if (!an.nodes[nid]) out.restored++; });
+    ['rowNoteDefs','references'].forEach(list=>{
+      const cm=new Map((an[list]||[]).map(e=>[e.key,JSON.stringify(e)])), bm=new Map((b[list]||[]).map(e=>[e.key,JSON.stringify(e)]));
+      cm.forEach((j,k)=>{ if (bm.get(k)!==j) out.notes++; }); bm.forEach((j,k)=>{ if (!cm.has(k)) out.notes++; });
+    });
+  });
+  return out;
+}
+function trackRejectAll() {
+  const T=state&&state.track; if (!T||!T.baseline) return;
+  ['ap','pcm'].forEach(id=>{
+    const an=state.analyses[id], b=T.baseline[id]; if (!an||!b) return;   // an analysis created after the baseline is left as it is
+    an.nodes=JSON.parse(JSON.stringify(b.nodes)); an.rootIds=[...b.rootIds];
+    an.rowNoteDefs=JSON.parse(JSON.stringify(b.rowNoteDefs||[])); an.references=JSON.parse(JSON.stringify(b.references||[]));
+  });
+  trackFixLinks(); trackSeen=null; trackView=null;
+}
+// Child order and root order of the baseline follow the current analysis where both know the item.
+function trackRebuildStructure(b,an) {
+  Object.keys(b.nodes).forEach(id=>{
+    const cur=an.nodes[id]?(an.nodes[id].childIds||[]):[];
+    const ordered=cur.filter(c=>b.nodes[c]&&b.nodes[c].parentId===id);
+    Object.keys(b.nodes).forEach(c=>{ if (b.nodes[c].parentId===id&&!ordered.includes(c)) ordered.push(c); });
+    b.nodes[id].childIds=ordered;
+  });
+  const roots=an.rootIds.filter(r=>b.nodes[r]&&!b.nodes[r].parentId);
+  Object.keys(b.nodes).forEach(r=>{ if (!b.nodes[r].parentId&&!roots.includes(r)) roots.push(r); });
+  b.rootIds=roots;
+}
+function trackItemInfo(id) {
+  const T=state&&state.track; if (!T||!T.baseline) return null;
+  const b=T.baseline[state.currentAnalysis], n=state.nodes[id]; if (!b||!n) return null;
+  const bn=b.nodes[id]; if (!bn) return {isNew:true};
+  const changed=trackStable(n)!==trackStable(bn);
+  return {isNew:false,changed,moved:(bn.parentId||null)!==(n.parentId||null),retyped:bn.type!==n.type};
+}
+function trackGroupIds(id) {   // an item's conversion group is accepted / rejected as a unit
+  const n=state.nodes[id];
+  if (n&&n.convRole) { const g=findConversionGroup(n); if (g) return [...g.inputs,...(g.output?[g.output]:[])].map(x=>x.id); }
+  return [id];
+}
+function trackAcceptItem(id) {
+  const T=state.track, b=T.baseline[state.currentAnalysis], an=state.analyses[state.currentAnalysis];
+  const ids=trackGroupIds(id);
+  for (const x of ids) {
+    const n=state.nodes[x]; if (!n) continue;
+    if (n.parentId&&!b.nodes[n.parentId]&&!ids.includes(n.parentId)) { alert(`"${dispName(state.nodes[n.parentId])}" is new since the baseline, so accept it first — this item sits under it.`); return false; }
+  }
+  ids.forEach(x=>{
+    const n=state.nodes[x]; if (!n) return;
+    b.nodes[x]=trackCloneNode(n);
+    const put=(list,key,e)=>{ if (!e) return; const c=JSON.parse(JSON.stringify(e)), i=b[list].findIndex(y=>y.key===key); if (i>=0) b[list][i]=c; else b[list].push(c); };
+    (n.rowNotes||[]).forEach(o=>put('rowNoteDefs',o.key,(an.rowNoteDefs||[]).find(d=>d.key===o.key)));
+    (n.rowRefs||[]).forEach(r=>put('references',r.key,(an.references||[]).find(d=>d.key===r.key)));
+  });
+  trackRebuildStructure(b,an); trackView=null; return true;
+}
+function trackRejectItem(id) {
+  const b=state.track.baseline[state.currentAnalysis];
+  trackGroupIds(id).forEach(x=>{
+    const n=state.nodes[x], bn=b.nodes[x]; if (!n||!bn) return;
+    Object.keys(bn).forEach(k=>{ if (!TRK_STRUCT.has(k)&&k.charAt(0)!=='_') n[k]=JSON.parse(JSON.stringify(bn[k])); });
+    Object.keys(n).forEach(k=>{ if (!TRK_STRUCT.has(k)&&k.charAt(0)!=='_'&&!(k in bn)) delete n[k]; });
+    syncSharedFields(n);
+  });
+  trackView=null;
+}
+// Items in the baseline that are gone now (current analysis): [{id,node,parentName,below}] for the top-most of each deleted branch.
+function trackDeletedList() {
+  const T=state&&state.track, b=T&&T.baseline&&T.baseline[state.currentAnalysis]; if (!b) return [];
+  const gone=new Set(Object.keys(b.nodes).filter(id=>!state.nodes[id]));
+  const out=[];
+  gone.forEach(id=>{
+    const bn=b.nodes[id]; if (bn.parentId&&gone.has(bn.parentId)) return;
+    const sub=[]; (function walk(x){ sub.push(x); Object.keys(b.nodes).forEach(c=>{ if (b.nodes[c].parentId===x&&gone.has(c)) walk(c); }); })(id);
+    const par=bn.parentId&&b.nodes[bn.parentId];
+    out.push({id,node:bn,parentName:par?(par.description||'unnamed'):'(top level)',ids:sub});
+  });
+  return out;
+}
+function trackRestoreDeleted(id) {
+  const b=state.track.baseline[state.currentAnalysis], item=trackDeletedList().find(x=>x.id===id); if (!item) return;
+  const bad=item.ids.find(x=>{ const bn=b.nodes[x]; return bn.convRole||bn.phase||bn.sharedPeerId; });
+  if (bad) { alert('This item is part of a TRU, a set of phases, or is shared with the other analysis, so it can only be brought back with Reject All.'); return; }
+  const pid=b.nodes[id].parentId;
+  if (pid&&!state.nodes[pid]) { alert('Restore the item it sat under first.'); return; }
+  item.ids.forEach(x=>{ const c=trackCloneNode(b.nodes[x]); c.childIds=(c.childIds||[]).filter(k=>item.ids.includes(k)); state.nodes[x]=c; });
+  if (pid) { const par=state.nodes[pid]; const sibs=b.nodes[pid].childIds||[]; const after=sibs.slice(sibs.indexOf(id)+1).find(k=>(par.childIds||[]).includes(k));
+    const arr=(par.childIds||[]).slice(); const at=after?arr.indexOf(after):arr.length; arr.splice(at,0,id); par.childIds=arr; }
+  else state.rootIds=[...state.rootIds,id];
+  trackView=null;
+}
+function trackAcceptDeletion(id) {
+  const b=state.track.baseline[state.currentAnalysis], an=state.analyses[state.currentAnalysis], item=trackDeletedList().find(x=>x.id===id); if (!item) return;
+  const present=Object.keys(b.nodes).find(k=>!item.ids.includes(k)&&b.nodes[k].parentId&&item.ids.includes(b.nodes[k].parentId));
+  if (present) { alert('Something that was under this item still exists; accept or reject that first.'); return; }
+  item.ids.forEach(x=>{ delete b.nodes[x]; });
+  trackRebuildStructure(b,an); trackView=null;
+}
+// Tracked-changes panel on the Document tab.
+function renderTrackPanel() {
+  const sec=document.getElementById('doc-track-section'), body=document.getElementById('doc-track-body'); if (!sec||!body) return;
+  const T=state&&state.track, b=T&&T.baseline&&T.baseline[state.currentAnalysis];
+  sec.classList.toggle('hidden',!b);
+  if (!b) return;
+  const sum=trackSummary(), del=trackDeletedList();
+  const an=state.analyses[state.currentAnalysis];
+  const removed=[];
+  Object.keys(b.nodes).forEach(id=>{
+    const n=an.nodes[id], bn=b.nodes[id]; if (!n) return;
+    (bn.rowNotes||[]).forEach(o=>{ if (!(n.rowNotes||[]).some(x=>x.key===o.key)) { const d=(b.rowNoteDefs||[]).find(x=>x.key===o.key); removed.push(`${n.description||'unnamed'}: note removed — “${(d&&d.text)||''}”`); } });
+    (bn.rowRefs||[]).forEach(r=>{ if (!(n.rowRefs||[]).some(x=>x.key===r.key&&String(x.comment||'')===String(r.comment||''))) removed.push(`${n.description||'unnamed'}: reference removed${r.comment?` — “${r.comment}”`:''}`); });
+  });
+  (b.rowNoteDefs||[]).forEach(d=>{ if (!(an.rowNoteDefs||[]).some(x=>x.key===d.key)) removed.push(`Row note deleted — “${d.text||''}”`); });
+  (b.references||[]).forEach(d=>{ if (!(an.references||[]).some(x=>x.key===d.key)) removed.push(`Reference deleted — ${[d.organization,d.docNumber,d.title].filter(Boolean).join(' ')}`); });
+  const li=t=>`<li>${esc(t)}</li>`;
+  body.innerHTML=`<div class="doc-empty-hint" style="margin-bottom:.4rem">Compared with the baseline taken ${esc(new Date(T.takenAt).toLocaleDateString())} (${T.on?'Tracking On':'Tracking Off'}): ${sum.newItems} new item${sum.newItems===1?'':'s'}, ${sum.changedItems} renamed/moved/changed, ${sum.changedValues} with a changed number, ${del.length} deleted. Use <strong>Changes</strong> to accept or reject everything, or the buttons in an item's Edit dialog for one item.</div>
+    ${del.length?`<div class="section-label" style="margin:.2rem 0">Deleted since the baseline</div><ul class="doc-track-list">${del.map(d=>`<li data-id="${esc(d.id)}">${esc(d.node.description||'unnamed')} <span style="color:var(--text-muted)">(${esc(d.node.type)}, was under ${esc(d.parentName)}${d.ids.length>1?`, with ${d.ids.length-1} item${d.ids.length>2?'s':''} below it`:''})</span>
+      <button class="btn-default trk-restore" style="padding:.1rem .45rem;font-size:.72rem;margin-left:.4rem">Restore</button><button class="btn-default trk-accept-del" style="padding:.1rem .45rem;font-size:.72rem">Accept deletion</button></li>`).join('')}</ul>`:''}
+    ${removed.length?`<div class="section-label" style="margin:.4rem 0 .2rem">Notes and references removed since the baseline</div><ul class="doc-track-list">${removed.slice(0,40).map(li).join('')}${removed.length>40?li(`…and ${removed.length-40} more`):''}</ul>`:''}
+    ${!del.length&&!removed.length?'<div class="doc-empty-hint">Nothing has been deleted or removed since the baseline.</div>':''}`;
+  body.querySelectorAll('li[data-id]').forEach(row=>{
+    const id=row.dataset.id;
+    row.querySelector('.trk-restore').addEventListener('click',()=>{ trackRestoreDeleted(id); trackAfterChange(); });
+    row.querySelector('.trk-accept-del').addEventListener('click',()=>{ trackAcceptDeletion(id); renderAll(); persist(); });
+  });
+}
+// Accept / Reject buttons in the Edit dialog (an item with changes of its own since the baseline).
+function updateTrackItemButtons(nodeId) {
+  const a=document.getElementById('btn-trk-accept'), r=document.getElementById('btn-trk-reject'); if (!a||!r) return;
+  a.style.display='none'; r.style.display='none';
+  if (!chgOn()||!nodeId) return;
+  const info=trackItemInfo(nodeId); if (!info) return;
+  if (info.isNew) { a.style.display=''; a.title='Make this new item part of the baseline (it stops being underlined)'; }
+  else if (info.changed) { a.style.display=''; r.style.display=''; a.title='Make this item\'s current values part of the baseline'; r.title='Put this item\'s values, name and notes back to the baseline'; }
+}
 function openTrackDialog() {
   if (!state) return;
   const T=state.track, el=document.getElementById('track-body');
@@ -3297,8 +3477,9 @@ function openTrackDialog() {
     ?'<p>Tracking has not been started. <strong>Tracking On</strong> takes a baseline of the items, values, row notes and references as they are now, then underlines everything that differs from it in the reports.</p>'
     :`<p><strong>${T.on?'Tracking On':'Tracking Off'}</strong> — baseline taken ${esc(since)}.</p>
        <p>Since the baseline: <strong>${sum.newItems}</strong> new item${sum.newItems===1?'':'s'}, <strong>${sum.changedItems}</strong> item${sum.changedItems===1?'':'s'} renamed, moved or changed in status or type, <strong>${sum.changedValues}</strong> item${sum.changedValues===1?'':'s'} with a changed number, <strong>${sum.deleted}</strong> deleted.</p>
-       <p style="color:var(--text-secondary);font-size:.8rem">${T.on?'New edits are underlined. <strong>Tracking Off</strong> stops marking new edits (they are accepted as you make them); earlier marks stay.':'New edits are accepted as you make them and are not marked; earlier marks stay. <strong>Tracking On</strong> resumes marking.'} <strong>Accept All</strong> clears every mark and makes the current state the new baseline.</p>`;
-  const tog=document.getElementById('track-toggle'), acc=document.getElementById('track-accept');
+       <p style="color:var(--text-secondary);font-size:.8rem">${T.on?'New edits are underlined. <strong>Tracking Off</strong> stops marking new edits (they are accepted as you make them); earlier marks stay.':'New edits are accepted as you make them and are not marked; earlier marks stay. <strong>Tracking On</strong> resumes marking.'} <strong>Accept All</strong> clears every mark and makes the current state the new baseline. <strong>Reject All</strong> puts the items, values, row notes and references back to the baseline.</p>`;
+  const tog=document.getElementById('track-toggle'), acc=document.getElementById('track-accept'), rej=document.getElementById('track-reject');
+  rej.style.display=T&&T.baseline?'':'none';
   tog.textContent=T&&T.baseline&&T.on?'Tracking Off':'Tracking On';
   acc.style.display=T&&T.baseline?'':'none';
   document.getElementById('track-dialog').classList.remove('hidden');
@@ -3343,8 +3524,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.7';
-const APP_RELEASE_DATE='2026-10-24';
+const APP_VERSION='0.9.8';
+const APP_RELEASE_DATE='2026-10-23';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -5773,6 +5954,7 @@ function renderRowNoteList() {
 }
 
 function renderDocPanel() {
+  renderTrackPanel();
   renderMeta();
   renderRefList();
   renderNoteList();
@@ -6611,6 +6793,8 @@ function closeModal() {
   document.getElementById('af-acdc').disabled=false;
   document.getElementById('btn-duplicate').style.display='none';
   document.getElementById('btn-calculate').style.display='none';
+  document.getElementById('btn-trk-accept').style.display='none';
+  document.getElementById('btn-trk-reject').style.display='none';
   document.getElementById('modal').style.width='';
   mMode=null;mNode=null;mBlocked=false;
   afRows=[];afRowCtr=0;afRowData={};
@@ -7590,6 +7774,7 @@ function openEdit(nodeId) {
   // Show Calculate button in edit mode
   document.getElementById('btn-calculate').style.display='';
   document.getElementById('btn-calculate').onclick=doEditCalculate;
+  updateTrackItemButtons(nodeId);
 
   efRenderSiblings(n.parentId,nodeId);
   renderEfNotesRefs(n);
@@ -10301,6 +10486,21 @@ function initEvents() {
     const T=state&&state.track;
     if (T&&T.baseline&&T.on) trackOff(); else trackOn();
     trackAfterChange(); openTrackDialog();
+  });
+  document.getElementById('track-reject').addEventListener('click',()=>{
+    const pl=trackPlan();
+    const msg=`Reject All puts the items in both analyses back to the tracked baseline: it removes ${pl.added} item${pl.added===1?'':'s'} added since, restores ${pl.restored} item${pl.restored===1?'':'s'} deleted since, and resets ${pl.reset} item${pl.reset===1?'':'s'} and ${pl.notes} row note${pl.notes===1?'':'s'} and reference${pl.notes===1?'':'s'}.\n\nNOT reverted: document properties (number, revision, date), report Settings and the VA method, general notes, and the Word-file connection.${pl.pcmLeft?'\n\nPrevious and Concurrent Modifications was created after the baseline and is left as it is.':''}\n\nContinue?`;
+    if (!confirm(msg)) return;
+    trackRejectAll(); trackAfterChange(); openTrackDialog();
+  });
+  document.getElementById('btn-trk-accept').addEventListener('click',()=>{
+    if (!mNode) return; if (trackAcceptItem(mNode)) { closeModal(); renderAll(); persist(); }
+  });
+  document.getElementById('btn-trk-reject').addEventListener('click',()=>{
+    if (!mNode) return; const info=trackItemInfo(mNode); if (!info||info.isNew) return;
+    const extra=(info.moved||info.retyped)?' Its position in the tree'+(info.retyped?' and type are':' is')+' not changed.':'';
+    if (!confirm('Put this item back to the baseline? Its values, name, status and notes are reset; anything unsaved in this dialog is discarded.'+extra)) return;
+    const id=mNode; trackRejectItem(id); closeModal(); trackAfterChange();
   });
   document.getElementById('track-accept').addEventListener('click',()=>{
     if (!confirm('Accept all tracked changes? Every underline is cleared and the current items, values, row notes and references become the new baseline.')) return;
