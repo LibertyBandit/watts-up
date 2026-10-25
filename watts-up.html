@@ -1019,7 +1019,7 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
 <li><a href="#4-building-an-analysis">4. Building an analysis</a><ul>
 <li><a href="#41-item-types-and-statuses">4.1 Item types and statuses</a></li>
 <li><a href="#42-the-edit-item-dialog">4.2 The Edit Item dialog</a></li>
-<li><a href="#43-adding-items">4.3 Adding items</a></li>
+<li><a href="#43-the-add-items-dialog">4.3 The Add Item(s) dialog</a></li>
 <li><a href="#44-previous-concurrent-modifications">4.4 Previous &amp; Concurrent Modifications</a></li>
 <li><a href="#45-three-phase-systems">4.5 Three-phase systems</a></li>
 <li><a href="#46-how-the-numbers-are-worked-out">4.6 How the numbers are worked out</a></li>
@@ -1174,7 +1174,7 @@ buttons:</p>
 </tr>
 <tr>
 <td><strong>↳</strong></td>
-<td>Add a child item.</td>
+<td>Insert a blank, editable child row under this item (see "Adding items from a grid" below).</td>
 </tr>
 <tr>
 <td><strong>✎</strong></td>
@@ -1186,7 +1186,7 @@ buttons:</p>
 </tr>
 <tr>
 <td><strong>↻</strong> (beside a group of columns)</td>
-<td>Clear that group of values.</td>
+<td>Clear that group of values. Clearing is required before you can change the values in an AC group; for DC values it is optional.</td>
 </tr>
 <tr>
 <td><strong>↑ ↓</strong></td>
@@ -1200,6 +1200,17 @@ buttons:</p>
 </table>
 <p>The status badge in a row toggles an item between Existing and Removed (in the Existing / Removed grid) when clicked; the
 keyboard focus stays on the badge, so Tab and Shift+Tab continue to the next or previous cell in the same row.</p>
+<p><strong>Adding items from a grid.</strong> There are three ways, and they are not all obvious:</p>
+<ul>
+<li><strong>↳</strong> (in a row) inserts a blank child row directly under that item and puts the cursor in its Description cell. The new row starts
+  with a default type for that parent (change it in the row if you need another) and takes its voltage and AC / DC from the item
+  above it; you type its values straight into the row's cells. Nothing else opens.</li>
+<li><strong>+ Item</strong> (bottom of the grid) opens the <strong>Add Item(s)</strong> dialog with no parent chosen yet (§4.3).</li>
+<li><strong>A TRU cannot be typed into a row</strong> — it is always created as an IN / OUT pair by the Add Item(s) dialog. To add a TRU as a
+  child of an item from a grid, open that item's <strong>Item Type</strong> drop-down in its row and choose the last entry, <strong>+ TRU (opens Add
+  Item)</strong>. The row itself does not change; the Add Item(s) dialog opens with that item already chosen as the parent and <strong>TRU</strong>
+  already chosen as the type (§4.3). The entry appears only on rows whose type can be changed.</li>
+</ul>
 <p>Above each grid are <strong>filters</strong>: AC / DC, and a <strong>Branch</strong> list (an item and everything beneath it). <strong>Clear
 Filters</strong> appears while a filter is active. The filters are shared between the two grids and are not saved
 with the project.</p>
@@ -1248,8 +1259,6 @@ with the project.</p>
 </tr>
 </tbody>
 </table>
-<p><em>(Other converter types — inverter, transformer, DC-DC and frequency converter — exist only in older files and
-cannot be created in new items.)</em></p>
 <table>
 <thead>
 <tr>
@@ -1282,7 +1291,9 @@ cannot be created in new items.)</em></p>
   overload warning and the Reserve.</li>
 <li><strong>Existing Load</strong> — the load the item already carries (non-load items).</li>
 <li><strong>Net Change Override</strong> — type a value here to replace the sum calculated from the children. Leave blank to
-  calculate automatically.</li>
+  calculate automatically. An item with a manually entered Net Change Override should not have children: the override
+  replaces the total of whatever is beneath it, so children added under it do not change the total (and an Installed item with
+  an override is not offered <strong>+ Child</strong> at all). Clear the override first if you want the item to total its children.</li>
 <li><strong>Load Value</strong> — for Load items (A, W, and for AC also VA, VAR, pf).</li>
 <li><strong>Conversion Parameters / TRU</strong> — efficiency and conversion power factor. A TRU has <strong>Input</strong> and
   <strong>Output</strong> panes with their own capacity and existing-load fields. Extra input phases can be added with
@@ -1298,13 +1309,23 @@ cannot be created in new items.)</em></p>
 <code>=12*3.5</code> or <code>=(28+1.5)/2</code>. Only digits and <code>+ − × ÷ . ( )</code> are allowed; the result replaces what you typed when you
 leave the field. For AC items you can supply any usable combination of A, VA, W, VAR and pf and the rest are
 worked out. With nothing else given, VAR defaults to 0 and pf to 1.</p>
-<h3 id="43-adding-items">4.3 Adding items</h3>
-<p><strong>+ Child</strong> (or ↳ in a grid) and <strong>+ Root</strong> open the <strong>Add Item(s)</strong> dialog. Choose the parent, the item type,
-the voltage, AC / DC and status once, then fill in as many rows as you need, using <strong>+ Add Another Row</strong>. Each row
-takes a description, optional reference designator and the capacity/load values appropriate to the type. New
-items inherit the parent's voltage, AC / DC and (where used) phase.</p>
+<h3 id="43-the-add-items-dialog">4.3 The Add Item(s) dialog</h3>
+<p>Open it with <strong>+ Child</strong> (a tree row), <strong>+ Root</strong> (above the tree), <strong>+ Item</strong> (bottom of either grid), or — to add a TRU from a
+grid — the <strong>+ TRU (opens Add Item)</strong> entry in a grid row's Item Type drop-down (§3.2). Several items of one kind can be added at once:</p>
+<ul>
+<li><strong>Parent Item</strong> — where the new items go (preselected when you start from a tree row or a grid row; choose <em>No Parent (New Root)</em>
+  for a top-level item).</li>
+<li><strong>Item Settings</strong> — <strong>Item Type</strong>, <strong>Volts</strong>, <strong>AC / DC</strong> and <strong>Status</strong>, chosen once for every row below.</li>
+<li><strong>Items to Add</strong> — one row per item: a description, an optional reference designator, and the capacity, existing-load or load
+  values that suit the type. Use <strong>+ Add Another Row</strong> for more.</li>
+<li><strong>TRU</strong> — a TRU row also takes the efficiency (default 0.85), the output voltage, and the capacity and load of its input (IN) and
+  output (OUT) sides. Saving creates the linked IN / OUT pair and its transfer row note (§3.3). Extra input phases are added
+  afterward in the Edit dialog with <strong>+ Parent</strong> (§4.2).</li>
+<li><strong>Save</strong> adds the items; <strong>Cancel</strong> closes the dialog without adding anything.</li>
+</ul>
+<p>New items inherit the parent's voltage, AC / DC and (where used) phase.</p>
 <h3 id="44-previous-concurrent-modifications">4.4 Previous &amp; Concurrent Modifications</h3>
-<p>Often an aircraft has changes already approved but not yet installed. Click <strong>+ Create Previous &amp; Concurrent
+<p>Sometimes it is necessary or advantageous to account for previous and concurrent modifications separate from the active project. Click <strong>+ Create Previous &amp; Concurrent
 Modifications</strong> to add a second analysis. The switch then toggles between <strong>Active Project</strong> and
 <strong>Previous &amp; Concurrent Modifications</strong>; each has its own tree, grids and reports, and its own Document tab
 content.</p>
@@ -1463,8 +1484,7 @@ own Word file, updating it in place without disturbing anything else in it.</p>
   browser asks permission to write to the file. A message lists any content controls the document is missing;
   those items are simply not updated.</li>
 <li><strong>Load from Report</strong> — replaces the current analysis with the project stored in the file (after a confirmation,
-  because unsynced changes are lost). Text you typed in Word into the introduction, compliance statement and general
-  notes controls is brought back too.</li>
+  because unsynced changes are lost).</li>
 <li><strong>Create New Report…</strong> — as above.</li>
 <li><strong>Connect Different…</strong> — pick another existing report and connect to it instead (then choose Sync or Load, as when
   connecting for the first time). Cancelling the file dialog leaves the current connection as it was.</li>
@@ -1552,7 +1572,7 @@ the items, values, row notes and references taken when you turn tracking on — 
 <li><strong>Reject All</strong>: puts the items and their values, names, statuses, row notes and references back to the baseline, in both
   analyses: items added since are removed, items deleted since come back. A confirmation first says how many items it will remove,
   restore and reset, and what it does <strong>not</strong> revert: document properties (number, revision, date), report Settings and the VA
-  calculation method, general notes, and the Word-file connection. If the Previous and Concurrent Modifications analysis was created
+  calculation method, and the Word-file connection. If the Previous and Concurrent Modifications analysis was created
   after the baseline, it is left as it is.</li>
 <li><strong>One item at a time:</strong> in an item's Edit dialog, <strong>Accept Change</strong> makes that item's current values (and the notes and references it
   cites) part of the baseline, and <strong>Reject Change</strong> puts that item's values, name, status and notes back to the baseline (not its
@@ -1568,7 +1588,7 @@ the items, values, row notes and references taken when you turn tracking on — 
 <p>Notes:
 - The underlines are drawn by Watts Up each time a report is built, so they are rewritten at every Word sync; Word's own Track
   Changes is not used.
-- Document properties, general notes and report settings are not tracked, and Reject All does not change them.
+- Document properties and report settings are not tracked, and Reject All does not change them.
 - The baseline is a second copy of the project's items, so a file saved while tracking is on is larger.</p>
 <h2 id="10-versions-and-getting-help">10. Versions and getting help</h2>
 <ul>
@@ -3526,7 +3546,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.9';
+const APP_VERSION='0.9.10';
 const APP_RELEASE_DATE='2026-10-24';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -10485,7 +10505,7 @@ function initEvents() {
   });
   document.getElementById('track-reject').addEventListener('click',()=>{
     const pl=trackPlan();
-    const msg=`Reject All puts the items in both analyses back to the tracked baseline: it removes ${pl.added} item${pl.added===1?'':'s'} added since, restores ${pl.restored} item${pl.restored===1?'':'s'} deleted since, and resets ${pl.reset} item${pl.reset===1?'':'s'} and ${pl.notes} row note${pl.notes===1?'':'s'} and reference${pl.notes===1?'':'s'}.\n\nNOT reverted: document properties (number, revision, date), report Settings and the VA method, general notes, and the Word-file connection.${pl.pcmLeft?'\n\nPrevious and Concurrent Modifications was created after the baseline and is left as it is.':''}\n\nContinue?`;
+    const msg=`Reject All puts the items in both analyses back to the tracked baseline: it removes ${pl.added} item${pl.added===1?'':'s'} added since, restores ${pl.restored} item${pl.restored===1?'':'s'} deleted since, and resets ${pl.reset} item${pl.reset===1?'':'s'} and ${pl.notes} row note${pl.notes===1?'':'s'} and reference${pl.notes===1?'':'s'}.\n\nNOT reverted: document properties (number, revision, date), report Settings and the VA method, and the Word-file connection.${pl.pcmLeft?'\n\nPrevious and Concurrent Modifications was created after the baseline and is left as it is.':''}\n\nContinue?`;
     if (!confirm(msg)) return;
     trackRejectAll(); trackAfterChange(); openTrackDialog();
   });

@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.10 — 2026-10-24 (testing build)
+
+User guide / Help only (plus one wording change in a dialog):
+- §3.2: the ↻ button note (required to change AC value groups, optional for DC); a new "Adding items from a grid" passage explaining the ↳ row
+  button, the **+ Item** button and — for a TRU — the **+ TRU (opens Add Item)** entry at the bottom of a row's Item Type drop-down.
+- §4.1: the sentence about older converter types removed. §4.2: Net Change Override note about items with children. §4.3 is now "The Add Item(s)
+  dialog", in parallel with §4.2. §4.4: new opening sentence. §7.3: the sentence about introduction / compliance / general notes removed. §9: references
+  to general notes removed (and the same words in the Reject All confirmation).
+
 ## 0.9.9 — 2026-10-24 (testing build)
 
 - **Power Distribution Summary:** no row notes (no Notes column and no notes under the tables), on screen and in Word.

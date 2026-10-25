@@ -6058,6 +6058,15 @@ Requested 2026-10-24 (all implemented as asked, no design questions needed):
 5. **Change tracking and references:** a row-note line that cites a reference with a comment is underlined only when the (reference, comment) citation is new or changed since the baseline (`chgRefComment`); a changed reference record no longer underlines it (the References list still does, via `chgRefBankChanged`).
 Verified: PDS screen and Word have no Notes column/list while the other reports keep theirs; headings read "Notes" / "[Ref.]" in screen, Print and Word; single-input and three-input note text; a changed reference title/number leaves the row-note line plain and underlines the References list entry, and a new comment underlines the line.
 
+## 88. Version 0.9.10 — User Guide Edits
+
+Seven edits to the in-program guide requested 2026-10-24: (1) §3.2 ↻ note; (2) §4.1 older-converter sentence removed (latent development-only functionality is not described to users);
+(3) §4.2 Net Change Override and children — worded to match the program (an Installed item with an override has no **+ Child**; for other items the Add dialog warns that children won't
+change the total while the override stands); (4) §4.3 recast as "The Add Item(s) dialog" and a new §3.2 passage on adding from a grid (↳ inserts a blank editable row, `gridAddChildRow`;
+**+ Item** opens the dialog; the **+ TRU (opens Add Item)** option, `GRID_ADD_TRU_SENTINEL`, opens it with that row as parent and TRU preselected); (5) §4.4 first sentence replaced;
+(6) §7.3 "Load from Report" no longer mentions introduction / compliance / general notes; (7) general-notes mentions removed from §9 — and from the Reject All confirmation text,
+for consistency. The latent functionality itself (hidden Document-tab fields and their Word content controls) is unchanged.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
