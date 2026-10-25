@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.11 — 2026-10-24 (testing build)
+
+Fix.
+
+- **Moving an item that has split (multi-phase) items below it:** moving an item that isn't itself split — for example a generator whose bus is
+  split into phases — to the top level or under another unlabeled item used to erase the phase structure of everything beneath it, in
+  both analyses when the item is shared. The phases are now kept. (An item that does carry a phase label still loses it, and its branch's
+  labels, when it is moved out from under its split.)
+
 ## 0.9.10 — 2026-10-24 (testing build)
 
 User guide / Help only (plus one wording change in a dialog):

@@ -75,3 +75,38 @@ window.__repairLoad=async function(){
   return {violationsBefore:before,loadError:err,ap:ins(snap.analyses.ap.nodes).map(n=>n.phase+':'+(n.sharedPeerId?'L':'-')),pcm:ins(snap.analyses.pcm.nodes).map(n=>n.phase+':'+(n.sharedPeerId?'L':'-')),notes:window.__lastRepairNotes||null};
 };
 'tests loaded'
+
+// 0.9.11: moving an UNLABELED item (e.g. a generator) to the top level or under another unlabeled parent must keep the
+// phase splits below it, in both analyses. __moveLoop(url) replays the move on a saved project file (AC Generator 1 -> top level);
+// __moveSynthetic() does the same on a small built tree. Expect after counts equal before counts (and, for the synthetic one, a labeled item
+// moved to the top level still loses its label).
+window.__moveLoop=async function(url){
+  const txt=await (await fetch(url)).text(); const p=JSON.parse(txt); migrateLegacy(p); validateImport(p);
+  state=p; reportCfg=p.reportCfg||defaultPrintCfg(); recalc(); renderAll();
+  const phaseCount=an=>Object.values(state.analyses[an].nodes).filter(n=>n.phase).length;
+  const before={ap:phaseCount('ap'),pcm:phaseCount('pcm')};
+  const gen=Object.values(state.analyses.ap.nodes).find(n=>n.description==='AC Generator 1');
+  state.currentAnalysis='ap'; openEdit(gen.id); await new Promise(r=>setTimeout(r,200));
+  const sel=document.getElementById('ef-parent'); sel.value=''; sel.dispatchEvent(new Event('change'));
+  await doEditSave(); await new Promise(r=>setTimeout(r,300));
+  return {before,after:{ap:phaseCount('ap'),pcm:phaseCount('pcm')},viol:[...phaseViolations(state.analyses.ap.nodes),...phaseViolations(state.analyses.pcm.nodes)].length};
+};
+window.__moveSynthetic=async function(){
+  window.showChoiceDialog=async()=>'copy';
+  state=freshState(); collapsed=new Set(); reportCfg=null;
+  const pw=(w,v)=>({w,var:v||0,va:Math.hypot(w,v||0),a:null,pf:null});
+  const root=state.rootIds[0];
+  const mk=(p,t,d,x={})=>addNode(p,{type:t,description:d,acDc:'ac',voltage:115,capacity:{a:null,va:30000},existingLoad:pw(1000,100),...x});
+  const gen=mk(root,'Generator','Gen'), other=mk(root,'Generator','Other Gen');
+  const bs=[['A',0],['B',1],['C',2]].map(([l,s])=>mk(gen,'Bus','Bus',{phase:l,phaseGroupId:'BG',phaseSeq:s}));
+  bs.forEach((b,i)=>mk(b,'Circuit Breaker','CB '+i,{phase:['A','B','C'][i],phaseGroupId:'CBG'+i,phaseSeq:0}));
+  recalc(); createPcmAnalysis(); switchAnalysis('ap'); await shareWithOther(gen); await shareWithOther(other); recalc();
+  const count=an=>Object.values(state.analyses[an].nodes).filter(n=>n.phase).length;
+  const before={ap:count('ap'),pcm:count('pcm')};
+  const move=async(id,parent)=>{ openEdit(id); await new Promise(r=>setTimeout(r,150)); const s=document.getElementById('ef-parent'); s.value=parent||''; s.dispatchEvent(new Event('change')); await doEditSave(); await new Promise(r=>setTimeout(r,250)); };
+  await move(gen,'');                                  // unlabeled item to the top level: splits below stay
+  const afterRoot={ap:count('ap'),pcm:count('pcm')};
+  await move(gen,other);                               // and back under another unlabeled parent
+  const afterUnder={ap:count('ap'),pcm:count('pcm')};
+  return {before,afterRoot,afterUnder,viol:[...phaseViolations(state.analyses.ap.nodes),...phaseViolations(state.analyses.pcm.nodes)].length};
+};

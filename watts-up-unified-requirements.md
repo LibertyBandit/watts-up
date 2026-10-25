@@ -6067,6 +6067,16 @@ change the total while the override stands); (4) §4.3 recast as "The Add Item(s
 (6) §7.3 "Load from Report" no longer mentions introduction / compliance / general notes; (7) general-notes mentions removed from §9 — and from the Reject All confirmation text,
 for consistency. The latent functionality itself (hidden Document-tab fields and their Word content controls) is unchanged.
 
+## 89. Version 0.9.11 — Moving an Unlabeled Item Keeps Phase Splits Below It
+
+Reported 2026-10-25 with two saved files (an original and the same project after moving "AC Generator 1" to the top level): AC Bus 1 and everything split beneath it lost its phase
+labels, in the Active Project and, through the mirrored move, in the shared twin branch in the other analysis (60 → 51 and 56 → 39 labeled items on the user's project).
+**Cause.** `phaseOnAttach` (top-level case) and `phaseAfterReparent` called `clearPhaseSubtree` for *any* node landing at the top level or under an unlabeled parent. That is right for a labeled
+node (its label was inherited or belonged to the split it just left) but wrong for an unlabeled node, whose branch can hold legitimate split origins (a split bus under a generator).
+**Fix.** Both now clear only when the moved node itself carries a phase label. Verified with a loop that replays the real move through the Edit dialog (`tools/regression-checks.js`
+`__moveLoop`, `__moveSynthetic`): the counts stay 60 / 56 on the user's file (0 phase violations), a synthetic split tree keeps its labels when its generator is moved to the top level and back under another
+(shared) generator, and a labeled breaker moved to the top level still loses its label.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

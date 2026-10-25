@@ -1852,14 +1852,19 @@ function cascadePhase(id,label) {
 function phaseOnAttach(id,parentId) {
   const n=state.nodes[id]; if (!n) return;
   const p=parentId?state.nodes[parentId]:null;
-  if (!p) { clearPhaseSubtree(id); return; }
+  // Version 0.9.11: only a node that itself carries a label loses it (and its branch's) when it lands at the top
+  // level; an unlabeled node's branch can hold legitimate splits below it (e.g. a generator whose bus is split
+  // into phases) and keeps them.
+  if (!p) { if (n.phase) clearPhaseSubtree(id); return; }
   if (!p.phase) return;
   if (phaseInherits(n)) cascadePhase(id,p.phase);
   else { n.phase=null; n.phaseGroupId=null; n.phaseSeq=0; }
 }
 function phaseAfterReparent(id,newParentId) {
   const p=newParentId?state.nodes[newParentId]:null;
-  if (!(p&&p.phase)) clearPhaseSubtree(id);
+  const n=state.nodes[id];
+  // Same rule as phaseOnAttach: an unlabeled item moved out from under a split keeps the splits below it.
+  if (!(p&&p.phase)&&n&&n.phase) clearPhaseSubtree(id);
 }
 // Renames one phase-mate's label (origin level only — callers enforce that) and carries it down
 // that mate's whole branch. Returns an error message, or null on success.
@@ -3546,7 +3551,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.10';
+const APP_VERSION='0.9.11';
 const APP_RELEASE_DATE='2026-10-24';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
