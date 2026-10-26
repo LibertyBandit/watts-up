@@ -14,7 +14,7 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
   live Word connection). Firefox and Safari work, but save by downloading files and cannot keep a live link to a
   Word file.
 - An Internet connection the first time the page loads, for the small library that creates and reads Word
-  files (see §7.5). Everything else works offline.
+  files (see §7.6). Everything else works offline.
 - Nothing is installed. Open the `watts-up.html` file in the browser.
 
 ### 1.2 The start-up dialog
@@ -298,8 +298,8 @@ With a file connected, **Word Report** offers:
 
 - **Sync to Report** — updates the document's content controls and the hidden project copy from the current analysis,
   leaving the rest of your document (extra pages, letterhead, your own edits) untouched. The first time in a session the
-  browser asks permission to write to the file. A message lists any content controls the document is missing;
-  those items are simply not updated.
+  browser asks permission to write to the file. If the document lacks some of the available content controls (§7.4), a
+  message says so; those parts are simply not updated.
 - **Load from Report** — replaces the current analysis with the project stored in the file (after a confirmation,
   because unsynced changes are lost).
 - **Create New Report…** — as above.
@@ -311,11 +311,44 @@ With a file connected, **Word Report** offers:
 **Important:** Word locks a file while it is open. Close the report in Word before syncing, otherwise the program
 reports that the file is probably open and nothing is written.
 
-### 7.4 Browsers without the connection feature
+### 7.4 Content controls
+Watts Up writes into a Word document through **content controls** — fields in the document that carry a **tag**. Each time you
+sync, every control whose tag is in the table below is refilled; anything else in the document is left exactly as you made it. A
+control can appear more than once (for example the document number in the body and in every header), and text controls can sit in
+headers and footers as well as in the body. A control that isn't in the document is simply not filled. **Create New Report…**
+makes a document that contains all of them, which is the easiest way to see how they look.
+
+To add one to your own document: in Word, insert a content control (Developer tab ▸ Rich Text Content Control), open its
+**Properties** and type the tag exactly as shown (lower case).
+
+| Tag | What it holds |
+|---|---|
+| `wu-docnumber` | Document number (Document tab). |
+| `wu-revision` | Revision (Rev, Document tab). |
+| `wu-revdate` | Revision date (Document tab), written out as a date. |
+| `wu-make` | Aircraft make. |
+| `wu-model` | Aircraft model. |
+| `wu-designation` | Marketing designation. |
+| `wu-serial` | Aircraft serial number. |
+| `wu-flightphase` | Flight phase / scenario. |
+| `wu-interval` | Interval. |
+| `wu-references` | The numbered reference list (Document tab) of the Active Project. |
+| `wu-tables` | Load Analysis Summary tables (AC and DC) of the Active Project, with their notes. |
+| `wu-pds` | Power Distribution Summary of the Active Project. |
+| `wu-lad-horizontal` | Load Analysis Detail, horizontal layout, of the Active Project. |
+| `wu-lad-vertical` | Load Analysis Detail, vertical layout, of the Active Project. |
+| `wu-references-pcm`, `wu-tables-pcm`, `wu-pds-pcm`, `wu-lad-horizontal-pcm`, `wu-lad-vertical-pcm` | The same five report sections for the **Previous & Concurrent Modifications** analysis (a short "no data" note when that analysis doesn't exist). |
+
+The report sections follow the report choices in **Settings** (columns, rounding, layout options) and show change-tracking
+underlines when tracking is on (§9). Watts Up also keeps these Word document properties up to date when the document has them
+(File ▸ Info ▸ Properties ▸ Advanced ▸ Custom): `ReportNo`, `ReportRev`, `Make`, `Model`, `S/N`, `Flight Phase` and
+`WattsUpVersion`.
+
+### 7.5 Browsers without the connection feature
 In Firefox and Safari there is no connection. **Word Report** simply downloads a new `.docx`; **Open** can still load
 a `.docx` or `.json`.
 
-### 7.5 Things to know
+### 7.6 Things to know
 - Creating and reading Word files uses a small library that the page loads from the Internet. If the page was opened
   without an Internet connection, the program says so and the Word functions are unavailable until it is reloaded online.
 - A Word report holds the full project in hidden form. Anyone who has the `.docx` can extract it, even if the visible

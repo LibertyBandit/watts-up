@@ -1,7 +1,7 @@
 # Watts Up — IT Summary and Security Assessment
 
 *Prepared 2026-10-17 for IT review. Describes `watts-up.html` as of the release whose SHA-256 is given in §9;
-recompute the hash for any later copy before relying on this document. Current program version: 0.9.11 (testing build).*
+recompute the hash for any later copy before relying on this document. Current program version: 0.9.12 (testing build).*
 
 ## 1. Summary for IT
 
@@ -143,7 +143,7 @@ builders to see whether anything would execute.
 After the fixes, none of the test files executed any injected code, and normal project files load and report as before.
 This was a code review and functional test, not a formal penetration test; IT may wish to run its own scan.
 
-**Addendum, 2026-10-18 (version 0.9.0 onward — versioning and the Help guide; 0.9.1 to 0.9.11 changed only report layout and formatting, change-tracking marks (a second copy of the project's items stored in the project file), the Word Report dialog, one grid focus handler, shared-TRU editing, a load-time data repair and a generated row note, with no new network, storage or window behavior).** Reviewed the two additions. (1) The version a file
+**Addendum, 2026-10-18 (version 0.9.0 onward — versioning and the Help guide; 0.9.1 to 0.9.12 changed only report layout and formatting, change-tracking marks (a second copy of the project's items stored in the project file), the Word Report dialog, one grid focus handler, shared-TRU editing, a load-time data repair and a generated row note, with no new network, storage or window behavior).** Reviewed the two additions. (1) The version a file
 claims is used only after it matches a strict `number.number.number` pattern, and is shown in a plain-text confirmation, never
 inserted into a page. (2) The Help page is built only from text constants inside the program (no project data, nothing from a
 file), contains no script, and is opened with `noopener`. Tested: a project file with a malformed or markup-bearing version
@@ -161,8 +161,8 @@ is treated as unstamped; the guide page contains no script element and no unrepl
 
 ## 9. How IT can verify the copy
 
-- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.11, 754,206 bytes):**
-  `09fb7540c7231d7c52dd6283559c736b02de57f109df96be61a86b1939451325`
+- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.12, 756,277 bytes):**
+  `d4c2db119fa2c66481d239cf8d00b5ee2cb2bd783f5ed4cf29e37f472b9b872f`
   (PowerShell: `Get-FileHash watts-up.html -Algorithm SHA256`). A different value means the file has changed since
   this assessment — a newer release, a modified copy, or a copy whose line endings were converted (for example by
   a source-control checkout on Windows). Ask the owner for the hash of the exact release being deployed.

@@ -1038,8 +1038,9 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
 <li><a href="#71-what-it-does">7.1 What it does</a></li>
 <li><a href="#72-creating-or-connecting-a-report">7.2 Creating or connecting a report</a></li>
 <li><a href="#73-sync-and-load">7.3 Sync and Load</a></li>
-<li><a href="#74-browsers-without-the-connection-feature">7.4 Browsers without the connection feature</a></li>
-<li><a href="#75-things-to-know">7.5 Things to know</a></li>
+<li><a href="#74-content-controls">7.4 Content controls</a></li>
+<li><a href="#75-browsers-without-the-connection-feature">7.5 Browsers without the connection feature</a></li>
+<li><a href="#76-things-to-know">7.6 Things to know</a></li>
 </ul>
 </li>
 <li><a href="#8-tips-and-troubleshooting">8. Tips and troubleshooting</a></li>
@@ -1055,7 +1056,7 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
   live Word connection). Firefox and Safari work, but save by downloading files and cannot keep a live link to a
   Word file.</li>
 <li>An Internet connection the first time the page loads, for the small library that creates and reads Word
-  files (see §7.5). Everything else works offline.</li>
+  files (see §7.6). Everything else works offline.</li>
 <li>Nothing is installed. Open the <code>watts-up.html</code> file in the browser.</li>
 </ul>
 <h3 id="12-the-start-up-dialog">1.2 The start-up dialog</h3>
@@ -1481,8 +1482,8 @@ own Word file, updating it in place without disturbing anything else in it.</p>
 <ul>
 <li><strong>Sync to Report</strong> — updates the document's content controls and the hidden project copy from the current analysis,
   leaving the rest of your document (extra pages, letterhead, your own edits) untouched. The first time in a session the
-  browser asks permission to write to the file. A message lists any content controls the document is missing;
-  those items are simply not updated.</li>
+  browser asks permission to write to the file. If the document lacks some of the available content controls (§7.4), a
+  message says so; those parts are simply not updated.</li>
 <li><strong>Load from Report</strong> — replaces the current analysis with the project stored in the file (after a confirmation,
   because unsynced changes are lost).</li>
 <li><strong>Create New Report…</strong> — as above.</li>
@@ -1493,10 +1494,92 @@ own Word file, updating it in place without disturbing anything else in it.</p>
 </ul>
 <p><strong>Important:</strong> Word locks a file while it is open. Close the report in Word before syncing, otherwise the program
 reports that the file is probably open and nothing is written.</p>
-<h3 id="74-browsers-without-the-connection-feature">7.4 Browsers without the connection feature</h3>
+<h3 id="74-content-controls">7.4 Content controls</h3>
+<p>Watts Up writes into a Word document through <strong>content controls</strong> — fields in the document that carry a <strong>tag</strong>. Each time you
+sync, every control whose tag is in the table below is refilled; anything else in the document is left exactly as you made it. A
+control can appear more than once (for example the document number in the body and in every header), and text controls can sit in
+headers and footers as well as in the body. A control that isn't in the document is simply not filled. <strong>Create New Report…</strong>
+makes a document that contains all of them, which is the easiest way to see how they look.</p>
+<p>To add one to your own document: in Word, insert a content control (Developer tab ▸ Rich Text Content Control), open its
+<strong>Properties</strong> and type the tag exactly as shown (lower case).</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wu-docnumber</code></td>
+<td>Document number (Document tab).</td>
+</tr>
+<tr>
+<td><code>wu-revision</code></td>
+<td>Revision (Rev, Document tab).</td>
+</tr>
+<tr>
+<td><code>wu-revdate</code></td>
+<td>Revision date (Document tab), written out as a date.</td>
+</tr>
+<tr>
+<td><code>wu-make</code></td>
+<td>Aircraft make.</td>
+</tr>
+<tr>
+<td><code>wu-model</code></td>
+<td>Aircraft model.</td>
+</tr>
+<tr>
+<td><code>wu-designation</code></td>
+<td>Marketing designation.</td>
+</tr>
+<tr>
+<td><code>wu-serial</code></td>
+<td>Aircraft serial number.</td>
+</tr>
+<tr>
+<td><code>wu-flightphase</code></td>
+<td>Flight phase / scenario.</td>
+</tr>
+<tr>
+<td><code>wu-interval</code></td>
+<td>Interval.</td>
+</tr>
+<tr>
+<td><code>wu-references</code></td>
+<td>The numbered reference list (Document tab) of the Active Project.</td>
+</tr>
+<tr>
+<td><code>wu-tables</code></td>
+<td>Load Analysis Summary tables (AC and DC) of the Active Project, with their notes.</td>
+</tr>
+<tr>
+<td><code>wu-pds</code></td>
+<td>Power Distribution Summary of the Active Project.</td>
+</tr>
+<tr>
+<td><code>wu-lad-horizontal</code></td>
+<td>Load Analysis Detail, horizontal layout, of the Active Project.</td>
+</tr>
+<tr>
+<td><code>wu-lad-vertical</code></td>
+<td>Load Analysis Detail, vertical layout, of the Active Project.</td>
+</tr>
+<tr>
+<td><code>wu-references-pcm</code>, <code>wu-tables-pcm</code>, <code>wu-pds-pcm</code>, <code>wu-lad-horizontal-pcm</code>, <code>wu-lad-vertical-pcm</code></td>
+<td>The same five report sections for the <strong>Previous &amp; Concurrent Modifications</strong> analysis (a short "no data" note when that analysis doesn't exist).</td>
+</tr>
+</tbody>
+</table>
+<p>The report sections follow the report choices in <strong>Settings</strong> (columns, rounding, layout options) and show change-tracking
+underlines when tracking is on (§9). Watts Up also keeps these Word document properties up to date when the document has them
+(File ▸ Info ▸ Properties ▸ Advanced ▸ Custom): <code>ReportNo</code>, <code>ReportRev</code>, <code>Make</code>, <code>Model</code>, <code>S/N</code>, <code>Flight Phase</code> and
+<code>WattsUpVersion</code>.</p>
+<h3 id="75-browsers-without-the-connection-feature">7.5 Browsers without the connection feature</h3>
 <p>In Firefox and Safari there is no connection. <strong>Word Report</strong> simply downloads a new <code>.docx</code>; <strong>Open</strong> can still load
 a <code>.docx</code> or <code>.json</code>.</p>
-<h3 id="75-things-to-know">7.5 Things to know</h3>
+<h3 id="76-things-to-know">7.6 Things to know</h3>
 <ul>
 <li>Creating and reading Word files uses a small library that the page loads from the Internet. If the page was opened
   without an Internet connection, the program says so and the Word functions are unavailable until it is reloaded online.</li>
@@ -3551,8 +3634,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.11';
-const APP_RELEASE_DATE='2026-10-24';
+const APP_VERSION='0.9.12';
+const APP_RELEASE_DATE='2026-10-25';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -3749,33 +3832,9 @@ async function importDocx(file){
     const parsed=JSON.parse(jsonStr);
     migrateLegacy(parsed);validateImport(parsed);
     if (!confirmFileVersion(parsed)) return 'declined';
-    const docFile=zip.file('word/document.xml');
-    if(docFile){
-      const docXml=await docFile.async('string');
-      const intro=extractSdtText(docXml,'wu-intro');
-      if(intro!==null)parsed.meta.introText=intro;
-      const comp=extractSdtText(docXml,'wu-compliance');
-      if(comp!==null)parsed.meta.complianceText=comp;
-      const gnRaw=extractSdtText(docXml,'wu-general-notes');
-      if(gnRaw!==null){
-        // Revision 70, item 7: buildGeneralNotesParas numbers each note ("N. text") when writing
-        // to Word, but this only ever stripped a leading bullet character — a real "N. " numeric
-        // prefix passed straight through into the stored text, so the *next* export numbered it
-        // again on top ("1. " + "1. The..." = "1. 1. The..."), compounding a little more each
-        // sync/reload cycle. stripListPrefix repeats until nothing more comes off, so it also
-        // cleans up any already-accumulated multi-prefix corruption from before this fix existed,
-        // not just prevents new corruption going forward.
-        const stripListPrefix=(s)=>{
-          s=s.trim();
-          let prev;
-          do{ prev=s; s=s.replace(/^\d+\.\s*/,'').replace(/^[••]\s*/,'').trim(); }while(s!==prev);
-          return s;
-        };
-        parsed.meta.generalNotes=gnRaw.split('\n')
-          .map(l=>stripListPrefix(l)).filter(Boolean)
-          .map(text=>({key:uid(),text,sharedPeerKey:null}));
-      }
-    }
+    // Version 0.9.12: the introduction, compliance statement and general notes controls (wu-intro, wu-compliance,
+    // wu-general-notes) are no longer read back from the document — those fields are hidden in the program, so Word is
+    // not an input for them. (Only the project data embedded in the file is loaded.)
     state=parsed;reportCfg=parsed.reportCfg||defaultPrintCfg();recalc();renderAll();persist();
     reportImportRepairs();
   }catch(err){alert('Import failed: '+err.message);}
@@ -9943,8 +10002,8 @@ function buildForPcm(tag,builderFn){
 // the end of fillWattsUpDocx to decide which ones truly never matched anywhere (see hitCounts
 // there), not per individual XML part.
 const WU_FILL_TAGS=['wu-docnumber','wu-revision','wu-make','wu-model','wu-designation','wu-serial',
-  'wu-flightphase','wu-preparedby','wu-interval','wu-revdate','wu-intro','wu-general-notes',
-  'wu-references','wu-compliance','wu-tables','wu-pds','wu-lad-horizontal','wu-lad-vertical',
+  'wu-flightphase','wu-interval','wu-revdate',
+  'wu-references','wu-tables','wu-pds','wu-lad-horizontal','wu-lad-vertical',
   'wu-references-pcm','wu-tables-pcm','wu-pds-pcm','wu-lad-horizontal-pcm','wu-lad-vertical-pcm'];
 // Revision 73 (header/footer sync fix): the actual fill logic, extracted so the exact same full set
 // of tags/content can run against ANY XML part — the body, or any header/footer part the document
@@ -9958,14 +10017,13 @@ function fillWattsUpXmlPart(xml,st,hitCounts){
    ['wu-make',m.make],['wu-model',m.model],
    ['wu-designation',m.marketingDesignation||m.designation],
    ['wu-serial',m.serialNumber],['wu-flightphase',m.flightPhase],
-   ['wu-preparedby',m.preparedBy],['wu-interval',m.interval]
+   ['wu-interval',m.interval]
   ].forEach(([tag,val])=>{xml=fillSdtText(xml,tag,val,hitCounts);});
   // wu-revdate has multiple runs — use block replacement
   xml=fillSdtBlock(xml,'wu-revdate',wuRevDateParaXml(m),hitCounts);
-  xml=fillSdtBlock(xml,'wu-intro',buildBodyTextParas(m.introText),hitCounts);
-  xml=fillSdtBlock(xml,'wu-general-notes',buildGeneralNotesParas(m.generalNotes),hitCounts);
+  // Version 0.9.12: wu-preparedby, wu-intro, wu-general-notes and wu-compliance are not available (their fields are
+  // hidden in the program): they are neither filled nor reported as missing, and a document that has them is left as is.
   xml=fillSdtBlock(xml,'wu-references',buildForActiveProject(()=>buildRefsParas()),hitCounts);
-  xml=fillSdtBlock(xml,'wu-compliance',buildBodyTextParas(m.complianceText),hitCounts);
   xml=fillSdtBlock(xml,'wu-tables',buildForActiveProject(()=>buildTablesContent()),hitCounts);
   // Revision 70 (Phase G), items 3.2.2-3.2.4: Active Project's Power Distribution Summary and
   // both Load Analysis Detail layouts, alongside the existing Load Analysis Summary (wu-tables).
@@ -10307,7 +10365,7 @@ async function syncToWordDoc(silent){
     await writable.close();
     if (!silent) {
       const missing=[...report.missing,...report.missingProps,...report.missingFiles];
-      if (missing.length) alert(`Synced, but this document is missing: ${missing.join(', ')}. That content wasn't updated — add matching content controls/properties if you want it included.`);
+      if (missing.length) alert('Synced, but some content controls were not found in this document.  See Help file for a list of available content controls, or use the "Create New Report…" option to create a file with all the available content controls.');
       else alert('Synced to '+wordDocFileName+'.');
     }
   } catch(err) {

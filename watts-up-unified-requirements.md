@@ -6077,6 +6077,19 @@ node (its label was inherited or belonged to the split it just left) but wrong f
 `__moveLoop`, `__moveSynthetic`): the counts stay 60 / 56 on the user's file (0 phase violations), a synthetic split tree keeps its labels when its generator is moved to the top level and back under another
 (shared) generator, and a labeled breaker moved to the top level still loses its label.
 
+## 90. Version 0.9.12 — Unavailable Word Content Controls Disabled, Content-Control List in the Guide
+
+Requested 2026-10-25. **Interpretation to confirm:** the request named `wu-intro`, `wu-general-notes`, `wu-references` and `wu-compliance`; the four hidden-field controls (Revision 70 §3.1) are
+`wu-preparedby`, `wu-intro`, `wu-general-notes` and `wu-compliance`, while `wu-references` is live (Document-tab References, written by Create New Report and shown in the user's own report), so
+`wu-preparedby` was disabled and `wu-references` left active. **Disabled** = `fillWattsUpXmlPart` no longer fills them, `WU_FILL_TAGS` no longer lists them (so they are never reported missing), and
+`importDocx` no longer reads `wu-intro` / `wu-compliance` / `wu-general-notes` back; the underlying `state.meta` fields and their parsers (`buildBodyTextParas`, `buildGeneralNotesParas`,
+`extractSdtText`) remain as latent code, and a document that still carries these controls keeps whatever they contain. Create New Report already omitted them (Revision 70).
+**Message** (`syncToWordDoc`): "Synced, but some content controls were not found in this document.  See Help file for a list of available content controls, or use the "Create New Report…" option to create a file with all
+the available content controls." — shown when anything expected (content control, custom property or part) was not found. **Guide:** new §7.4 with the tag table.
+Verified on the user's real report: a sync left the four controls' content byte-identical (no project text leaked into them), filled `wu-make`, and showed the new message (that report has no `wu-tables`);
+a freshly generated report syncs with no message; text typed into `wu-intro` in Word is not imported on Load. Note: the legacy download used where the File System Access API is missing (`generateDocx`, from the
+bundled template) still contains those four controls with the template's own placeholder text, now never filled.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

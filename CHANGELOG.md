@@ -9,6 +9,16 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.12 — 2026-10-25 (testing build)
+
+Word content controls.
+
+- **Four unavailable controls are switched off:** `wu-preparedby`, `wu-intro`, `wu-general-notes` and `wu-compliance` (their fields are hidden in the program) are no longer
+  filled at sync, not reported as missing, and not read back at Load. A document that still has them is left as it is.
+- **New message after a sync that finds controls missing:** "Synced, but some content controls were not found in this document.  See Help file for a list of
+  available content controls, or use the "Create New Report…" option to create a file with all the available content controls."
+- **User guide:** new §7.4 "Content controls" lists every available tag and what it holds (and how to add one to your own document); §7.4–7.5 became §7.5–7.6.
+
 ## 0.9.11 — 2026-10-24 (testing build)
 
 Fix.
