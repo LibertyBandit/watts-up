@@ -6090,6 +6090,19 @@ Verified on the user's real report: a sync left the four controls' content byte-
 a freshly generated report syncs with no message; text typed into `wu-intro` in Word is not imported on Load. Note: the legacy download used where the File System Access API is missing (`generateDocx`, from the
 bundled template) still contains those four controls with the template's own placeholder text, now never filled.
 
+## 91. Version 0.9.13 — Word Sync Write-Permission Fix
+
+Reported 2026-10-26: on a second computer the program could read (Load) but not write (Sync) a Word file, with nothing shown; not reproducible later on the original machine.
+**Cause (code review, not reproduced).** `syncToWordDoc` called `handle.requestPermission({mode:'readwrite'})` outside its `try`, after the "This will update … Continue?" `confirm()`.
+Reading a file never needs write permission, which is why Load worked; the permission request needs transient user activation (a recent click), so a pause on the confirmation (or any delay)
+could make the browser reject it, and the uncaught rejection produced no message at all.
+**Fix.** `ensureWordWritePermission()` (query first; request only if not granted; all errors caught, explained and logged to the console) is called right after Sync is chosen, in both
+places that offer it (`doWordReportAction`, `connectExistingWordReport`), before the confirmation, and again inside `syncToWordDoc` (a no-op once granted). "Sync failed" now includes the
+error name and a pointer to the console; `loadFromWordDoc` explains a failed read. User guide §8 has a troubleshooting row.
+Verified with simulated file handles: a refused request (SecurityError) shows the explanation and writes nothing; an already-granted permission is not requested again; prompt → granted syncs;
+denied shows the old message; a browser without `queryPermission` still works; a write error shows "Sync failed: NotAllowedError — …"; a failed read on Load is explained; from the Word Report dialog the
+order is query → request → confirmation → write. Not verified on real hardware (the browser pane cannot use real file pickers).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

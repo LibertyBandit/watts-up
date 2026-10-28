@@ -1609,6 +1609,10 @@ a <code>.docx</code> or <code>.json</code>.</p>
 <td>Close it in Word and try again.</td>
 </tr>
 <tr>
+<td>Word sync does nothing, says permission was not granted, or "Sync failed"</td>
+<td>Click <strong>Sync to Report</strong> and answer the browser's permission prompt promptly (it only works shortly after the click). Then check that the Word file is closed in Word, is not read-only, has no hidden <code>~$</code> lock file beside it, is not being held by OneDrive or a virus scanner, and is on a drive you can write to; try a copy in a plain local folder such as <code>C:\Temp</code>. Managed browsers can block file writes (look for "FileSystem" in <code>chrome://policy</code> or <code>edge://policy</code>). Press F12 and open the Console to see the detail. Firefox and Safari cannot keep a live connection; use Chrome or Edge.</td>
+</tr>
+<tr>
 <td>Word functions say JSZip is not loaded</td>
 <td>Reload the page while online.</td>
 </tr>
@@ -3634,8 +3638,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.12';
-const APP_RELEASE_DATE='2026-10-25';
+const APP_VERSION='0.9.13';
+const APP_RELEASE_DATE='2026-10-27';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -10275,6 +10279,7 @@ async function doWordReportAction(){
     ]
   });
   if (choice==='sync') {
+    if (!(await ensureWordWritePermission())) return;   // asked first, while the click that chose Sync is still fresh
     if (!confirm(`This will update "${wordDocFileName}" from the current browser data. Continue?`)) return;
     await syncToWordDoc(false);
   } else if (choice==='load') {
@@ -10336,6 +10341,7 @@ async function connectExistingWordReport(){
     ]
   });
   if (choice==='sync') {
+    if (!(await ensureWordWritePermission())) return;   // asked first, while the click that chose Sync is still fresh
     if (!confirm(`This will update "${wordDocFileName}" from the current browser data. Continue?`)) return;
     await syncToWordDoc(false);
   } else if (choice==='load') {
@@ -10349,11 +10355,28 @@ async function connectExistingWordReport(){
 // Revision 69, item 1.2.2: requests readwrite permission here, right before it's actually needed,
 // rather than upfront when merely connecting — Chrome's own native permission panel for this is
 // expected and fine to see at the moment we're genuinely about to write, just not before.
+// Version 0.9.13: read-write permission for the connected file. The browser only allows the permission *request* shortly
+// after a real click (transient user activation), so callers ask for it FIRST, right after the click, before any
+// confirmation dialog; an already-granted permission is never asked for again. Any failure is explained (it used to be an
+// uncaught error: nothing happened and nothing was shown).
+async function ensureWordWritePermission(){
+  if (!wordDocHandle) return false;
+  try {
+    let perm=wordDocHandle.queryPermission?await wordDocHandle.queryPermission({mode:'readwrite'}):'prompt';
+    if (perm!=='granted') perm=await wordDocHandle.requestPermission({mode:'readwrite'});
+    if (perm==='granted') return true;
+    alert('Read-write permission was not granted — try again and allow access.');
+    return false;
+  } catch(err) {
+    console.error('[WattsUp] write permission request failed',err);
+    alert(`Watts Up could not get permission to write to "${wordDocFileName}" (${err&&err.name?err.name:'error'}: ${err&&err.message?err.message:err}).\n\nThe browser only allows the request right after a click, so click "Sync to Report" again and answer the permission prompt promptly. If it keeps happening, check that the file is not read-only or locked (by Word, OneDrive, or a virus scanner), that it is on a drive you can write to, and that your browser policy allows file writes. Press F12 and open the Console for more detail.`);
+    return false;
+  }
+}
 async function syncToWordDoc(silent){
   if (!wordDocHandle||!state) return;
   if (typeof JSZip==='undefined'){alert('JSZip not loaded — Word sync requires an internet connection.');return;}
-  const perm=await wordDocHandle.requestPermission({mode:'readwrite'});
-  if (perm!=='granted') { alert('Read-write permission was not granted — try again and allow access.'); return; }
+  if (!(await ensureWordWritePermission())) return;
   try {
     const file=await wordDocHandle.getFile();
     const buf=await file.arrayBuffer();
@@ -10373,10 +10396,11 @@ async function syncToWordDoc(silent){
     // blocks any external process — including this write — from touching the file at all. The
     // browser surfaces that as a generic, unhelpful state-mismatch error; translate it into the
     // actual actionable cause instead of showing the raw message.
+    console.error('[WattsUp] sync failed',err);
     if (err&&(err.name==='NoModificationAllowedError'||err.name==='InvalidStateError')) {
       alert(`Sync failed — "${wordDocFileName}" is probably open in Word right now, which locks the file against outside changes. Close it in Word (or make sure nothing else has it open) and try again.`);
     } else {
-      alert('Sync failed: '+(err&&err.message?err.message:err));
+      alert('Sync failed: '+(err&&err.name?err.name+' — ':'')+(err&&err.message?err.message:err)+'\n\n(Press F12 and open the Console for more detail.)');
     }
   }
 }
@@ -10387,7 +10411,9 @@ async function syncToWordDoc(silent){
 async function loadFromWordDoc(){
   if (!wordDocHandle) return;
   if (!confirm('Load from the connected Word document? Any changes made here since the last sync will be lost.')) return;
-  const file=await wordDocHandle.getFile();
+  let file;
+  try { file=await wordDocHandle.getFile(); }
+  catch(err) { console.error('[WattsUp] load failed',err); alert('Could not read "'+wordDocFileName+'" ('+(err&&err.name?err.name+' — ':'')+(err&&err.message?err.message:err)+'). If the file was moved, renamed or is in use, use "Connect Different…" to pick it again.'); return; }
   await importDocx(file);
 }
 

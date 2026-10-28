@@ -9,6 +9,18 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.13 — 2026-10-27 (testing build)
+
+Fix: Word sync that read a file but did not write it, with no message.
+
+- **Write permission is asked for first.** The browser only grants the permission request shortly after a click. The request used to come after the
+  "This will update … Continue?" confirmation, so pausing there (or a slow machine, antivirus or OneDrive delay) made the browser refuse it — and the refusal was
+  not caught, so nothing happened and nothing was shown. The program now asks right after you choose **Sync to Report**, before the confirmation, and never asks again
+  once the permission is granted.
+- **Failures are explained:** a refused permission, a failed write or a failed read now show a message that names the cause (error name and wording) and what to
+  check, and the detail is written to the browser console (F12).
+- **User guide:** a troubleshooting row for a Word sync that does nothing or fails.
+
 ## 0.9.12 — 2026-10-25 (testing build)
 
 Word content controls.
