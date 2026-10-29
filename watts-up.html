@@ -1610,7 +1610,7 @@ a <code>.docx</code> or <code>.json</code>.</p>
 </tr>
 <tr>
 <td>Word sync does nothing, says permission was not granted, or "Sync failed"</td>
-<td>Click <strong>Sync to Report</strong> and answer the browser's permission prompt promptly (it only works shortly after the click). Then check that the Word file is closed in Word, is not read-only, has no hidden <code>~$</code> lock file beside it, is not being held by OneDrive or a virus scanner, and is on a drive you can write to; try a copy in a plain local folder such as <code>C:\Temp</code>. Managed browsers can block file writes (look for "FileSystem" in <code>chrome://policy</code> or <code>edge://policy</code>). Press F12 and open the Console to see the detail. Firefox and Safari cannot keep a live connection; use Chrome or Edge.</td>
+<td>Click <strong>Sync to Report</strong> and answer the browser's permission prompt promptly (it only works shortly after the click). If the browser refuses even to ask (a message mentioning a "third-party context"), Watts Up offers <strong>Choose the File…</strong>: pick the same Word file again and allow editing when asked; connecting with <strong>Connect Existing…</strong> already grants editing this way. Make sure <code>watts-up.html</code> is open directly in its own browser tab, not inside another page or app. Then check that the Word file is closed in Word, is not read-only, has no hidden <code>~$</code> lock file beside it, is not being held by OneDrive or a virus scanner, and is on a drive you can write to; try a copy in a plain local folder such as <code>C:\Temp</code>. Managed browsers can block file writes (look for "FileSystem" in <code>chrome://policy</code> or <code>edge://policy</code>). Press F12 and open the Console to see the detail. Firefox and Safari cannot keep a live connection; use Chrome or Edge.</td>
 </tr>
 <tr>
 <td>Word functions say JSZip is not loaded</td>
@@ -3638,8 +3638,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.13';
-const APP_RELEASE_DATE='2026-10-27';
+const APP_VERSION='0.9.14';
+const APP_RELEASE_DATE='2026-10-29';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -10324,7 +10324,8 @@ async function createNewWordReport(){
 // from Report". syncToWordDoc requests it lazily, right before it actually needs to write.
 async function connectExistingWordReport(){
   try {
-    const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false,...WU_PICKER_OPTS});
+    // mode:'readwrite' (Chrome/Edge 108+, ignored elsewhere): the picker itself grants edit access, so syncing never has to ask for it later.
+    const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false,mode:'readwrite',...WU_PICKER_OPTS});
     wordDocHandle=handle;
     wordDocFileName=handle.name;
     updateWordDocUI();
@@ -10369,8 +10370,31 @@ async function ensureWordWritePermission(){
     return false;
   } catch(err) {
     console.error('[WattsUp] write permission request failed',err);
-    alert(`Watts Up could not get permission to write to "${wordDocFileName}" (${err&&err.name?err.name:'error'}: ${err&&err.message?err.message:err}).\n\nThe browser only allows the request right after a click, so click "Sync to Report" again and answer the permission prompt promptly. If it keeps happening, check that the file is not read-only or locked (by Word, OneDrive, or a virus scanner), that it is on a drive you can write to, and that your browser policy allows file writes. Press F12 and open the Console for more detail.`);
-    return false;
+    // Version 0.9.14: some browser setups refuse the permission request itself ("Not allowed to request permissions in a
+    // third-party context") although file pickers work. A file picked with mode:'readwrite' is granted edit access by the
+    // picker, so offer to pick the same file again that way. The button click gives the picker its own fresh user activation.
+    const why=(err&&err.name?err.name+': ':'')+(err&&err.message?err.message:String(err));
+    const choice=await showChoiceDialog({
+      title:'Edit access needed',
+      message:`The browser would not let Watts Up ask for permission to edit "${wordDocFileName}" (${why}). You can give it edit access by choosing the file again: pick the same Word file in the next dialog and allow editing when the browser asks.`+(window.top!==window?' (This page is running inside another page or app; opening watts-up.html directly in its own browser tab usually avoids the problem.)':''),
+      options:[{label:'Choose the File…',value:'pick',primary:true},{label:'Cancel',value:'cancel'}]
+    });
+    if (choice!=='pick') return false;
+    try {
+      const [h]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false,mode:'readwrite',...WU_PICKER_OPTS});
+      if (h.name!==wordDocFileName&&!confirm(`You chose "${h.name}" instead of "${wordDocFileName}". Connect to "${h.name}" and sync to it instead?`)) return false;
+      wordDocHandle=h; wordDocFileName=h.name; updateWordDocUI();
+      let perm=h.queryPermission?await h.queryPermission({mode:'readwrite'}):'prompt';
+      if (perm!=='granted') perm=await h.requestPermission({mode:'readwrite'});
+      if (perm==='granted') return true;
+      alert('Edit access was not granted for "'+h.name+'", so nothing was written.');
+      return false;
+    } catch(e2) {
+      if (e2&&e2.name==='AbortError') return false;
+      console.error('[WattsUp] could not get edit access',e2);
+      alert(`Watts Up could not get edit access to the file (${e2&&e2.name?e2.name+': ':''}${e2&&e2.message?e2.message:e2}).\n\nCheck that the file is not read-only or locked (by Word, OneDrive, or a virus scanner), that it is on a drive you can write to, and that your browser policy allows file writes. If this page is open inside another page or app, open watts-up.html directly in its own browser tab. Press F12 and open the Console for more detail.`);
+      return false;
+    }
   }
 }
 async function syncToWordDoc(silent){

@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.14 — 2026-10-29 (testing build)
+
+Fix: Word sync refused with "Not allowed to request permissions in a third-party context".
+
+- **Connect Existing…** now asks the file picker itself for edit access, so syncing never has to ask for it afterwards.
+- If a browser setup still refuses the permission request, Watts Up offers **Choose the File…**: pick the same Word file again (with edit access) and the sync
+  continues; picking a different file asks before switching to it.
+- User guide: the Word sync troubleshooting row covers this.
+
 ## 0.9.13 — 2026-10-27 (testing build)
 
 Fix: Word sync that read a file but did not write it, with no message.

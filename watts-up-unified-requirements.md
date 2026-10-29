@@ -6103,6 +6103,19 @@ Verified with simulated file handles: a refused request (SecurityError) shows th
 denied shows the old message; a browser without `queryPermission` still works; a write error shows "Sync failed: NotAllowedError — …"; a failed read on Load is explained; from the Word Report dialog the
 order is query → request → confirmation → write. Not verified on real hardware (the browser pane cannot use real file pickers).
 
+## 92. Version 0.9.14 — Word Sync When the Browser Refuses the Permission Request
+
+Reported 2026-10-28 from the second computer (Chrome and Edge, no "FileSystem" browser policy): after Connect Existing (or reconnecting) every sync failed with *SecurityError: Failed to execute
+'requestPermission' on 'FileSystemHandle': Not allowed to request permissions in a third-party context*; a report just created with Create New Report synced fine.
+**Why those differ.** Create New Report's handle comes from `showSaveFilePicker`, which grants edit access, so `queryPermission` says 'granted' and no request is ever made; a handle from `showOpenFilePicker`
+(default read mode) has to *request* edit access before the first write, and on that machine the browser refuses the request itself. The cause on that machine (a page the browser treats as third-party)
+is not established — the program cannot see it; suggested checks: open `watts-up.html` directly in its own tab, and the console values `window.top===window` and `location.href`.
+**Fix.** `connectExistingWordReport` passes `mode:'readwrite'` to the picker (Chrome/Edge 108+; ignored elsewhere), so edit access is granted at pick time; and `ensureWordWritePermission` falls back, when the request
+throws, to a `showChoiceDialog` ("Edit access needed" — its button click supplies fresh user activation) → `showOpenFilePicker({mode:'readwrite'})` for the same file, switching the connection to the re-picked handle
+(a different file name asks first). Cancel or a dismissed picker changes nothing; any other picker error is explained.
+Verified with simulated handles: refused request → choose again → synced through the new handle; cancel; picker dismissed; a different file declined and accepted; another picker error; Connect Existing passes
+`mode:'readwrite'`; the already-granted path is unchanged. Not verified on the second computer.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
