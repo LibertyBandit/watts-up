@@ -16,6 +16,10 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
 - An Internet connection the first time the page loads, for the small library that creates and reads Word
   files (see §7.6). Everything else works offline.
 - Nothing is installed. Open the `watts-up.html` file in the browser.
+- **Keep `watts-up.html` on your own computer.** Save it to a local folder such as `C:\Users\<you>\Documents\Watts Up`
+  and open it from there. Running it straight from a network drive, a mapped drive letter or a `\\server\share` path can stop
+  the live Word connection from syncing (the browser refuses to ask for permission to write to the Word file). Your
+  **Word reports and project files can stay on the network drive**; only the program file itself needs to be local.
 
 ### 1.2 The start-up dialog
 Every time the program opens it asks what you want to do:
@@ -365,7 +369,8 @@ a `.docx` or `.json`.
 |---|---|
 | "Import failed" or "refused" on opening a file | The file is damaged, not from Watts Up, or edited by hand. Use an earlier copy. |
 | A Word sync says the file is probably open | Close it in Word and try again. |
-| Word sync does nothing, says permission was not granted, or "Sync failed" | Click **Sync to Report** and answer the browser's permission prompt promptly (it only works shortly after the click). If the browser refuses even to ask (a message mentioning a "third-party context"), Watts Up offers **Choose the File…**: pick the same Word file again and allow editing when asked; connecting with **Connect Existing…** already grants editing this way. Make sure `watts-up.html` is open directly in its own browser tab, not inside another page or app. Then check that the Word file is closed in Word, is not read-only, has no hidden `~$` lock file beside it, is not being held by OneDrive or a virus scanner, and is on a drive you can write to; try a copy in a plain local folder such as `C:\Temp`. Managed browsers can block file writes (look for "FileSystem" in `chrome://policy` or `edge://policy`). Press F12 and open the Console to see the detail. Firefox and Safari cannot keep a live connection; use Chrome or Edge. |
+| Word sync fails with a message about permission or a "third-party context", or Connect Existing works but Sync does not | **Run `watts-up.html` from a local drive.** Copy it to a local folder (for example `C:\Users\<you>\Documents\Watts Up`), close the tab, and open the local copy. Opening the program from a network drive, a mapped drive letter or a `\\server\share` path is a known cause. The Word report itself can stay on the network drive: a local copy of the program can read and write it there. After switching, use **Connect Existing…** to pick the report again. |
+| Word sync does nothing, says permission was not granted, or "Sync failed" | Click **Sync to Report** and answer the browser's permission prompt promptly (it only works shortly after the click). If the browser refuses even to ask (a message mentioning a "third-party context"), Watts Up offers **Choose the File…**: pick the same Word file again and allow editing when asked; connecting with **Connect Existing…** already grants editing this way. Make sure `watts-up.html` is open from a local drive (§1.1) and directly in its own browser tab, not inside another page or app. Then check that the Word file is closed in Word, is not read-only, has no hidden `~$` lock file beside it, is not being held by OneDrive or a virus scanner, and is on a drive you can write to; try a copy in a plain local folder such as `C:\Temp`. Managed browsers can block file writes (look for "FileSystem" in `chrome://policy` or `edge://policy`). Press F12 and open the Console to see the detail. Firefox and Safari cannot keep a live connection; use Chrome or Edge. |
 | Word functions say JSZip is not loaded | Reload the page while online. |
 | Warning W3 on an item | The new load exceeds the capacity. Check the capacity entry, the loads below it, or any override. |
 | A number you typed "disappeared" | If it began with `=` and contained anything but digits and `+ - * / . ( )`, it is left as typed; check for stray letters or commas. |

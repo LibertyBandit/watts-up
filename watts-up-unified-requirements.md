@@ -6116,6 +6116,16 @@ throws, to a `showChoiceDialog` ("Edit access needed" — its button click suppl
 Verified with simulated handles: refused request → choose again → synced through the new handle; cancel; picker dismissed; a different file declined and accepted; another picker error; Connect Existing passes
 `mode:'readwrite'`; the already-granted path is unchanged. Not verified on the second computer.
 
+## 93. Version 0.9.15 — User Guide: Run the Program from a Local Drive
+
+**Finding.** The second-computer Word-sync failure (§91, §92) was caused by running `watts-up.html` from a network drive. Run from the local C: drive, the
+same computer read and wrote Word files on the network drive. The program code was not at fault (0.9.13 and 0.9.14 remain as defensive hardening).
+
+**Change (guide only, no program behavior change).**
+- §1.1 "What you need": a bullet saying the program file belongs in a local folder; running it from a network drive, mapped drive or UNC path may prevent syncing to a Word report; Word reports and
+  project files may stay on the network.
+- §8 Troubleshooting: a new first row for permission / "third-party context" failures (run from a local drive, then Connect Existing… again), and the older Sync row now points to §1.1.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

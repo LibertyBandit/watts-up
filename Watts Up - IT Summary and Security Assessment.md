@@ -161,8 +161,8 @@ is treated as unstamped; the guide page contains no script element and no unrepl
 
 ## 9. How IT can verify the copy
 
-- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.14, 761,452 bytes):**
-  `b23751e6f01d9b752d7493815b39fe312cb9a0a7d0ef2b2ce1868c6962cde29e`
+- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.15, 762,698 bytes):**
+  `7e7a33eb223ef0c66ce6d46da78c19222d94c9b2f021c7f73449e1403017afc2`
   (PowerShell: `Get-FileHash watts-up.html -Algorithm SHA256`). A different value means the file has changed since
   this assessment — a newer release, a modified copy, or a copy whose line endings were converted (for example by
   a source-control checkout on Windows). Ask the owner for the hash of the exact release being deployed.

@@ -9,6 +9,14 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.15 — 2026-10-29 (testing build)
+
+User guide only: running `watts-up.html` from a network drive can stop Word sync (found on a second computer, where the browser refused the write-permission
+request; from a local drive the same computer read and wrote Word files on the network drive without trouble).
+
+- **§1.1 What you need:** keep `watts-up.html` in a local folder; Word reports and project files can stay on the network.
+- **§8 Troubleshooting:** a new first row for sync permission / "third-party context" errors says to run the program from a local drive and connect the report again.
+
 ## 0.9.14 — 2026-10-29 (testing build)
 
 Fix: Word sync refused with "Not allowed to request permissions in a third-party context".
