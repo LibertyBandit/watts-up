@@ -275,7 +275,13 @@ connects the program to that Word file (§7).
 **Print Report** builds a formatted report using the current Settings and opens the browser's print dialog, from which
 you can print or choose "Save as PDF".
 
-### 6.4 New
+### 6.4 Where the file dialogs open
+In Chrome and Edge, the Open, Export JSON, Word Report and Connect Existing dialogs all start in the folder of the **last file you opened or
+saved** in Watts Up, even after the browser has been closed and reopened. The first time (or if that folder is gone) they start in
+the Downloads folder. Watts Up keeps only a reference to that last file, in the browser's own storage on your computer (not the file's
+contents), and clearing the browser's site data forgets it.
+
+### 6.5 New
 **New** discards the current analysis (after asking) and starts an empty one. If a Word file is connected, it is
 disconnected.
 

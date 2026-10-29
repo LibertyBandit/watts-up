@@ -58,13 +58,14 @@ write-protected (§6). Two weaknesses found during this review were fixed (§7).
 | Feature | Used for | Limits |
 |---|---|---|
 | `localStorage` (key `wattsup_v1`) | Automatic save of the current project so it survives a page reload | Per browser profile and per web origin; not encrypted |
+| `IndexedDB` (database `wattsup_files`) | Remembers the last file the user opened or saved so the next file dialog opens in that folder | Holds only a handle reference to that one file (no contents; it grants no access by itself); per browser profile and web origin; cleared with site data |
 | File System Access API (`showOpenFilePicker`, `showSaveFilePicker`, handle permission) | Open/save project and Word files | Only the files the user picks; a write permission prompt is shown; no folder access; no access outside the pick |
 | Blob downloads, `blob:` page for the user guide, `window.print` | Fallback downloads, the Help guide tab (built from text inside the file; no script in it), printing | In-memory addresses only; standard browser behaviour |
 | JSZip (from the CDN) | Read/write the zip container inside `.docx` | See §5.2 |
 
 ### 3.4 What it does **not** do
 No `fetch`/XHR/WebSocket calls, no cookies, no `postMessage`, no web workers or service workers, no geolocation/camera/microphone/clipboard
-access, no IndexedDB, no `eval`, no remote code loading other than JSZip, no execution of anything found in a project or Word
+access, no IndexedDB use beyond the one stored file reference (§3.3), no `eval`, no remote code loading other than JSZip, no execution of anything found in a project or Word
 file, no access to the network file system other than through a file the user chooses.
 
 **One new window, only when the user asks for it.** The **Help** button opens the user guide in a new browser tab. The guide
@@ -84,7 +85,7 @@ notes, references, document numbers, and report text. Depending on the customer 
 **proprietary or export-controlled**; classify and store it according to your normal policy.
 
 Where copies of the data can end up:
-- **Browser storage** (`localStorage`) on each user's machine — unencrypted, kept until cleared.
+- **Browser storage** (`localStorage`, and an IndexedDB reference to the last picked file — no contents) on each user's machine — unencrypted, kept until cleared.
 - **Project `.json` files** — plain text, wherever the user saves them.
 - **Word reports** — also carry a full copy of the project as hidden data inside the file (so the report can be
   loaded back into the program). Anyone who receives the Word file can extract that data, even if the visible
@@ -161,8 +162,8 @@ is treated as unstamped; the guide page contains no script element and no unrepl
 
 ## 9. How IT can verify the copy
 
-- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.15, 762,698 bytes):**
-  `7e7a33eb223ef0c66ce6d46da78c19222d94c9b2f021c7f73449e1403017afc2`
+- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.16, 765590 bytes):**
+  `8cb482369a4158f6912f544a8553fe5d4126a79f2de00f72830ab4884b868d56`
   (PowerShell: `Get-FileHash watts-up.html -Algorithm SHA256`). A different value means the file has changed since
   this assessment — a newer release, a modified copy, or a copy whose line endings were converted (for example by
   a source-control checkout on Windows). Ask the owner for the hash of the exact release being deployed.

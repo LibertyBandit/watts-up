@@ -1031,7 +1031,8 @@ then produces the standard reports: on screen, as a printed/PDF report, and as a
 <li><a href="#61-export-json-save-your-project">6.1 Export JSON (save your project)</a></li>
 <li><a href="#62-open">6.2 Open</a></li>
 <li><a href="#63-print-report">6.3 Print Report</a></li>
-<li><a href="#64-new">6.4 New</a></li>
+<li><a href="#64-where-the-file-dialogs-open">6.4 Where the file dialogs open</a></li>
+<li><a href="#65-new">6.5 New</a></li>
 </ul>
 </li>
 <li><a href="#7-the-word-interface">7. The Word interface</a><ul>
@@ -1463,7 +1464,12 @@ connects the program to that Word file (§7).</p>
 <h3 id="63-print-report">6.3 Print Report</h3>
 <p><strong>Print Report</strong> builds a formatted report using the current Settings and opens the browser's print dialog, from which
 you can print or choose "Save as PDF".</p>
-<h3 id="64-new">6.4 New</h3>
+<h3 id="64-where-the-file-dialogs-open">6.4 Where the file dialogs open</h3>
+<p>In Chrome and Edge, the Open, Export JSON, Word Report and Connect Existing dialogs all start in the folder of the <strong>last file you opened or
+saved</strong> in Watts Up, even after the browser has been closed and reopened. The first time (or if that folder is gone) they start in
+the Downloads folder. Watts Up keeps only a reference to that last file, in the browser's own storage on your computer (not the file's
+contents), and clearing the browser's site data forgets it.</p>
+<h3 id="65-new">6.5 New</h3>
 <p><strong>New</strong> discards the current analysis (after asking) and starts an empty one. If a Word file is connected, it is
 disconnected.</p>
 <h2 id="7-the-word-interface">7. The Word interface</h2>
@@ -3646,7 +3652,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.15';
+const APP_VERSION='0.9.16';
 const APP_RELEASE_DATE='2026-10-29';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -3783,7 +3789,7 @@ async function doExport() {
   const name=['WattsUp',m.make,m.model,m.serialNumber,new Date().toISOString().slice(0,10)].filter(Boolean).join('_').replace(/\s+/g,'_')+'.json';
   if (hasFileSystemAccess()) {
     try {
-      const handle=await window.showSaveFilePicker({suggestedName:name,types:[WATTSUP_JSON_TYPE],...WU_PICKER_OPTS});
+      const handle=await wuShowSavePicker({suggestedName:name,types:[WATTSUP_JSON_TYPE]});
       const writable=await handle.createWritable();
       await writable.write(jsonStr);
       await writable.close();
@@ -10222,6 +10228,55 @@ const WATTSUP_OPEN_TYPE={description:'Watts Up Files',accept:{
 // these native pickers had, as a side effect, changed the browser's own default starting folder
 // from Downloads to Documents.
 const WU_PICKER_OPTS={id:'watts-up-files',startIn:'downloads'};
+// Version 0.9.16: the `id` memory above is the browser's own and does not work in every setup (notably pages opened from a
+// file:// address), so the program also remembers the last file it opened or saved: a reference to that file (no contents) is
+// kept in IndexedDB, and `startIn` that file makes the next picker open in the same folder, even after the browser was closed.
+// Anything wrong with the stored reference (no IndexedDB, a moved folder, a refused picker option) quietly falls back to the
+// browser's own default, so this can never block a file dialog.
+let wuLastPicked=null;
+function wuIdb(fn){
+  return new Promise((resolve,reject)=>{
+    const open=indexedDB.open('wattsup_files',1);
+    open.onupgradeneeded=()=>open.result.createObjectStore('handles');
+    open.onerror=()=>reject(open.error);
+    open.onsuccess=()=>{
+      const db=open.result;
+      const req=fn(db.transaction('handles','readwrite').objectStore('handles'));
+      req.onsuccess=()=>{db.close();resolve(req.result);};
+      req.onerror=()=>{db.close();reject(req.error);};
+    };
+  });
+}
+async function wuLoadLastPicked(){
+  try { const h=await wuIdb(st=>st.get('lastPicked')); if (h&&h.kind==='file') wuLastPicked=h; } catch(e) {}
+}
+function wuRememberPicked(handle){
+  if (!handle||handle.kind!=='file') return;
+  wuLastPicked=handle;
+  wuIdb(st=>st.put(handle,'lastPicked')).catch(()=>{});
+}
+function wuPickerOpts(){ return wuLastPicked?{startIn:wuLastPicked}:WU_PICKER_OPTS; }
+async function wuShowOpenPicker(opts){
+  let handles;
+  try { handles=await window.showOpenFilePicker({...opts,...wuPickerOpts()}); }
+  catch(err) {
+    if (!wuLastPicked||!err||err.name==='AbortError'||err.name==='SecurityError'||err.name==='NotAllowedError') throw err;
+    wuLastPicked=null; handles=await window.showOpenFilePicker({...opts,...WU_PICKER_OPTS});
+  }
+  wuRememberPicked(handles[0]);
+  return handles;
+}
+async function wuShowSavePicker(opts){
+  let handle;
+  try { handle=await window.showSaveFilePicker({...opts,...wuPickerOpts()}); }
+  catch(err) {
+    if (!wuLastPicked||!err||err.name==='AbortError'||err.name==='SecurityError'||err.name==='NotAllowedError') throw err;
+    wuLastPicked=null; handle=await window.showSaveFilePicker({...opts,...WU_PICKER_OPTS});
+  }
+  wuRememberPicked(handle);
+  return handle;
+}
+if (window.indexedDB&&window.showOpenFilePicker) wuLoadLastPicked();
 
 function hasFileSystemAccess(){ return !!(window.showOpenFilePicker&&window.showSaveFilePicker); }
 
@@ -10307,7 +10362,7 @@ async function doWordReportAction(){
 async function createNewWordReport(){
   if (typeof JSZip==='undefined'){alert('JSZip not loaded — this needs an internet connection.');return;}
   try {
-    const handle=await window.showSaveFilePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE],...WU_PICKER_OPTS});
+    const handle=await wuShowSavePicker({suggestedName:docxFileNameFor(state||{meta:{}}),types:[WORD_DOCX_TYPE]});
     const tmplBuf=Uint8Array.from(atob(DOCX_TEMPLATE_B64),c=>c.charCodeAt(0)).buffer;
     const zip=await JSZip.loadAsync(tmplBuf);
     if (state) await fillBlankWattsUpDocx(zip,state);
@@ -10333,7 +10388,7 @@ async function createNewWordReport(){
 async function connectExistingWordReport(){
   try {
     // mode:'readwrite' (Chrome/Edge 108+, ignored elsewhere): the picker itself grants edit access, so syncing never has to ask for it later.
-    const [handle]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false,mode:'readwrite',...WU_PICKER_OPTS});
+    const [handle]=await wuShowOpenPicker({types:[WORD_DOCX_TYPE],multiple:false,mode:'readwrite'});
     wordDocHandle=handle;
     wordDocFileName=handle.name;
     updateWordDocUI();
@@ -10389,7 +10444,7 @@ async function ensureWordWritePermission(){
     });
     if (choice!=='pick') return false;
     try {
-      const [h]=await window.showOpenFilePicker({types:[WORD_DOCX_TYPE],multiple:false,mode:'readwrite',...WU_PICKER_OPTS});
+      const [h]=await wuShowOpenPicker({types:[WORD_DOCX_TYPE],multiple:false,mode:'readwrite'});
       if (h.name!==wordDocFileName&&!confirm(`You chose "${h.name}" instead of "${wordDocFileName}". Connect to "${h.name}" and sync to it instead?`)) return false;
       wordDocHandle=h; wordDocFileName=h.name; updateWordDocUI();
       let perm=h.queryPermission?await h.queryPermission({mode:'readwrite'}):'prompt';
@@ -10940,7 +10995,7 @@ function doNewProject(){
 async function doOpenProject(){
   if (!hasFileSystemAccess()) { document.getElementById('file-input').click(); return; }
   try {
-    const [handle]=await window.showOpenFilePicker({types:[WATTSUP_OPEN_TYPE],multiple:false,...WU_PICKER_OPTS});
+    const [handle]=await wuShowOpenPicker({types:[WATTSUP_OPEN_TYPE],multiple:false});
     const file=await handle.getFile();
     if (file.name.toLowerCase().endsWith('.docx')) {
       wordDocHandle=handle;

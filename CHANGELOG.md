@@ -9,6 +9,16 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.16 — 2026-10-29 (testing build)
+
+The file dialogs open where you last were.
+
+- **Open, Export JSON, Word Report (Create New) and Connect Existing** now start in the folder of the last file you opened or saved, even after the browser was
+  closed. The browser's own "remember the last folder" did not work in every setup (pages opened from a file address), so Watts Up keeps a reference to the last
+  picked file (no contents) in the browser's IndexedDB and starts the next dialog beside it. If nothing is stored, the folder is gone or the browser refuses the
+  starting folder, the dialog opens in Downloads as before.
+- User guide §6.4 (new) describes it; the IT summary now lists IndexedDB and what it holds.
+
 ## 0.9.15 — 2026-10-29 (testing build)
 
 User guide only: running `watts-up.html` from a network drive can stop Word sync (found on a second computer, where the browser refused the write-permission

@@ -6126,6 +6126,27 @@ same computer read and wrote Word files on the network drive. The program code w
   project files may stay on the network.
 - §8 Troubleshooting: a new first row for permission / "third-party context" failures (run from a local drive, then Connect Existing… again), and the older Sync row now points to §1.1.
 
+## 94. Version 0.9.16 — File Dialogs Open in the Last-Used Folder
+
+**Problem.** Revision 70 gave every picker the same `id` (`watts-up-files`) so Chrome would remember the last folder, with `startIn:'downloads'` for first use. On the
+user's machines the dialogs still opened in a fixed folder (suspected cause: pages opened from a `file://` address, where the browser's id memory is not kept).
+
+**Decision (user, "remember across sessions").** Keep a reference to the last picked or saved file and use it as `startIn`.
+
+**Implementation.**
+- `wuRememberPicked(handle)` keeps the last file handle in `wuLastPicked` and in IndexedDB (database `wattsup_files`, store `handles`, key `lastPicked`); `wuLoadLastPicked()` reads
+  it at start-up (only when the File System Access API and IndexedDB exist). A FileSystemFileHandle holds no file contents and grants no access by itself.
+- `wuShowOpenPicker(opts)` / `wuShowSavePicker(opts)` wrap `showOpenFilePicker` / `showSaveFilePicker`: with a stored handle they pass `startIn:<handle>` (no `id`); without one they use
+  `WU_PICKER_OPTS` as before. A picker error other than Abort/Security/NotAllowed while a handle was in use is retried once with `WU_PICKER_OPTS` (and the memory dropped); every successful pick
+  is remembered. The five picker calls (Export JSON, Create New Word report, Connect Existing, the Choose-the-File fallback, Open) use the wrappers.
+- Failures anywhere in this (no IndexedDB, private mode, stale handle) are swallowed: the dialog opens in the browser's default as before.
+- A typed default path is not possible: browsers do not let a page choose a folder by path.
+
+**Documents.** User guide §6.4 (new; New becomes §6.5); IT summary §3.3/§3.4 and the storage list now name IndexedDB and what it holds.
+
+**Verified** in the browser pane with a stand-in file handle: first use passes the old options; a pick is stored and survives a simulated restart; both pickers then pass `startIn` the stored handle;
+a refused `startIn` retries with the old options; Abort propagates and keeps the memory. Not exercised with the real native dialog.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report
