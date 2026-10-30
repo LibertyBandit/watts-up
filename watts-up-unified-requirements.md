@@ -6147,6 +6147,22 @@ user's machines the dialogs still opened in a fixed folder (suspected cause: pag
 **Verified** in the browser pane with a stand-in file handle: first use passes the old options; a pick is stored and survives a simulated restart; both pickers then pass `startIn` the stored handle;
 a refused `startIn` retries with the old options; Abort propagates and keeps the memory. Not exercised with the real native dialog.
 
+## 95. Version 0.9.17 — Fine Vertical Borders Between Unit Columns in Word Tables
+
+**Request.** In all Word tables with column groups (capacity, existing load, load, net change, new load, reserve), a fine vertical border between the unit columns of one group
+(for example VA | W), the same thickness as the horizontal row boundary; keep the heavier lines at the outer edges and between groups; no visible border between the description and rating
+columns of the summary and detail reports (`wu-tables`, `wu-tables-pcm`).
+
+**Implementation.**
+- `wxTc`'s `leftBdr` now takes `true` (the heavy 1.5 pt rule, `sz=12`, `777777`, between groups — unchanged) or `'fine'` (`sz=4`, `dddddd`: exactly the table's `insideH` row line).
+- The value columns that are not the first of their group pass `'fine'`: `buildWordTblHeader` (sub-column label row), `buildWordDataRow` (values and em-dash cells) — used by the Load Analysis Summary, the Power Distribution
+  Summary and the horizontal Load Analysis Detail, each with their PCM twins — and `buildLadSiblingWordTable` (header, blanks and values of the vertical report, between the units of one sibling).
+- Group header cells (which span their unit columns), the description, rating and notes columns, and the full-width note/banner rows are unchanged. The description and rating cells carry no vertical border (table `insideV` is `none`).
+- The color matches the row lines on purpose (the request named thickness only); change `dddddd` in `wxTc` to darken the vertical lines alone.
+
+**Verified.** A report generated from the sample project and opened in Word through COM: in the summary, PDS and vertical-report tables the group-first columns read as 1.5 pt / `777777`, the second unit
+column of each group as 0.5 pt / `dddddd`, and the rating column's left border is none.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

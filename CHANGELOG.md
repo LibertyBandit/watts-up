@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.17 — 2026-10-29 (testing build)
+
+Word report tables: a fine vertical line between the unit columns of a column group.
+
+- In every Word table with power and load groups (Load Analysis Summary, Power Distribution Summary, both Load Analysis Detail layouts, and the Previous & Concurrent
+  Modifications versions), the unit columns inside one group (for example VA and W) are now separated by a fine vertical line, the same weight and
+  color as the horizontal row lines. The heavier lines on the outer edges and between column groups are unchanged.
+- No line is drawn between the description and rating columns.
+
 ## 0.9.16 — 2026-10-29 (testing build)
 
 The file dialogs open where you last were.

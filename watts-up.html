@@ -3652,7 +3652,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.16';
+const APP_VERSION='0.9.17';
 const APP_RELEASE_DATE='2026-10-29';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -9106,7 +9106,9 @@ function wxSdtBlock(tag,contentXml){
 function wxTc(inner,{w,span,vm,topBdr,leftBdr,bottomBdr,shd}={}){
   const bdrParts=[
     topBdr?'<w:top w:val="single" w:sz="6" w:space="0" w:color="888888"/>':'',
-    leftBdr?'<w:left w:val="single" w:sz="12" w:space="0" w:color="777777"/>':'',
+    // leftBdr: true = the heavy rule between column groups; 'fine' = version 0.9.17's hairline between the unit columns of one group
+    // (same weight and color as the horizontal row lines, see wxTableOpen insideH).
+    leftBdr==='fine'?'<w:left w:val="single" w:sz="4" w:space="0" w:color="dddddd"/>':leftBdr?'<w:left w:val="single" w:sz="12" w:space="0" w:color="777777"/>':'',
     bottomBdr?'<w:bottom w:val="single" w:sz="8" w:space="0" w:color="777777"/>':'',
   ].join('');
   const tcPr=[
@@ -9161,7 +9163,7 @@ function buildWordTblHeader(cols,hasAnnot,{descW,ratingW,notesW,colWidths,hasRat
   if(hasAnnot)r2+=wxTc(wxPar('',{before:0,after:0,keepNext:true}),{w:notesW,vm:'cont',leftBdr:true,bottomBdr:true});
   cols.forEach((c,i)=>{
     r2+=wxTc(wxPar(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),
-      {w:colWidths[i],leftBdr:c.isGroupFirst,bottomBdr:true});
+      {w:colWidths[i],leftBdr:c.isGroupFirst||'fine',bottomBdr:true});
   });
   return wxTr(r1,{h:300,hdr:true})+wxTr(r2,{h:260,hdr:true});
 }
@@ -9195,7 +9197,7 @@ function buildWordDataRow(n,depth,cols,cfg,am,topBdr,{descW,ratingW,notesW,colWi
   let numCells='';
   cols.forEach((col,i)=>{
     const{group,k,isPf,isGroupFirst}=col;
-    const lB=isGroupFirst;
+    const lB=isGroupFirst||'fine';
     const w=colWidths[i];
     const emDash=()=>{numCells+=wxTc(wxPar(wxRun('—',{sz}),{before:20,after:20,jc:'right',keepNext:true}),{w,topBdr,leftBdr:lB});};
     if(isConvIn&&cfg.convInNcOnly&&group!=='nc'){emDash();return;}
@@ -9814,14 +9816,14 @@ function buildLadSiblingWordTable(t,cols,cfgSide,hasAnnot,maxMembers){
   let h2=wxTc(kp(''),{w:labelW,vm:'cont',bottomBdr:true})+wxTc(kp(''),{w:cbW,vm:'cont',bottomBdr:true});
   if(hasAnnot) h2+=wxTc(kp(''),{w:notesW,vm:'cont',leftBdr:true,bottomBdr:true});
   t.members.forEach(()=>cols.forEach((c,i)=>{
-    h2+=wxTc(wp(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0,bottomBdr:true});
+    h2+=wxTc(wp(wxRun(c.l,{b:true,sz:HSZ}),{before:20,after:20,jc:'center',keepNext:true}),{w:numW,leftBdr:i===0||'fine',bottomBdr:true});
   }));
   const header=wxTr(h1,{h:280,hdr:true})+wxTr(h2,{h:280,hdr:true});
 
   // ── body
-  const blank=(first)=>wxTc(wp('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:first});
+  const blank=(first)=>wxTc(wp('',{before:20,after:20,keepNext:true}),{w:numW,leftBdr:first||'fine'});
   const blanks=()=>cols.map((c,i)=>blank(i===0)).join('');
-  const valCell=(val,c,i,isNeg,u)=>wxTc(wp(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5,u}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0});
+  const valCell=(val,c,i,isNeg,u)=>wxTc(wp(wxRun(rptTxt(val==null?null:val,c.isPf||false,isNeg),{sz:7.5,u}),{before:20,after:20,jc:'right',keepNext:true}),{w:numW,leftBdr:i===0||'fine'});
   const markerCell=(marker,chg)=>hasAnnot?wxTc(wp(marker?wxRun(marker,{sz:6.5,u:chg}):'',{before:20,after:20,jc:'center',keepNext:true}),{w:notesW,leftBdr:true}):'';
   const ratingCell=(n,sz)=>{
     const a=(NT.PROTECTION.includes(n.type)&&n.capacity&&n.capacity.a!=null)?fmtRating(n.capacity.a):null;
