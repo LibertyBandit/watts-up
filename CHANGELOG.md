@@ -9,6 +9,17 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.18 — 2026-11-05 (testing build)
+
+Five of the seven items in the November request list (the voltage cascade and the TRU Calculate/OK fixes follow in 0.9.19).
+
+- **Button names:** the **Save** buttons are now **OK** (Edit Item dialog and the grids) and **Add** (Add Item(s) dialog), since they apply changes to the project and do not write a file.
+- **Switching siblings in the Edit Item dialog:** if the current item has changes, you are asked "Accept changes to X before editing Y?" (Yes applies them, No discards them, Cancel
+  stays). A refused save (for example a validation message) keeps you on the current item.
+- **Vertical Load Analysis Detail** gives every Existing item without children its own table (it used to be only those with a Net Change Override), on screen and in Word.
+- **Duplicating a branch that contains a TRU** now gives the copied TRU its own transfer note (it used to cite the original's note).
+- **Grids:** the **↳** (add child) button is hidden for an Existing item with a Net Change Override entered, as it already was for an Installed one. A blanked-out override no longer counts as entered.
+
 ## 0.9.17 — 2026-10-29 (testing build)
 
 Word report tables: a fine vertical line between the unit columns of a column group.

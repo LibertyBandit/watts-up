@@ -960,7 +960,7 @@
         <button id="btn-calculate"  class="btn-default" style="display:none">Calculate</button>
         <button id="btn-cancel"     class="btn-default">Cancel</button>
         <button id="btn-duplicate"  class="btn-default" style="display:none">Duplicate</button>
-        <button id="btn-save"       class="btn-primary">Save</button>
+        <button id="btn-save"       class="btn-primary">OK</button>
       </div>
     </div>
   </div>
@@ -1153,7 +1153,7 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
   loads): Capacity, Net Change, New Load and Remaining. It carries no row notes.</li>
 <li><strong>Load Analysis Detail</strong> — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A <strong>Vertical / Horizontal</strong> toggle chooses the
-  layout (Vertical places sibling items side by side; see §5 for the options that control it). In the Horizontal
+  layout (Vertical places sibling items side by side, and also gives an Existing item with no children a table of its own, so its capacity, existing load and reserve are reported even when nothing about it changed; see §5 for the options that control it). In the Horizontal
   layout a load's value is shown under <strong>Net Change</strong> (a removed load in parentheses); there is no separate
   "Installed (Removed)" column group there.</li>
 </ul>
@@ -1180,7 +1180,7 @@ buttons:</p>
 </tr>
 <tr>
 <td><strong>↳</strong></td>
-<td>Insert a blank, editable child row under this item (see "Adding items from a grid" below).</td>
+<td>Insert a blank, editable child row under this item (see "Adding items from a grid" below). Not shown for an item that has a Net Change Override entered, since the override replaces the sum of the children.</td>
 </tr>
 <tr>
 <td><strong>✎</strong></td>
@@ -1204,6 +1204,7 @@ buttons:</p>
 </tr>
 </tbody>
 </table>
+<p>Edits in a grid apply immediately. <strong>OK</strong> (bottom right) keeps everything you changed since you opened the tab; <strong>Cancel</strong> puts it all back as it was then.</p>
 <p>The status badge in a row toggles an item between Existing and Removed (in the Existing / Removed grid) when clicked; the
 keyboard focus stays on the badge, so Tab and Shift+Tab continue to the next or previous cell in the same row.</p>
 <p><strong>Adding items from a grid.</strong> There are three ways, and they are not all obvious:</p>
@@ -1305,12 +1306,12 @@ with the project.</p>
   <strong>Output</strong> panes with their own capacity and existing-load fields. Extra input phases can be added with
   <strong>+ Parent</strong>.</li>
 <li><strong>Phases</strong> — the <strong>Multi-phase</strong> option splits an eligible AC item into phase-mates (§4.5).</li>
-<li><strong>Siblings</strong> — shows the item's siblings for reference.</li>
+<li><strong>Siblings</strong> — shows the item's siblings; click one to edit it instead. If you have changed the current item, you are asked whether to accept those changes first (Yes applies them, No discards them, Cancel stays where you are).</li>
 <li><strong>Notes &amp; References</strong> — row notes and row references for this item (click to expand).</li>
 </ul>
 <p>Each section has its own <strong>Reset</strong> button. The bottom buttons are <strong>Delete</strong>, <strong>Calculate</strong>, <strong>Cancel</strong>,
-<strong>Duplicate</strong> and <strong>Save</strong>. <strong>Calculate</strong> fills in the empty fields of the item from the ones you have already entered
-(for example VA from A and volts, or W from VA and pf) without overwriting anything you typed; <strong>Save</strong> also fills in what it can.</p>
+<strong>Duplicate</strong> and <strong>OK</strong>. <strong>OK</strong> applies your changes to the project (nothing is written to a file; use Export JSON or a Word report for that) and <strong>Cancel</strong> discards them. <strong>Calculate</strong> fills in the empty fields of the item from the ones you have already entered
+(for example VA from A and volts, or W from VA and pf) without overwriting anything you typed; <strong>OK</strong> also fills in what it can.</p>
 <p><strong>Typing numbers.</strong> Number fields accept ordinary numbers or a calculation that starts with <code>=</code>, such as
 <code>=12*3.5</code> or <code>=(28+1.5)/2</code>. Only digits and <code>+ − × ÷ . ( )</code> are allowed; the result replaces what you typed when you
 leave the field. For AC items you can supply any usable combination of A, VA, W, VAR and pf and the rest are
@@ -1327,7 +1328,7 @@ grid — the <strong>+ TRU (opens Add Item)</strong> entry in a grid row's Item 
 <li><strong>TRU</strong> — a TRU row also takes the efficiency (default 0.85), the output voltage, and the capacity and load of its input (IN) and
   output (OUT) sides. Saving creates the linked IN / OUT pair and its transfer row note (§3.3). Extra input phases are added
   afterward in the Edit dialog with <strong>+ Parent</strong> (§4.2).</li>
-<li><strong>Save</strong> adds the items; <strong>Cancel</strong> closes the dialog without adding anything.</li>
+<li><strong>Add</strong> adds the items; <strong>Cancel</strong> closes the dialog without adding anything.</li>
 </ul>
 <p>New items inherit the parent's voltage, AC / DC and (where used) phase.</p>
 <h3 id="44-previous-concurrent-modifications">4.4 Previous &amp; Concurrent Modifications</h3>
@@ -3652,7 +3653,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.17';
+const APP_VERSION='0.9.18';
 const APP_RELEASE_DATE='2026-10-29';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -4592,11 +4593,11 @@ function renderLoadAnalysisDetail() {
 // not a TRU input, and with children. The walk goes: a set of sibling parents -> its table(s) ->
 // then, for each sibling in order, that sibling's own parent-children as the next set (so where the old
 // report went on to the second sibling, this one goes on to the second sibling's children).
-// Revision 83: an Existing item with a net change override entered but no children still gets its own
-// table (Capacity, Existing Load, Net Change, New Load, Reserve — no child rows), so its New Load and
-// Reserve are reported. Shared by the table plan and the Settings list of entry items.
-function ladOverrideLeaf(n,nodes) {
-  return !!n&&n.status==='existing'&&!isLoad(n.type)&&n.convRole!=='in'&&n.netChangeOverride!=null&&children(n.id,nodes).length===0;
+// Revision 83, widened in 0.9.18: an Existing item with no children (with or without a net change override) still
+// gets its own table (Capacity, Existing Load, Net Change, New Load, Reserve — no child rows), so its New Load and
+// Reserve are reported even when nothing about it changed. Shared by the table plan and the Settings list of entry items.
+function ladExistingLeaf(n,nodes) {
+  return !!n&&n.status==='existing'&&!isLoad(n.type)&&n.convRole!=='in'&&children(n.id,nodes).length===0;
 }
 function ladMaxSiblings(colCount) {
   const v=reportCfg&&reportCfg.ladSiblings;
@@ -4612,7 +4613,7 @@ function ladMaxSiblings(colCount) {
 // in its own column group.
 function ladSiblingPlan(section,maxSib,annotator) {
   const nodes=state.nodes;
-  const isParent=n=>!!n&&n.acDc===section&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&(children(n.id,nodes).length>0||ladOverrideLeaf(n,nodes));
+  const isParent=n=>!!n&&n.acDc===section&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&(children(n.id,nodes).length>0||ladExistingLeaf(n,nodes));
   const parentKids=n=>children(n.id,nodes).filter(isParent);
   const isPhaseMate=n=>!!n&&!!n.phase&&!n.convRole&&!!n.phaseGroupId;
   // Groups a list of nodes into units: phase-mates of one group together (in group order, at the place
@@ -5409,12 +5410,19 @@ function gridShareInfo(n,gridKey){
   const otherLabel=state.analyses[otherId].label;
   return {show:true,action:'share',label:'Share',title:`Share this item with ${otherLabel}`};
 }
+// True when a Net Change Override has an actual value in it (a cleared AC override can linger as an object whose fields are all blank).
+function ncOverrideEntered(n) {
+  const ov=n&&n.netChangeOverride;
+  if (ov===null||ov===undefined||ov==='') return false;
+  if (typeof ov!=='object') return true;
+  return ['a','va','w','var'].some(k=>ov[k]!==null&&ov[k]!==undefined&&ov[k]!=='');
+}
 function gridActionsCell(n,readOnly,gridKey){
   const {canUp,canDown}=siblingOrderInfoForNode(n);
-  // A New-status item with an active Net Change override is being treated as a fixed value
+  // An item (Existing or Installed) with an active Net Change override is being treated as a fixed value
   // rather than a sum of children — adding a child wouldn't affect the total anyway (and
   // would need the override cleared first), so +Child is hidden rather than just warned about.
-  const canAddChild=!(isLoad(n.type)||n.status==='removed'||n.convRole==='in'||(n.status==='new'&&n.netChangeOverride!=null));
+  const canAddChild=!(isLoad(n.type)||n.status==='removed'||n.convRole==='in'||ncOverrideEntered(n));
   // A conversion-output row is structurally paired with its IN parent — duplicating or deleting
   // it independently doesn't make sense (both already happen via the IN row's own Dup/Del).
   // Revision 57 (Phase 4): for a TRU with multiple input phases, restricted further to the
@@ -5837,7 +5845,7 @@ function gridFooter(gridKey){
     <span class="grid-footer-msg">Edits apply immediately. Cancel reverts everything changed since you opened this tab.</span>
     <button data-grid-add class="btn-default">+ Item</button>
     <button data-grid-cancel class="btn-default">Cancel</button>
-    <button data-grid-save class="btn-primary">Save</button>
+    <button data-grid-save class="btn-primary">OK</button>
   </div>`;
 }
 
@@ -6607,7 +6615,7 @@ function efPhaseActivate(id) {
 function efPhaseAdd() {
   const P=efPhase; if (!P||!efPhaseCanAdd()) return;
   const prim=state.nodes[P.primaryId];
-  if ((efEl('ef-parent').value||null)!==(prim.parentId||null)) { alert('Save the change of parent first, then add phases.'); return; }
+  if ((efEl('ef-parent').value||null)!==(prim.parentId||null)) { alert('Click OK to apply the change of parent first, then add phases.'); return; }
   efPhaseStash();
   const tmp=makeNode(prim.type,null,{});
   // A new phase starts with the previous phase's values (Existing Load, Net Change Override /
@@ -7003,6 +7011,7 @@ function duplicateBranch(rootId,allPhases=false) {
   // input phase living outside the duplicated subtree (a separate, un-duplicated ancestor bus)
   // gets cloned here too, and every group member touched gets a fresh, shared convGroupId.
   reconcileConvGroups(idMap,roots);
+  fixTruNoteRefs();   // version 0.9.18: a copied TRU gets a transfer note of its own, not a second link to the original's
   return idMap[rootId];
 }
 async function duplicateNode() {
@@ -7648,7 +7657,32 @@ function efRenderSiblings(parentId,excludeId) {
       const rdHtml=n.refDes?` <span class="node-refdes">[${esc(n.refDes)}]</span>`:'';
       return `<tr data-id="${n.id}"><td>${badgeHtml(n)||esc(displayType(n))}</td><td>${esc(n.description||'')+esc(phaseSuffix(n))+rdHtml}</td><td><span class="status-badge s-${n.status}">${statusLabel(n.status)}</span></td></tr>`;
     }).join('')}</tbody></table>`;
-  body.querySelectorAll('tr[data-id]').forEach(r=>r.addEventListener('click',()=>{closeModal();openEdit(r.dataset.id);}));
+  body.querySelectorAll('tr[data-id]').forEach(r=>r.addEventListener('click',()=>efSwitchSibling(r.dataset.id)));
+}
+// Version 0.9.18: a fingerprint of everything the Edit dialog holds (fields, notes, references, phase drafts), taken when it
+// opens; if it differs when a sibling is clicked, the user is asked what to do with the changes first.
+let efOpenSig='';
+function efFormSig() {
+  try {
+    const f=document.getElementById('edit-form');
+    const vals=[...f.querySelectorAll('input,select,textarea')].map(e=>(e.type==='checkbox'||e.type==='radio')?(e.checked?1:0):e.value);
+    return JSON.stringify([vals,collectEfNotes(),collectEfRefs(),efPhase&&efPhase.drafts?efPhase.drafts:null]);
+  } catch(e) { return ''; }
+}
+async function efSwitchSibling(targetId) {
+  const target=state.nodes[targetId]; if (!target) return;
+  if (efFormSig()!==efOpenSig) {
+    const cur=state.nodes[efPhaseActiveRealId()||mNode];
+    const choice=await showChoiceDialog({
+      title:'Unsaved Changes',
+      message:`Accept changes to "${cur?dispName(cur,'this item'):'this item'}" before editing "${dispName(target,'the other item')}"?`,
+      options:[{label:'Yes',value:'yes',primary:true},{label:'No',value:'no'},{label:'Cancel',value:'cancel'}]
+    });
+    if (!choice||choice==='cancel') return;
+    if (choice==='yes') { doSave(); if (mMode==='edit') return; }   // still open: the save was refused, so stay on this item
+    else closeModal();
+  } else closeModal();
+  openEdit(targetId);
 }
 
 function openEdit(nodeId) {
@@ -7896,7 +7930,9 @@ function openEdit(nodeId) {
   efPhaseSetup(n,openedId);
   if (efPhase) efPhaseApplyActive();
 
+  document.getElementById('btn-save').textContent='OK';   // version 0.9.18: it applies the changes to the project (nothing is written to a file)
   document.getElementById('btn-save').disabled=false;
+  efOpenSig=efFormSig();
   document.getElementById('modal-overlay').classList.remove('hidden');
   if (n.convRole&&n.type==='TRU') document.getElementById('ef-tru-desc-0').focus();
   else document.getElementById('ef-desc').focus();
@@ -8510,6 +8546,7 @@ function afRenderTable() {
 
 function openAdd(parentId) {
   mMode='add';mNode=null;mBlocked=false;
+  document.getElementById('btn-save').textContent='Add';
   afRows=[];afRowCtr=0;afRowData={};
   document.getElementById('af-table-wrap').innerHTML='';
   // Start with one blank row
@@ -10609,7 +10646,7 @@ function fillLadEntryList() {
   box.innerHTML='';
   if (!state) return;
   const nodes=state.nodes;
-  const items=preOrder(state.rootIds,nodes).map(id=>nodes[id]).filter(n=>n&&ladEntryKind(n)&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&(children(n.id,nodes).length>0||ladOverrideLeaf(n,nodes)));
+  const items=preOrder(state.rootIds,nodes).map(id=>nodes[id]).filter(n=>n&&ladEntryKind(n)&&!isLoad(n.type)&&n.status!=='removed'&&n.convRole!=='in'&&(children(n.id,nodes).length>0||ladExistingLeaf(n,nodes)));
   if (items.length<2) return;     // nothing to choose between
   const head=document.createElement('div'); head.className='section-label'; head.style.cssText='margin-top:.4rem;font-size:.7rem';
   head.textContent='Vertical Load Analysis Detail — table for each TRU output / top-level item';

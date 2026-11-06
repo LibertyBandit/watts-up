@@ -6163,6 +6163,22 @@ columns of the summary and detail reports (`wu-tables`, `wu-tables-pcm`).
 **Verified.** A report generated from the sample project and opened in Word through COM: in the summary, PDS and vertical-report tables the group-first columns read as 1.5 pt / `777777`, the second unit
 column of each group as 0.5 pt / `dddddd`, and the rating column's left border is none.
 
+## 96. Version 0.9.18 — Button Names, Sibling Switching, Existing Leaf Tables, TRU Copy Notes, No Child Under an Override
+
+Requests 1, 2, 4, 6 and 7 of the 2026-11-05 list (3 and 5 are §97). Decisions taken in the /grill-me round: the user chose **OK** (Edit Item), **Add** (Add Item(s)) and **OK** (grids, instead of the proposed "Done"); everything else as proposed.
+
+1. **Button names.** `#btn-save` is labelled OK in `openEdit` and Add in `openAdd`; the grid footer's `data-grid-save` is OK. "Accept" was avoided because the Edit dialog already has Accept Change / Reject Change for change tracking.
+   The one message that told the user to "Save" the parent change first now says to click OK.
+2. **Existing items in the vertical detail.** `ladExistingLeaf(n)` (was `ladOverrideLeaf`, which required an override) is true for any Existing, non-load, non-TRU-input item without children; `ladSiblingPlan`'s `isParent` and the
+   Settings entry list use it, so such an item gets a table beside its siblings (same siblings-per-table rule, screen and Word). The horizontal report is unchanged (these items are already rows there). Installed items without children are not included.
+4. **TRU copy note.** `duplicateBranch` now calls `fixTruNoteRefs()` after `reconcileConvGroups`, as `duplicateNodeById` already did, so copied conversion members drop the original's `{tpl:'tru'}` note and get one of their own.
+   Reproduced first with the sample project (after a branch duplicate four copied TRU members cited the originals' notes and no new note existed), then verified (four notes for four groups, none foreign).
+6. **Switching siblings.** `efFormSig()` fingerprints the Edit dialog (all inputs/selects, collected notes and references, phase drafts) when it opens (`efOpenSig`); `efSwitchSibling` compares at click time and, if different, asks Yes / No / Cancel.
+   Yes runs `doSave()` and switches only if the dialog closed (a refused save leaves it open); No closes and switches; Cancel does nothing. Unchanged: switches without asking. No false positives on a TRU, feeder, Installed breaker or root.
+7. **No ↳ under an override.** `gridActionsCell`'s `canAddChild` uses the new `ncOverrideEntered(n)` (any of A/VA/W/VAR typed; a cleared AC override object whose fields are all blank does not count), for Existing and Installed items alike.
+
+**Verified** in the browser pane with the sample project (button names, Yes/No/Cancel paths, the child button with no override, a blank override object and a real one, the two Existing leaf items now having tables, the Word vertical builder, the TRU copy check above).
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

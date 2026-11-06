@@ -76,7 +76,7 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
   loads): Capacity, Net Change, New Load and Remaining. It carries no row notes.
 - **Load Analysis Detail** — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A **Vertical / Horizontal** toggle chooses the
-  layout (Vertical places sibling items side by side; see §5 for the options that control it). In the Horizontal
+  layout (Vertical places sibling items side by side, and also gives an Existing item with no children a table of its own, so its capacity, existing load and reserve are reported even when nothing about it changed; see §5 for the options that control it). In the Horizontal
   layout a load's value is shown under **Net Change** (a removed load in parentheses); there is no separate
   "Installed (Removed)" column group there.
 
@@ -91,12 +91,14 @@ buttons:
 |---|---|
 | **∑** | Recalculate this row's AC values (W, VAR, VA, A, pf) from whatever you have filled in. |
 | **⧉** | Duplicate the row. |
-| **↳** | Insert a blank, editable child row under this item (see "Adding items from a grid" below). |
+| **↳** | Insert a blank, editable child row under this item (see "Adding items from a grid" below). Not shown for an item that has a Net Change Override entered, since the override replaces the sum of the children. |
 | **✎** | Open the full Edit Item dialog (for overrides, notes and references). |
 | **×** | Delete. |
 | **↻** (beside a group of columns) | Clear that group of values. Clearing is required before you can change the values in an AC group; for DC values it is optional. |
 | **↑ ↓** | Reorder. |
 | **Share / Unshare** | When a Previous & Concurrent Modifications analysis exists (§4.4). |
+
+Edits in a grid apply immediately. **OK** (bottom right) keeps everything you changed since you opened the tab; **Cancel** puts it all back as it was then.
 
 The status badge in a row toggles an item between Existing and Removed (in the Existing / Removed grid) when clicked; the
 keyboard focus stays on the badge, so Tab and Shift+Tab continue to the next or previous cell in the same row.
@@ -165,12 +167,12 @@ Open it with **Edit** (tree) or **✎** (grids). Sections appear according to th
   **Output** panes with their own capacity and existing-load fields. Extra input phases can be added with
   **+ Parent**.
 - **Phases** — the **Multi-phase** option splits an eligible AC item into phase-mates (§4.5).
-- **Siblings** — shows the item's siblings for reference.
+- **Siblings** — shows the item's siblings; click one to edit it instead. If you have changed the current item, you are asked whether to accept those changes first (Yes applies them, No discards them, Cancel stays where you are).
 - **Notes & References** — row notes and row references for this item (click to expand).
 
 Each section has its own **Reset** button. The bottom buttons are **Delete**, **Calculate**, **Cancel**,
-**Duplicate** and **Save**. **Calculate** fills in the empty fields of the item from the ones you have already entered
-(for example VA from A and volts, or W from VA and pf) without overwriting anything you typed; **Save** also fills in what it can.
+**Duplicate** and **OK**. **OK** applies your changes to the project (nothing is written to a file; use Export JSON or a Word report for that) and **Cancel** discards them. **Calculate** fills in the empty fields of the item from the ones you have already entered
+(for example VA from A and volts, or W from VA and pf) without overwriting anything you typed; **OK** also fills in what it can.
 
 **Typing numbers.** Number fields accept ordinary numbers or a calculation that starts with `=`, such as
 `=12*3.5` or `=(28+1.5)/2`. Only digits and `+ − × ÷ . ( )` are allowed; the result replaces what you typed when you
@@ -189,7 +191,7 @@ grid — the **+ TRU (opens Add Item)** entry in a grid row's Item Type drop-dow
 - **TRU** — a TRU row also takes the efficiency (default 0.85), the output voltage, and the capacity and load of its input (IN) and
   output (OUT) sides. Saving creates the linked IN / OUT pair and its transfer row note (§3.3). Extra input phases are added
   afterward in the Edit dialog with **+ Parent** (§4.2).
-- **Save** adds the items; **Cancel** closes the dialog without adding anything.
+- **Add** adds the items; **Cancel** closes the dialog without adding anything.
 
 New items inherit the parent's voltage, AC / DC and (where used) phase.
 
