@@ -154,7 +154,10 @@ Open it with **Edit** (tree) or **✎** (grids). Sections appear according to th
 
 - **Parent Item** — move the item to another parent, or choose *No Parent (New Root)* to make it a top-level item.
 - **Identity** — Item Type, Status, Volts, AC / DC, Description, optional Ref Des (reference designator).
-  Volts and AC / DC are inherited from the parent and fixed where the parent decides them.
+  Volts and AC / DC are inherited from the parent and fixed where the parent decides them. Changing them on a top-level item
+  (or a TRU's output volts) passes the change down to everything beneath it, as far as the next TRU or other converter, whose
+  output side keeps its own voltage. If the change would be invalid for something below (for example AC to DC with a TRU
+  underneath, or phase-labeled items), a message lists those items and nothing is changed.
 - **Capacity** — Cap (A) and Cap (W) for DC; Cap (A) and Cap (VA) for AC. Optional, but needed for the
   overload warning and the Reserve.
 - **Existing Load** — the load the item already carries (non-load items).
@@ -165,7 +168,10 @@ Open it with **Edit** (tree) or **✎** (grids). Sections appear according to th
 - **Load Value** — for Load items (A, W, and for AC also VA, VAR, pf).
 - **Conversion Parameters / TRU** — efficiency and conversion power factor. A TRU has **Input** and
   **Output** panes with their own capacity and existing-load fields. Extra input phases can be added with
-  **+ Parent**.
+  **+ Parent**. **Calculate** treats the side you changed as the source: it fills that side's blanks, and if the other side holds
+  different values it asks before recalculating them from the side you changed. When you press **OK** after changing only one side and
+  the other no longer matches, you are asked to **Recalculate** the other side, **Keep As Entered** (the two sides then differ
+  on purpose), or **Cancel**.
 - **Phases** — the **Multi-phase** option splits an eligible AC item into phase-mates (§4.5).
 - **Siblings** — shows the item's siblings; click one to edit it instead. If you have changed the current item, you are asked whether to accept those changes first (Yes applies them, No discards them, Cancel stays where you are).
 - **Notes & References** — row notes and row references for this item (click to expand).
@@ -382,7 +388,7 @@ a `.docx` or `.json`.
 | Word functions say JSZip is not loaded | Reload the page while online. |
 | Warning W3 on an item | The new load exceeds the capacity. Check the capacity entry, the loads below it, or any override. |
 | A number you typed "disappeared" | If it began with `=` and contained anything but digits and `+ - * / . ( )`, it is left as typed; check for stray letters or commas. |
-| "This file was repaired as it opened" | An older version let a shared TRU's phases get out of step between the two analyses. The program linked the matching phases (or un-shared that item) so the file could open. Save the file again to keep the repair. |
+| "This file was repaired as it opened" | An older version let a shared TRU's phases get out of step between the two analyses, or did not pass a change of a top-level item's voltage or AC / DC down to the items beneath it. The program linked the matching phases (or un-shared that item), or gave those items their parent's voltage and AC / DC, so the file could open and calculate correctly. Check the numbers, then save the file again to keep the repair. |
 | Work is missing after reopening the browser | The auto-save is per browser and may have been cleared. Keep an exported `.json` or a connected Word report. |
 | The Open/Save dialogs look different | You are in a browser without file-system access; files are downloaded instead. Use Chrome or Edge for the full feature set. |
 

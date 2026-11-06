@@ -9,6 +9,18 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.19 — 2026-11-05 (testing build)
+
+The other two items of the November list: voltage and AC / DC changes reach the whole branch, and the TRU Input / Output fields behave.
+
+- **Voltage and AC / DC now pass all the way down.** Changing a top-level item's voltage or AC / DC (in the grid or the Edit Item dialog), or a TRU / converter output's voltage,
+  changes every item beneath it, not just the display of the first level. It stops at a converter input (which takes the voltage only), since the output side has its own voltage.
+  If the change would be invalid for something below (AC to DC with a TRU or other converter underneath, or phase-labeled items going to DC), a message lists those items and nothing is changed.
+- **Files saved earlier are repaired when opened.** Items whose stored voltage / AC-DC does not follow their parent's (what the old behavior left behind) are corrected,
+  with the usual "This file was repaired as it opened" notice.
+- **TRU Calculate:** the side you changed is the source; the other side is cleared and recalculated from it after the usual question (it used to rewrite the value the other side already held).
+- **TRU OK:** if only one of Input / Output was changed and the other no longer matches, a question offers **Recalculate**, **Keep As Entered** (a deliberate difference) or **Cancel**.
+
 ## 0.9.18 — 2026-11-05 (testing build)
 
 Five of the seven items in the November request list (the voltage cascade and the TRU Calculate/OK fixes follow in 0.9.19).

@@ -6179,6 +6179,28 @@ Requests 1, 2, 4, 6 and 7 of the 2026-11-05 list (3 and 5 are §97). Decisions t
 
 **Verified** in the browser pane with the sample project (button names, Yes/No/Cancel paths, the child button with no override, a blank override object and a real one, the two Existing leaf items now having tables, the Word vertical builder, the TRU copy check above).
 
+## 97. Version 0.9.19 — Voltage / AC-DC Down the Branch, and TRU Input / Output
+
+Requests 3 and 5 of the 2026-11-05 list (the rest are §96).
+
+**Request 3.** A root's voltage / AC-DC change reached only the first level. Cause: only a root (and a conversion output's voltage) holds its own value; a child's stored value was set when it was created, and the grid / Edit dialog only *display* the parent's
+(`gridVoltAcdcInfo`). Children's stored values drive the calculations, so nothing below the root changed.
+- `voltAcdcWalk(nodes,rootId,V,AC)` returns the `targets` (items to receive the value) and `issues`. A conversion input takes the voltage only and the walk stops there (the output keeps its own voltage and branch); a conversion input whose type needs
+  the other AC/DC (`CONV_IN_ACDC`) is an issue, and so is a phase-labeled item under a change to DC. `voltAcdcApply` writes the targets.
+- `applyVoltAcdcChange` (grid root row voltage / AC-DC fields) and the Edit dialog's `doEditSave` (only when the field is editable per `gridVoltAcdcInfo`) run the walk first. **Decision changed while building:** the /grill-me round offered "apply to everything else, skipping
+  the invalid items"; that would leave a TRU hanging off a DC bus, so any issue now refuses the whole change with an alert listing the items (`voltAcdcConfirm`), which the user can resolve by changing or moving them first. A voltage-only change has no issues.
+- A conversion output's voltage (TRU save, the other conversion types' Edit paths) is passed down its own branch the same way.
+- `repairVoltAcdcInheritance` (load): for every root and conversion output, targets whose stored value differs are corrected, noted in `importRepairNotes` ("N item(s) below "X" did not follow its voltage / AC-DC…"). Values entered are not converted; they are re-read under the new voltage / AC-DC
+  by the normal calculation (DC items keep amps, AC items keep W / VAR).
+- Verified with the sample project: 115 to 230 V reaches all 19 AC items and leaves the 28 V DC side alone; AC to DC is refused (lists the seven TRUs) with nothing changed; a TRU output 28 to 24 V reaches its feeder and breaker; a copy of the file with the root at 200 V and children at 115 V opens
+  with 16 items corrected; a clean file loads with no notice. The Edit dialog's save and refusal were exercised too.
+
+**Request 5.** `calcConvPairRow` with values on both sides keeps each as it is, so Calculate's "Recalculate IN?" re-wrote what IN already held, and Save kept whatever was typed on each side without comment.
+- `efTruRowPlan(key)` (`cap` / `ld`): the side the user changed (`efTruFieldChanged`, which now also snapshots the four OUT fields) is the source; if neither or both changed, the side shown (`efConvView`); a side with no values hands over to the other. The other side is derived from the source alone.
+- **Calculate:** fills the source side's blanks; if the other side is blank or already agrees (0.2 % / 0.001), it is filled silently; otherwise it asks and then overwrites that side's fields (phase and total for IN). Blanks used to prompt too.
+- **OK:** `doSave` (now async) asks `efTruSavePrompt` first when exactly one side of a row was changed and the other differs: **Recalculate** (the source is the only input of `calcConvPairRow` for that row), **Keep As Entered** (stored as typed, as before) or **Cancel**. `efSwitchSibling` awaits it.
+- Verified with TRU 1 (A) of the sample: OUT capacity 100 A / 2800 W then Calculate gave IN 3467.49 VA total (= 2800 / (0.85 x 0.95)); OK with OUT existing load changed: Cancel kept the dialog open, Keep As Entered stored only OUT, Recalculate set each IN phase to 700 / (0.85 x 0.95) / 3; a consistent TRU gives no question.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

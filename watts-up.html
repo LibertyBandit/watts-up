@@ -1293,7 +1293,10 @@ with the project.</p>
 <ul>
 <li><strong>Parent Item</strong> — move the item to another parent, or choose <em>No Parent (New Root)</em> to make it a top-level item.</li>
 <li><strong>Identity</strong> — Item Type, Status, Volts, AC / DC, Description, optional Ref Des (reference designator).
-  Volts and AC / DC are inherited from the parent and fixed where the parent decides them.</li>
+  Volts and AC / DC are inherited from the parent and fixed where the parent decides them. Changing them on a top-level item
+  (or a TRU's output volts) passes the change down to everything beneath it, as far as the next TRU or other converter, whose
+  output side keeps its own voltage. If the change would be invalid for something below (for example AC to DC with a TRU
+  underneath, or phase-labeled items), a message lists those items and nothing is changed.</li>
 <li><strong>Capacity</strong> — Cap (A) and Cap (W) for DC; Cap (A) and Cap (VA) for AC. Optional, but needed for the
   overload warning and the Reserve.</li>
 <li><strong>Existing Load</strong> — the load the item already carries (non-load items).</li>
@@ -1304,7 +1307,10 @@ with the project.</p>
 <li><strong>Load Value</strong> — for Load items (A, W, and for AC also VA, VAR, pf).</li>
 <li><strong>Conversion Parameters / TRU</strong> — efficiency and conversion power factor. A TRU has <strong>Input</strong> and
   <strong>Output</strong> panes with their own capacity and existing-load fields. Extra input phases can be added with
-  <strong>+ Parent</strong>.</li>
+  <strong>+ Parent</strong>. <strong>Calculate</strong> treats the side you changed as the source: it fills that side's blanks, and if the other side holds
+  different values it asks before recalculating them from the side you changed. When you press <strong>OK</strong> after changing only one side and
+  the other no longer matches, you are asked to <strong>Recalculate</strong> the other side, <strong>Keep As Entered</strong> (the two sides then differ
+  on purpose), or <strong>Cancel</strong>.</li>
 <li><strong>Phases</strong> — the <strong>Multi-phase</strong> option splits an eligible AC item into phase-mates (§4.5).</li>
 <li><strong>Siblings</strong> — shows the item's siblings; click one to edit it instead. If you have changed the current item, you are asked whether to accept those changes first (Yes applies them, No discards them, Cancel stays where you are).</li>
 <li><strong>Notes &amp; References</strong> — row notes and row references for this item (click to expand).</li>
@@ -1641,7 +1647,7 @@ a <code>.docx</code> or <code>.json</code>.</p>
 </tr>
 <tr>
 <td>"This file was repaired as it opened"</td>
-<td>An older version let a shared TRU's phases get out of step between the two analyses. The program linked the matching phases (or un-shared that item) so the file could open. Save the file again to keep the repair.</td>
+<td>An older version let a shared TRU's phases get out of step between the two analyses, or did not pass a change of a top-level item's voltage or AC / DC down to the items beneath it. The program linked the matching phases (or un-shared that item), or gave those items their parent's voltage and AC / DC, so the file could open and calculate correctly. Check the numbers, then save the file again to keep the repair.</td>
 </tr>
 <tr>
 <td>Work is missing after reopening the browser</td>
@@ -2933,6 +2939,7 @@ function migrateLegacy(p) {
     syncAllPhaseGroups(an.nodes);
   });
   repairPartlySharedGroups(p);
+  repairVoltAcdcInheritance(p);
   sanitizeTrack(p);
   installAnalysisView(p);
 }
@@ -2954,6 +2961,71 @@ function sanitizeTrack(p) {
       ['rowNoteDefs','references'].forEach(list=>{ if (!Array.isArray(b[list])) b[list]=[]; b[list].forEach(e=>{ if (!e||typeof e.key!=='string'||!IMPORT_ID_RE.test(e.key)) throw new Error('keys'); }); });
     });
   } catch(e) { p.track=null; importRepairNotes.push('the change-tracking data in this file was damaged and was removed (tracking is off)'); }
+}
+// ── VOLTAGE / AC-DC INHERITANCE (version 0.9.19) ─────────────────────────────
+// Only a root item (and a conversion output, for its voltage) has a voltage and AC/DC of its own; everything below
+// takes its parent's. The grid and the Edit dialog show a child's value as its parent's, but the value stored on
+// the child was only ever set when the child was created, so changing a root reached nothing in the calculations.
+// voltAcdcWalk lists what a new voltage / AC-DC means for every item below `rootId`:
+//  - targets: items to receive it ({id,voltage,acDc?}); a conversion input takes the voltage only (its AC/DC is fixed
+//    by its type) and the walk stops there, since the output side has a voltage of its own;
+//  - issues: items it would be invalid for — a conversion input whose type needs the other AC/DC, or a phase-labeled
+//    item under a change to DC. Those items and everything beneath them are left out of the targets, and the callers
+//    refuse the change (voltAcdcConfirm) rather than leave them under a parent that no longer fits.
+function voltAcdcWalk(nodes,rootId,V,AC) {
+  const targets=[], issues=[];
+  const visit=pid=>children(pid,nodes).forEach(c=>{
+    if (c.convRole==='out') return;
+    const need=CONV_IN_ACDC[c.type];
+    if (c.convRole==='in'||(need&&!isLoad(c.type))) {
+      if (need&&need!==AC) issues.push({id:c.id,msg:`${dispName(c,'a conversion item')} needs ${need.toUpperCase()} on its input side`});
+      else targets.push({id:c.id,voltage:V});
+      return;
+    }
+    if (c.phase&&AC==='dc') { issues.push({id:c.id,msg:`${dispName(c,'an item')} is phase-labeled, which needs AC`}); return; }
+    targets.push({id:c.id,voltage:V,acDc:AC});
+    visit(c.id);
+  });
+  visit(rootId);
+  return {targets,issues};
+}
+function voltAcdcApply(nodes,targets) {
+  targets.forEach(t=>{ const n=nodes[t.id]; if (!n) return; n.voltage=t.voltage; if (t.acDc) n.acDc=t.acDc; });
+}
+// A change of `n`'s own voltage / AC-DC, passed down its subtree. Returns false (nothing changed) when it is invalid for an item below.
+// An item the change is invalid for would be left hanging off a parent that no longer fits it (a TRU on a DC bus), so the
+// whole change is refused, with the list: nothing is changed until those items are changed or moved.
+function voltAcdcConfirm(issues,newV,newAcDc) {
+  if (!issues.length) return true;
+  const NL=String.fromCharCode(10);
+  const list=issues.slice(0,8).map(i=>'• '+i.msg).join(NL)+(issues.length>8?NL+'• …and '+(issues.length-8)+' more':'');
+  alert(`Can't change this to ${newAcDc.toUpperCase()}${newV!=null?' '+newV+' V':''}: it would be invalid for`+NL+NL+list+NL+NL+'Nothing was changed. Change or move those items first.');
+  return false;
+}
+function applyVoltAcdcChange(n,newV,newAcDc) {
+  const nodes=state.nodes;
+  const plan=voltAcdcWalk(nodes,n.id,newV,newAcDc);
+  if (!voltAcdcConfirm(plan.issues,newV,newAcDc)) return false;
+  n.voltage=newV; n.acDc=newAcDc;
+  voltAcdcApply(nodes,plan.targets);
+  return true;
+}
+// Loading a file: items below a root (or a conversion output) whose stored voltage / AC-DC doesn't follow their parent's —
+// what a change to a root left behind in versions before 0.9.19 — are corrected, and the user is told.
+function repairVoltAcdcInheritance(p) {
+  if (!p||!p.analyses) return;
+  ['ap','pcm'].forEach(id=>{
+    const an=p.analyses[id]; if (!an||!an.nodes||!Array.isArray(an.rootIds)) return;
+    const starts=[...an.rootIds.map(r=>an.nodes[r]), ...Object.values(an.nodes).filter(n=>n&&n.convRole==='out')].filter(Boolean);
+    starts.forEach(r=>{
+      const plan=voltAcdcWalk(an.nodes,r.id,r.voltage??null,r.acDc||'dc');
+      const diff=plan.targets.filter(t=>{ const n=an.nodes[t.id]; return n&&((n.voltage??null)!==(t.voltage??null)||(t.acDc&&n.acDc!==t.acDc)); });
+      if (!diff.length) return;
+      voltAcdcApply(an.nodes,diff);
+      const nm=String(r.description||'an item').replace(/[<>&"]/g,'?').slice(0,60);
+      importRepairNotes.push(`${diff.length} item(s) below "${nm}" did not follow its voltage / AC-DC (an older version did not pass a change down), so they were corrected`);
+    });
+  });
 }
 // Revision 83 follow-up (0.9.4): a phase group (including a TRU's input phases) must be shared with the
 // other analysis as a whole or not at all. Earlier versions let input phases be added to a shared TRU on
@@ -3653,7 +3725,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.18';
+const APP_VERSION='0.9.19';
 const APP_RELEASE_DATE='2026-10-29';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -5633,8 +5705,8 @@ function gridFieldChanged(e,renderFn){
     // inhibited "Existing" status option for Load items).
     if (isLoad(n.type)&&n.status==='existing') n.status='removed';
   }
-  else if (field==='voltage') n.voltage=parseF(evalFormula(el.value.trim()));
-  else if (field==='acdc') n.acDc=el.value;
+  else if (field==='voltage') { if (!applyVoltAcdcChange(n,parseF(evalFormula(el.value.trim())),n.acDc||'dc')) { renderAll(); return; } }
+  else if (field==='acdc') { if (!applyVoltAcdcChange(n,n.voltage??null,el.value)) { renderAll(); return; } }
   else if (field==='efficiency') { const eff=parseF(evalFormula(el.value.trim())); if (eff!==null&&eff>0&&eff<=1) n.efficiency=eff; }
   else if (field==='convPf') { const pf=parseF(evalFormula(el.value.trim())); if (pf!==null) n.convPf=pf; }
   else if (field==='capacity') gridCommitCapacity(n,el.dataset.key);
@@ -7540,6 +7612,49 @@ function efAttachAcCapDerive() {
   aEl.addEventListener('blur',()=>{ const a=parseF(aEl.value),v=getV(); if (a!==null&&v>0&&vaEl.value==='') vaEl.value=fmtPField(a*v); });
   vaEl.addEventListener('blur',()=>{ const va=parseF(vaEl.value),v=getV(); if (va!==null&&v>0&&aEl.value==='') aEl.value=fmtPField(va/v); });
 }
+// ── TRU IN <-> OUT (version 0.9.19) ──────────────────────────────────────────
+// A TRU's capacity and existing load are held on both sides (IN: per phase and total; OUT: one pair). With values on both sides,
+// calcConvPairRow keeps each as it is, so editing one side never reached the other — and the "Recalculate ..." prompt wrote back
+// what the other side already held. Now the side the user changed is the source: the other side is derived from it alone.
+const EF_TRU_ROWS={
+  cap:{what:'capacity',inIds:['ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw'],outIds:['ef-tru-out-cap-a','ef-tru-out-cap-vaw']},
+  ld: {what:'existing load',inIds:['ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw'],outIds:['ef-tru-out-ld-a','ef-tru-out-ld-vaw']}
+};
+function efTruRowPlan(key) {
+  const R=EF_TRU_ROWS[key];
+  const getV=id=>{const el=document.getElementById(id);return el?parseF(el.value):null;};
+  const inV=parseF(document.getElementById('ef-tru-in-volts').value)||0;
+  const outV=getV('ef-tru-out-volts')??inV;
+  const eff=getV('ef-tru-eff')||0.85, cpf=getV('ef-tru-convpf')||1.0;
+  const nIn=efTruNInputs();
+  const res=efTruResolvePhasePair(R.inIds[0],R.inIds[1],R.inIds[2],R.inIds[3],nIn,inV,getV);
+  const inA=res.phaseA!=null?res.phaseA*nIn:null, inVAW=res.phaseVAW!=null?res.phaseVAW*nIn:null;
+  const outA=getV(R.outIds[0]), outVAW=getV(R.outIds[1]);
+  const hasIn=inA!=null||inVAW!=null, hasOut=outA!=null||outVAW!=null;
+  const inCh=R.inIds.some(efTruFieldChanged), outCh=R.outIds.some(efTruFieldChanged);
+  let src=(outCh&&!inCh)?'out':(inCh&&!outCh)?'in':efConvView;
+  if (src==='in'&&!hasIn&&hasOut) src='out'; else if (src==='out'&&!hasOut&&hasIn) src='in';
+  const inAc=CONV_IN_ACDC.TRU, outAc=CONV_OUT_ACDC.TRU;
+  const row=src==='in'?calcConvPairRow(inA,inVAW,null,null,inAc,outAc,inV,outV,eff,cpf):calcConvPairRow(null,null,outA,outVAW,inAc,outAc,inV,outV,eff,cpf);
+  const other=src==='in'?{a:outA,vaw:outVAW}:{a:inA,vaw:inVAW}, derived=src==='in'?row.out:row.in;
+  const near=(x,y)=>x==null||y==null||Math.abs(x-y)<=Math.max(1e-3,0.002*Math.abs(y));
+  const differs=(other.a!=null||other.vaw!=null)&&!(near(other.a,derived.a)&&near(other.vaw,derived.vaw));
+  return {key,what:R.what,src,other:src==='in'?'out':'in',row,nIn,differs,oneSided:inCh!==outCh};
+}
+// Save on a TRU: when only one side of capacity / existing load was changed and the other side no longer matches, ask what to do.
+// Returns 'recalc', 'keep', null (nothing to ask) or 'cancel'.
+let efTruSaveChoice=null;
+async function efTruSavePrompt() {
+  const plans=['cap','ld'].map(efTruRowPlan).filter(p=>p.oneSided&&p.differs);
+  if (!plans.length) return null;
+  const what=plans.map(p=>`the ${p.src.toUpperCase()} ${p.what} was changed and no longer matches the ${p.other.toUpperCase()} ${p.what}`).join('; ');
+  const choice=await showChoiceDialog({
+    title:'TRU Input and Output',
+    message:`${what.charAt(0).toUpperCase()+what.slice(1)}. Recalculate the other side from the side you changed, or keep both as entered?`,
+    options:[{label:'Recalculate',value:'recalc',primary:true},{label:'Keep As Entered',value:'keep'},{label:'Cancel',value:'cancel'}]
+  });
+  return choice||'cancel';
+}
 function doEditCalculate() {
   const acDc=document.getElementById('ef-acdc').value;
   const v=parseF(document.getElementById('ef-voltage').value)||0;
@@ -7603,35 +7718,20 @@ function doEditCalculate() {
     const nInputs=efTruNInputs();
     const setForce=(id,val)=>{if(val===null||val===undefined)return;const el=g(id);if(el)el.value=fmtPField(val)??'';};
 
-    const truCalcRow=(totalAId,totalVAWId,phaseAId,phaseVAWId,outAId,outVAWId,offsideMsg)=>{
-      // Feeds the *combined total* across all inputs into calcConvPairRow (not a single phase's
-      // value) — matches calcNC's own outW/efficiency/nInputs relationship (Phase 1); a single
-      // phase's value alone would understate the derived OUT side by a factor of nInputs.
-      // See doEditSaveTru's identical comment — Existing Load's fields always start at a real
-      // "0", so a plain current-value check can't tell "left alone" apart from "explicitly
-      // re-entered zero."
-      const resolved=efTruResolvePhasePair(totalAId,totalVAWId,phaseAId,phaseVAWId,nInputs,inV,getV);
-      const totalInA=resolved.phaseA!=null?resolved.phaseA*nInputs:null;
-      const totalInVAW=resolved.phaseVAW!=null?resolved.phaseVAW*nInputs:null;
-      const row=calcConvPairRow(totalInA,totalInVAW,getV(outAId),getV(outVAWId),inAcDc,outAcDc,inV,outV,eff,cpf);
-      const rowInPhaseA=row.in.a!=null?row.in.a/nInputs:null;
-      const rowInPhaseVAW=row.in.vaw!=null?row.in.vaw/nInputs:null;
-      if (efConvView==='in') {
-        setIfEmpty(phaseAId,rowInPhaseA);setIfEmpty(phaseVAWId,rowInPhaseVAW);
-        setIfEmpty(totalAId,row.in.a);setIfEmpty(totalVAWId,row.in.vaw);
-        if ((row.out.a!=null||row.out.vaw!=null)&&confirm(offsideMsg)) { setForce(outAId,row.out.a);setForce(outVAWId,row.out.vaw); }
-      } else {
-        setIfEmpty(outAId,row.out.a);setIfEmpty(outVAWId,row.out.vaw);
-        if ((row.in.a!=null||row.in.vaw!=null)&&confirm(offsideMsg)) {
-          setForce(phaseAId,rowInPhaseA);setForce(phaseVAWId,rowInPhaseVAW);
-          setForce(totalAId,row.in.a);setForce(totalVAWId,row.in.vaw);
-        }
-      }
+    const truCalcRow=key=>{
+      // The side the user changed is the source (the one shown, if neither or both changed): its own blanks are filled in, and the other
+      // side is derived from it alone. Where the other side holds different values it is overwritten only after asking; blanks fill silently.
+      const plan=efTruRowPlan(key), R=EF_TRU_ROWS[key], row=plan.row;
+      const inPhaseA=row.in.a!=null?row.in.a/nInputs:null, inPhaseVAW=row.in.vaw!=null?row.in.vaw/nInputs:null;
+      const setIn=f=>{ f(R.inIds[2],inPhaseA);f(R.inIds[3],inPhaseVAW);f(R.inIds[0],row.in.a);f(R.inIds[1],row.in.vaw); };
+      const setOut=f=>{ f(R.outIds[0],row.out.a);f(R.outIds[1],row.out.vaw); };
+      const fillSrc=plan.src==='in'?setIn:setOut, fillOther=plan.src==='in'?setOut:setIn;
+      fillSrc(setIfEmpty);
+      if (!plan.differs) fillOther(setIfEmpty);
+      else if (confirm(`Recalculate the ${plan.other.toUpperCase()} ${plan.what} values${plan.other==='in'?' (all input phases)':''} from the ${plan.src.toUpperCase()} values?`)) fillOther(setForce);
     };
-    truCalcRow('ef-tru-cap-total-a','ef-tru-cap-total-vaw','ef-tru-cap-phase-a','ef-tru-cap-phase-vaw','ef-tru-out-cap-a','ef-tru-out-cap-vaw',
-      efConvView==='in'?'Recalculate OUT capacity values?':'Recalculate IN capacity values (all input phases)?');
-    truCalcRow('ef-tru-ld-total-a','ef-tru-ld-total-vaw','ef-tru-ld-phase-a','ef-tru-ld-phase-vaw','ef-tru-out-ld-a','ef-tru-out-ld-vaw',
-      efConvView==='in'?'Recalculate OUT existing load values?':'Recalculate IN existing load values (all input phases)?');
+    truCalcRow('cap');
+    truCalcRow('ld');
   } else if (acDc==='ac') {
     // AC cap: A ↔ VA
     const ca=getV('ef-cap-a2'),cva=getV('ef-cap-va');
@@ -7679,7 +7779,7 @@ async function efSwitchSibling(targetId) {
       options:[{label:'Yes',value:'yes',primary:true},{label:'No',value:'no'},{label:'Cancel',value:'cancel'}]
     });
     if (!choice||choice==='cancel') return;
-    if (choice==='yes') { doSave(); if (mMode==='edit') return; }   // still open: the save was refused, so stay on this item
+    if (choice==='yes') { await doSave(); if (mMode==='edit') return; }   // still open: the save was refused, so stay on this item
     else closeModal();
   } else closeModal();
   openEdit(targetId);
@@ -7869,6 +7969,8 @@ function openEdit(nodeId) {
     document.getElementById('ef-tru-out-ld-a').value=fmtPField(outNode?.existingLoad?.a??0);
     document.getElementById('ef-tru-out-ld-vaw').value=
       fmtPField((outAcDc==='ac'?outNode?.existingLoad?.va:outNode?.existingLoad?.w)??0);
+    // Version 0.9.19: the OUT side's opening values too, so a change on either side can be told from no change.
+    ['ef-tru-out-cap-a','ef-tru-out-cap-vaw','ef-tru-out-ld-a','ef-tru-out-ld-vaw'].forEach(id=>{ efTruInitialVals[id]=document.getElementById(id).value; });
 
     document.getElementById('ef-tru-eff-msg').classList.add('hidden');
     document.getElementById('ef-tru-addparent-btn').onclick=efTruAddParent;
@@ -8071,7 +8173,10 @@ function doEditSaveTru(n) {
     'ef-tru-cap-phase-a','ef-tru-cap-phase-vaw',nInputs,inV,pF);
   const capTotalA=capPhase.phaseA!=null?capPhase.phaseA*nInputs:null;
   const capTotalVAW=capPhase.phaseVAW!=null?capPhase.phaseVAW*nInputs:null;
-  const capRow=calcConvPairRow(capTotalA,capTotalVAW,pF('ef-tru-out-cap-a'),pF('ef-tru-out-cap-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
+  // Version 0.9.19: after "Recalculate" the side that was changed is the only source for its row (see efTruRowPlan).
+  const srcOf=key=>{ if (efTruSaveChoice!=='recalc') return null; const pl=efTruRowPlan(key); return (pl.oneSided&&pl.differs)?pl.src:null; };
+  const capSrc=srcOf('cap'), ldSrc=srcOf('ld');
+  const capRow=calcConvPairRow(capSrc==='out'?null:capTotalA,capSrc==='out'?null:capTotalVAW,capSrc==='in'?null:pF('ef-tru-out-cap-a'),capSrc==='in'?null:pF('ef-tru-out-cap-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
   const capInPhaseA=capRow.in.a!=null?capRow.in.a/nInputs:null;
   const capInPhaseVAW=capRow.in.vaw!=null?capRow.in.vaw/nInputs:null;
 
@@ -8079,7 +8184,7 @@ function doEditSaveTru(n) {
     'ef-tru-ld-phase-a','ef-tru-ld-phase-vaw',nInputs,inV,pF);
   const ldTotalA=ldPhase.phaseA!=null?ldPhase.phaseA*nInputs:null;
   const ldTotalVAW=ldPhase.phaseVAW!=null?ldPhase.phaseVAW*nInputs:null;
-  const ldRow=calcConvPairRow(ldTotalA,ldTotalVAW,pF('ef-tru-out-ld-a'),pF('ef-tru-out-ld-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
+  const ldRow=calcConvPairRow(ldSrc==='out'?null:ldTotalA,ldSrc==='out'?null:ldTotalVAW,ldSrc==='in'?null:pF('ef-tru-out-ld-a'),ldSrc==='in'?null:pF('ef-tru-out-ld-vaw'),inAcDc,outAcDc,inV,outV,eff,cpf);
   const ldInPhaseA=ldRow.in.a!=null?ldRow.in.a/nInputs:null;
   const ldInPhaseVAW=ldRow.in.vaw!=null?ldRow.in.vaw/nInputs:null;
 
@@ -8108,6 +8213,7 @@ function doEditSaveTru(n) {
     outNode.description=document.getElementById('ef-tru-out-desc').value.trim();
     outNode.refDes=document.getElementById('ef-tru-out-refdes').value.trim();
     outNode.voltage=outV;
+    voltAcdcApply(state.nodes,voltAcdcWalk(state.nodes,outNode.id,outV,outNode.acDc||'dc').targets);   // 0.9.19: and down its branch
     outNode.capacity=capForOutput;
     outNode.existingLoad=ldForOutput;
     outNode.netChangeOverride=null;
@@ -8229,6 +8335,15 @@ function doEditSave() {
   }
   data.description=document.getElementById('ef-desc').value.trim();
   data.refDes=document.getElementById('ef-refdes').value.trim();
+  // Version 0.9.19: a new voltage / AC-DC on a root (or a conversion output's voltage) goes down the whole branch.
+  let cascadePlan=null;
+  {
+    const vi=gridVoltAcdcInfo(n);
+    if ((vi.vEditable&&(voltage??null)!==(n.voltage??null))||(vi.acEditable&&acDc!==n.acDc)) {
+      cascadePlan=voltAcdcWalk(state.nodes,mNode,voltage??null,acDc);
+      if (!voltAcdcConfirm(cascadePlan.issues,voltage??null,acDc)) return;
+    }
+  }
 
   // parent/sibling-order management
   // A group of phase-mates moves by its plan (each mate under the parent phase-mate with its own
@@ -8309,12 +8424,14 @@ function doEditSave() {
         paired.capacity=mkCap(capRow.out,outAcDc);
         paired.existingLoad=mkLd(ldRow.out,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
         paired.voltage=outV;
+        voltAcdcApply(state.nodes,voltAcdcWalk(state.nodes,paired.id,outV,paired.acDc||'dc').targets);
       }
     } else {
       data.capacity=mkCap(capRow.out,outAcDc);
       data.existingLoad=mkLd(ldRow.out,outAcDc,outV,outAcDc==='ac'?cpf:1.0);
       data.netChangeOverride=null;
       data.voltage=outV;
+      voltAcdcApply(state.nodes,voltAcdcWalk(state.nodes,mNode,outV,n.acDc||'dc').targets);
       if (paired) {
         // Efficiency/Conv. PF belong to the IN node's own fields — always persisted there
         // (paired, when editing from OUT) regardless of which side you opened Edit on.
@@ -8352,6 +8469,7 @@ function doEditSave() {
   if (clearExistingLoadOnSave) data.existingLoad=mkPow();
   if (clearNetChangeOnSave) data.netChangeOverride=null;
   efPrimarySaved=true;
+  if (cascadePlan) voltAcdcApply(state.nodes,cascadePlan.targets);
   updateNode(mNode,data);
   if (!efGroupSaving) closeModal();
 }
@@ -8663,7 +8781,15 @@ function doAddSave() {
   batchCommit();closeModal();
 }
 
-function doSave() { if (mBlocked) return; if (mMode==='edit') doEditSave(); else if (mMode==='add') doAddSave(); }
+async function doSave() {
+  if (mBlocked) return;
+  if (mMode==='edit') {
+    efTruSaveChoice=null;
+    const n=state.nodes[mNode];
+    if (n&&n.convRole&&n.type==='TRU') { const ch=await efTruSavePrompt(); if (ch==='cancel') return; efTruSaveChoice=ch; }
+    doEditSave();
+  } else if (mMode==='add') doAddSave();
+}
 
 // ── PRINT ─────────────────────────────────────────────────────────────────────
 function buildPrint() {
