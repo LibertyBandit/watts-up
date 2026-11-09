@@ -1,1 +1,7 @@
 .claude/
+
+# reference material and customer data: never commit
+Archive/
+EZAP Form/
+Project Support/
+WattsUp_*.json
