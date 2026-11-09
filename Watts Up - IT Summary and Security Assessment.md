@@ -117,9 +117,7 @@ with that user's own permissions.
 
 ## 6. Deployment checklist
 
-1. Publish **only** `watts-up.html` (and, if wanted, the requirements/help documents). Do **not** copy the rest of
-   the development folder: it contains spreadsheets, test project files with real customer data and a workbook
-   whose file name contains a password.
+1. Publish **only** `watts-up.html` (and, if wanted, the requirements/help documents).
 2. Place it on a **read-only** location for users; restrict write access to the owner/IT.
 3. Record its SHA-256 (§9) and check it after any file-share maintenance.
 4. Serve it from its own host name or port if it is on a web server, or have users open a local copy.
