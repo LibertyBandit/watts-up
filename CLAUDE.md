@@ -18,13 +18,13 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 | `RELEASING.md` | Version numbering and the release checklist. |
 | `Watts Up - User Guide.md` / `.docx` | Guide source / generated Word copy. |
 | `Watts Up - IT Summary and Security Assessment.md` / `.docx` | IT review document; §9 holds the SHA-256 of `watts-up.html`. |
-| `tools/` | `package-docs.sh` (rebuilds guide, Word copies, IT hash), `build-guide.py`, `md2docx.py`, `regression-checks.js`, `regression-tracking.js`, `test-upload-server.py`. |
+| `tools/` | `package-docs.sh` (rebuilds guide, Word copies, IT hash), `build-guide.py`, `md2docx.py`, `regression-checks.js`, `regression-tracking.js`, `test-upload-server.py`, `serve.py` (preview server). |
 
 Edit the `.md` files; the `.docx` files are regenerated and any hand edit to them is lost. Everything else in the folder (spreadsheets, `Archive*`, `WattsUp_*.json`, customer Word reports) is reference or customer data: never commit it, never publish it.
 
 ## Running and checking
 
-- Preview: `.claude/launch.json` defines `watts-up` (`py -m http.server 3131`); open `http://localhost:3131/watts-up.html` in the built-in browser. Add a `?v=N` query to dodge caching.
+- Preview: `.claude/launch.json` defines `watts-up` (`py -3 tools/serve.py 3131`, a threaded server: the default Python here is 3.6, whose plain `http.server` is single-threaded and hangs the browser pane); open `http://localhost:3131/watts-up.html` in the built-in browser (or the port the preview reports, if 3131 is taken). Add a `?v=N` query to dodge caching.
 - Regression loops live in `tools/regression-*.js`; run them in the browser pane with `(0,eval)(await (await fetch('/tools/regression-checks.js')).text())`, then call the `window.__…` functions they define (`__moveSynthetic`, `__trkReject`, `__trkNotesRefs`, …).
 - Word output is checked by generating a report in the page (`fillBlankWattsUpDocx`), POSTing it to `tools/test-upload-server.py`, and inspecting it through Word COM (PowerShell), not by eye.
 - `tools/package-docs.sh` needs Python 3 with `markdown` and `python-docx`.
