@@ -9,6 +9,15 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.20 — 2026-11-08 (testing build)
+
+A voltage change now keeps amps and power in step, or tells you when they are not.
+
+- **A question after a voltage (or AC / DC) change.** When items beneath the changed item hold amps and power entered at the old voltage, you choose **Keep Power** (amps recalculated), **Keep Amps** (VA / watts
+  recalculated), **Leave As Entered** or **Cancel**. Applies to the grid and the Edit Item dialog, and to a TRU output's voltage (its own values and the branch beneath it).
+- **New warning W7: amps and power disagree.** Flags an item whose amps times voltage does not match its VA (AC) or watts (DC) in capacity, existing load, load value or net change override (1 % tolerance).
+  It catches whatever was left as entered, and any hand-typed mismatch.
+
 ## 0.9.19 — 2026-11-05 (testing build)
 
 The other two items of the November list: voltage and AC / DC changes reach the whole branch, and the TRU Input / Output fields behave.

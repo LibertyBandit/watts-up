@@ -1296,7 +1296,10 @@ with the project.</p>
   Volts and AC / DC are inherited from the parent and fixed where the parent decides them. Changing them on a top-level item
   (or a TRU's output volts) passes the change down to everything beneath it, as far as the next TRU or other converter, whose
   output side keeps its own voltage. If the change would be invalid for something below (for example AC to DC with a TRU
-  underneath, or phase-labeled items), a message lists those items and nothing is changed.</li>
+  underneath, or phase-labeled items), a message lists those items and nothing is changed. Otherwise, if the items below hold
+  amps and power entered at the old voltage, you are asked what stays fixed: <strong>Keep Power</strong> (VA or watts stay, amps are
+  recalculated; right for loads), <strong>Keep Amps</strong> (amps stay, VA or watts are recalculated; right for breaker and feeder ratings)
+  or <strong>Leave As Entered</strong> (warning W7 then marks every item whose amps and power no longer agree). <strong>Cancel</strong> changes nothing.</li>
 <li><strong>Capacity</strong> — Cap (A) and Cap (W) for DC; Cap (A) and Cap (VA) for AC. Optional, but needed for the
   overload warning and the Reserve.</li>
 <li><strong>Existing Load</strong> — the load the item already carries (non-load items).</li>
@@ -1399,6 +1402,10 @@ or <strong>all phases</strong>. A TRU can be fed from several phases; its total 
 <tr>
 <td>W6</td>
 <td><strong>Phase load unbalance</strong> on a generator or alternator: the spread between the heaviest and lightest phase exceeds 3.33 % of one phase of the generator's rating (MIL-E-7016F).</td>
+</tr>
+<tr>
+<td>W7</td>
+<td><strong>Amps and power disagree:</strong> an item's amps times its voltage does not match its VA (AC) or watts (DC) in capacity, existing load, load value or net change override, beyond a 1 % tolerance. Usually the result of changing a voltage and leaving the values as entered; retype the amps or the power, or change the voltage back.</td>
 </tr>
 </tbody>
 </table>
@@ -3002,12 +3009,74 @@ function voltAcdcConfirm(issues,newV,newAcDc) {
   alert(`Can't change this to ${newAcDc.toUpperCase()}${newV!=null?' '+newV+' V':''}: it would be invalid for`+NL+NL+list+NL+NL+'Nothing was changed. Change or move those items first.');
   return false;
 }
-function applyVoltAcdcChange(n,newV,newAcDc) {
+// ── amps vs power after a voltage / AC-DC change (version 0.9.20) ───────────
+// The cascade changes an item's voltage but not the amps, VA and watts entered beside it, which were consistent only at the old voltage.
+// The user chooses what stays fixed for every item the change touches: the power (amps are recalculated) or the amps (power is).
+const RB_FIELDS=[['capacity',true],['existingLoad',false],['loadValue',false],['netChangeOverride',false]];
+function rbApplies(n,f) { return f==='loadValue'?isLoad(n.type):hasCap(n.type); }
+function rbEntered(n) {
+  const nz=x=>x!==null&&x!==undefined&&!isNaN(x)&&x!==0;
+  return RB_FIELDS.some(([f])=>{ const g=n[f]; return rbApplies(n,f)&&g&&typeof g==='object'&&(nz(g.a)||nz(g.va)||nz(g.w)); });
+}
+function rebasePow(isCap,pow,oldAc,oldV,newAc,newV,mode) {
+  const has=x=>x!==null&&x!==undefined&&!isNaN(x);
+  if (!pow||typeof pow!=='object'||!(newV>0)) return pow;
+  const oldP=oldAc==='ac'?pow.va:pow.w;
+  const oldA=has(pow.a)?pow.a:(has(oldP)&&oldV>0?oldP/oldV:null);
+  if (![oldA,oldP,pow.w].some(x=>has(x)&&x!==0)) return pow;
+  if (isCap) {
+    if (mode==='power') return has(oldP)?computeCapacity(newAc,'vaw',null,oldP,newV):pow;
+    return has(oldA)?computeCapacity(newAc,'a',oldA,null,newV):pow;
+  }
+  if (mode==='power') {
+    if (newAc==='ac') return calcAcPowerGroup({w:pow.w,var:pow.var,va:pow.va,pf:pow.pf,a:null},newV);
+    const pw=has(pow.w)?pow.w:(has(pow.va)?pow.va:null);
+    return pw===null?pow:computeDcGroupValue('w',{a:null,w:pw},newV);
+  }
+  if (!has(oldA)) return pow;
+  if (newAc==='ac') return calcAcPowerGroup({a:oldA,va:null,w:null,var:null,pf:oldAc==='ac'?pow.pf:null},newV);
+  return computeDcGroupValue('a',{a:oldA,w:null},newV);
+}
+// What a change to `rootId` (voltage newV, AC/DC newAc) touches that carries entered values: {issues, items:[{id,oldV,oldAc}]}.
+// Taken BEFORE the change is written, since it records each item's present voltage and AC/DC.
+function voltRebasePlan(nodes,rootId,newV,newAc,includeRoot) {
+  const walk=voltAcdcWalk(nodes,rootId,newV,newAc);
+  const items=[];
+  const add=(id,nv,na)=>{
+    const n=nodes[id]; if (!n||!rbEntered(n)) return;
+    if ((n.voltage??null)===(nv??null)&&n.acDc===na) return;
+    items.push({id,oldV:n.voltage,oldAc:n.acDc});
+  };
+  if (includeRoot) add(rootId,newV,newAc);
+  walk.targets.forEach(t=>add(t.id,t.voltage,t.acDc||nodes[t.id].acDc));
+  return {issues:walk.issues,items};
+}
+async function voltRebaseAsk(plan) {
+  if (!plan.items.length) return 'none';
+  const n=plan.items.length;
+  const choice=await showChoiceDialog({
+    title:'Voltage Changed',
+    message:`${n} item${n===1?' holds':'s hold'} amps and power entered at the old voltage. Keep the power and recalculate the amps, keep the amps and recalculate the power, or leave the values as entered? (Values left as entered are flagged by warning W7 wherever amps and power no longer agree.)`,
+    options:[{label:'Keep Power',value:'power',primary:true},{label:'Keep Amps',value:'amps'},{label:'Leave As Entered',value:'leave'},{label:'Cancel',value:'cancel'}]
+  });
+  return choice||'cancel';
+}
+function voltRebaseApply(nodes,plan,mode) {
+  if (mode!=='power'&&mode!=='amps') return;
+  plan.items.forEach(it=>{
+    const n=nodes[it.id]; if (!n) return;
+    RB_FIELDS.forEach(([f,isCap])=>{ if (rbApplies(n,f)&&n[f]) n[f]=rebasePow(isCap,n[f],it.oldAc,it.oldV||0,n.acDc,n.voltage||0,mode); });
+  });
+}
+async function applyVoltAcdcChange(n,newV,newAcDc) {
   const nodes=state.nodes;
-  const plan=voltAcdcWalk(nodes,n.id,newV,newAcDc);
+  const plan=voltRebasePlan(nodes,n.id,newV,newAcDc,true);
   if (!voltAcdcConfirm(plan.issues,newV,newAcDc)) return false;
+  const mode=await voltRebaseAsk(plan);
+  if (mode==='cancel') return false;
   n.voltage=newV; n.acDc=newAcDc;
-  voltAcdcApply(nodes,plan.targets);
+  voltAcdcApply(nodes,voltAcdcWalk(nodes,n.id,newV,newAcDc).targets);
+  voltRebaseApply(nodes,plan,mode);
   return true;
 }
 // Loading a file: items below a root (or a conversion output) whose stored voltage / AC-DC doesn't follow their parent's —
@@ -3129,6 +3198,22 @@ function calcNC(node,nodes) {
   return deriveDcFromA(sumA,v);
 }
 
+// Which of an item's value groups hold amps and power that disagree at its own voltage (A x V against VA for AC, against W for DC).
+// A 1 % tolerance (at least 0.05) lets rounded entries pass. A group missing either figure is not judged.
+function ampsPowerMismatch(node) {
+  const v=node.voltage;
+  if (!(v>0)) return [];
+  const bad=[];
+  [['capacity','capacity',hasCap(node.type)],['existingLoad','existing load',hasCap(node.type)],['loadValue','load value',isLoad(node.type)],['netChangeOverride','net change override',hasCap(node.type)]].forEach(([f,label,applies])=>{
+    const g=node[f];
+    if (!applies||!g||typeof g!=='object') return;
+    const p=node.acDc==='ac'?g.va:g.w;
+    if (g.a===null||g.a===undefined||p===null||p===undefined) return;
+    const calc=g.a*v;
+    if (Math.abs(calc-p)>Math.max(0.01*Math.max(Math.abs(calc),Math.abs(p)),0.05)) bad.push(label);
+  });
+  return bad;
+}
 function warnNode(node,nodes) {
   const w=[];
   if (isLoad(node.type)) {
@@ -3158,6 +3243,9 @@ function warnNode(node,nodes) {
         w.push({code:'W4',message:`Existing load not entered — "${esc(dispName(node,''))}".`});
     }
   }
+  // Version 0.9.20: amps that no longer agree with the power beside them (typically after a voltage change).
+  const w7=ampsPowerMismatch(node);
+  if (w7.length) w.push({code:'W7',message:`Amps do not agree with ${node.acDc==='ac'?'VA':'W'} at ${node.voltage} V (${w7.join(', ')}) — "${esc(dispName(node,''))}".`});
   if (hasCap(node.type)&&node.status==='existing'&&nodes) {
     // W only — the VAR half of this check (comparing summed children VAR against the parent's
     // own VAR) is disabled: rounding/derivation noise accumulated through the calculation chain
@@ -3725,7 +3813,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.19';
+const APP_VERSION='0.9.20';
 const APP_RELEASE_DATE='2026-10-29';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -5673,7 +5761,7 @@ function buildNewRow(n,depth){
   </tr>`;
 }
 
-function gridFieldChanged(e,renderFn){
+async function gridFieldChanged(e,renderFn){
   const el=e.target; const row=el.closest('tr[data-nid]'); if (!row) return;
   const id=row.dataset.nid; const n=state.nodes[id]; if (!n) return;
   const field=el.dataset.field;
@@ -5705,8 +5793,8 @@ function gridFieldChanged(e,renderFn){
     // inhibited "Existing" status option for Load items).
     if (isLoad(n.type)&&n.status==='existing') n.status='removed';
   }
-  else if (field==='voltage') { if (!applyVoltAcdcChange(n,parseF(evalFormula(el.value.trim())),n.acDc||'dc')) { renderAll(); return; } }
-  else if (field==='acdc') { if (!applyVoltAcdcChange(n,n.voltage??null,el.value)) { renderAll(); return; } }
+  else if (field==='voltage') { if (!(await applyVoltAcdcChange(n,parseF(evalFormula(el.value.trim())),n.acDc||'dc'))) { renderAll(); return; } }
+  else if (field==='acdc') { if (!(await applyVoltAcdcChange(n,n.voltage??null,el.value))) { renderAll(); return; } }
   else if (field==='efficiency') { const eff=parseF(evalFormula(el.value.trim())); if (eff!==null&&eff>0&&eff<=1) n.efficiency=eff; }
   else if (field==='convPf') { const pf=parseF(evalFormula(el.value.trim())); if (pf!==null) n.convPf=pf; }
   else if (field==='capacity') gridCommitCapacity(n,el.dataset.key);
@@ -7643,7 +7731,7 @@ function efTruRowPlan(key) {
 }
 // Save on a TRU: when only one side of capacity / existing load was changed and the other side no longer matches, ask what to do.
 // Returns 'recalc', 'keep', null (nothing to ask) or 'cancel'.
-let efTruSaveChoice=null;
+let efTruSaveChoice=null, efVoltChoice=null;
 async function efTruSavePrompt() {
   const plans=['cap','ld'].map(efTruRowPlan).filter(p=>p.oneSided&&p.differs);
   if (!plans.length) return null;
@@ -8212,12 +8300,14 @@ function doEditSaveTru(n) {
     outNode.status=status;
     outNode.description=document.getElementById('ef-tru-out-desc').value.trim();
     outNode.refDes=document.getElementById('ef-tru-out-refdes').value.trim();
+    const rbTru=(efVoltChoice==='power'||efVoltChoice==='amps')?voltRebasePlan(state.nodes,outNode.id,outV,outNode.acDc||'dc',true):null;
     outNode.voltage=outV;
     voltAcdcApply(state.nodes,voltAcdcWalk(state.nodes,outNode.id,outV,outNode.acDc||'dc').targets);   // 0.9.19: and down its branch
     outNode.capacity=capForOutput;
     outNode.existingLoad=ldForOutput;
     outNode.netChangeOverride=null;
     syncSharedFields(outNode);
+    if (rbTru) voltRebaseApply(state.nodes,rbTru,efVoltChoice);   // 0.9.20: after the output's own values are stored, with the branch below it
   }
 
   if (state.nodes[mNode]) {
@@ -8469,8 +8559,10 @@ function doEditSave() {
   if (clearExistingLoadOnSave) data.existingLoad=mkPow();
   if (clearNetChangeOnSave) data.netChangeOverride=null;
   efPrimarySaved=true;
+  const rbPlan=(cascadePlan&&(efVoltChoice==='power'||efVoltChoice==='amps'))?voltRebasePlan(state.nodes,mNode,voltage??null,acDc,true):null;
   if (cascadePlan) voltAcdcApply(state.nodes,cascadePlan.targets);
   updateNode(mNode,data);
+  if (rbPlan) { voltRebaseApply(state.nodes,rbPlan,efVoltChoice); recalc(); persist(); renderAll(); }
   if (!efGroupSaving) closeModal();
 }
 
@@ -8786,7 +8878,24 @@ async function doSave() {
   if (mMode==='edit') {
     efTruSaveChoice=null;
     const n=state.nodes[mNode];
-    if (n&&n.convRole&&n.type==='TRU') { const ch=await efTruSavePrompt(); if (ch==='cancel') return; efTruSaveChoice=ch; }
+    efVoltChoice=null;
+    if (n&&n.convRole&&n.type==='TRU') {
+      const ch=await efTruSavePrompt(); if (ch==='cancel') return; efTruSaveChoice=ch;
+      // a changed output voltage goes down the branch below the output: ask what to keep
+      const outN=findConversionGroup(n)&&findConversionGroup(n).output, newOutV=parseF(document.getElementById('ef-tru-out-volts').value);
+      if (outN&&newOutV!==null&&newOutV!==(outN.voltage??null)) {
+        const pl=voltRebasePlan(state.nodes,outN.id,newOutV,outN.acDc||'dc',true);
+        if (!pl.issues.length) { const m=await voltRebaseAsk(pl); if (m==='cancel') return; efVoltChoice=m; }
+      }
+    } else if (n&&!n.convRole) {
+      const vi=gridVoltAcdcInfo(n);
+      let newV=null; try { newV=parseF(evalFormula(document.getElementById('ef-voltage').value.trim())); } catch(e) {}
+      const newAc=document.getElementById('ef-acdc').value;
+      if ((vi.vEditable&&(newV??null)!==(n.voltage??null))||(vi.acEditable&&newAc!==n.acDc)) {
+        const pl=voltRebasePlan(state.nodes,n.id,newV??null,newAc,true);
+        if (!pl.issues.length) { const m=await voltRebaseAsk(pl); if (m==='cancel') return; efVoltChoice=m; }
+      }
+    }
     doEditSave();
   } else if (mMode==='add') doAddSave();
 }

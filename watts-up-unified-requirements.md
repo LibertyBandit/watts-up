@@ -6201,6 +6201,22 @@ Requests 3 and 5 of the 2026-11-05 list (the rest are §96).
 - **OK:** `doSave` (now async) asks `efTruSavePrompt` first when exactly one side of a row was changed and the other differs: **Recalculate** (the source is the only input of `calcConvPairRow` for that row), **Keep As Entered** (stored as typed, as before) or **Cancel**. `efSwitchSibling` awaits it.
 - Verified with TRU 1 (A) of the sample: OUT capacity 100 A / 2800 W then Calculate gave IN 3467.49 VA total (= 2800 / (0.85 x 0.95)); OK with OUT existing load changed: Cancel kept the dialog open, Keep As Entered stored only OUT, Recalculate set each IN phase to 700 / (0.85 x 0.95) / 3; a consistent TRU gives no question.
 
+## 98. Version 0.9.20 — Amps and Power After a Voltage Change; Warning W7
+
+**Problem.** The 0.9.19 cascade changes an item's voltage but not the amps, VA and watts entered beside it, which were consistent only at the old voltage (the user found this testing the cascade). Considered: leaving it with a note, refusing the change, prompting, warning.
+The user chose a prompt plus a warning ("items 1 and 2" of the proposal), without the per-field default rule.
+
+1. **W7** (`ampsPowerMismatch`, called from `warnNode`): for capacity, existing load, load value and net change override, A x V against VA (AC) or W (DC) when both are present and the item has a voltage; tolerance max(1 % of the larger, 0.05). A group missing either figure is not judged.
+   Shown like the other warnings (yellow row / banner). The sample project and both analyses produce none.
+2. **The question** (`voltRebaseAsk`): `voltRebasePlan` lists the items the change touches that carry entered values (`rbEntered`: a non-zero A, VA or W in a group that applies to the type), taken before anything is written; if there are any the user picks
+   **Keep Power** / **Keep Amps** / **Leave As Entered** / **Cancel**. `voltRebaseApply` then rewrites those groups with `rebasePow` (Keep Power: capacity through `computeCapacity` from the power, other groups through `calcAcPowerGroup` / `computeDcGroupValue` from W, VAR, VA, pf;
+   Keep Amps: from the amps, keeping the pf of an AC group). It handles an AC/DC change as well (AC to DC keeps real power or the amps; DC to AC starts from W or the amps at unity pf).
+   - Grid root row: `applyVoltAcdcChange` (now async; `gridFieldChanged` awaits it) includes the root itself.
+   - Edit dialog: `doSave` asks (after the invalid-change refusal would apply, it does not ask), `doEditSave` rebases the root and the branch after `updateNode` and recalculates again.
+   - TRU: a changed output voltage asks in `doSave`; `doEditSaveTru` rebases the output's own capacity / existing load (after they are stored) and the branch below it. For the other conversion types' Edit paths the cascade stays and W7 does the flagging.
+3. **Verified** with the sample project: changing the root 115 to 200 V with Keep Power leaves every VA and recalculates the amps (TRU 1 (A) capacity 15.08 A to 8.67 A at 1733.7 VA); Keep Amps leaves the amps (VA 3015.2); Leave As Entered gives W7 on all 19 AC items; Cancel changes nothing.
+   Edit dialog on the root with Keep Power: root capacity 160000 VA / 800 A at 200 V, no W7. TRU output 28 to 24 V: Keep Power gives 4200 W / 175 A, Keep Amps 3600 W / 150 A, Leave gives W7 on the output and its two children. Unit checks of `rebasePow` for AC/DC flips.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

@@ -157,7 +157,10 @@ Open it with **Edit** (tree) or **✎** (grids). Sections appear according to th
   Volts and AC / DC are inherited from the parent and fixed where the parent decides them. Changing them on a top-level item
   (or a TRU's output volts) passes the change down to everything beneath it, as far as the next TRU or other converter, whose
   output side keeps its own voltage. If the change would be invalid for something below (for example AC to DC with a TRU
-  underneath, or phase-labeled items), a message lists those items and nothing is changed.
+  underneath, or phase-labeled items), a message lists those items and nothing is changed. Otherwise, if the items below hold
+  amps and power entered at the old voltage, you are asked what stays fixed: **Keep Power** (VA or watts stay, amps are
+  recalculated; right for loads), **Keep Amps** (amps stay, VA or watts are recalculated; right for breaker and feeder ratings)
+  or **Leave As Entered** (warning W7 then marks every item whose amps and power no longer agree). **Cancel** changes nothing.
 - **Capacity** — Cap (A) and Cap (W) for DC; Cap (A) and Cap (VA) for AC. Optional, but needed for the
   overload warning and the Reserve.
 - **Existing Load** — the load the item already carries (non-load items).
@@ -243,6 +246,7 @@ Warnings appear in the banner and as yellow (or, for overloads, red) rows. They 
 | W4 | An existing or removed item has no existing load entered. |
 | W5 | The existing/removed children's existing loads add up to more than the parent's own existing load. |
 | W6 | **Phase load unbalance** on a generator or alternator: the spread between the heaviest and lightest phase exceeds 3.33 % of one phase of the generator's rating (MIL-E-7016F). |
+| W7 | **Amps and power disagree:** an item's amps times its voltage does not match its VA (AC) or watts (DC) in capacity, existing load, load value or net change override, beyond a 1 % tolerance. Usually the result of changing a voltage and leaving the values as entered; retype the amps or the power, or change the voltage back. |
 
 ## 5. Settings
 
