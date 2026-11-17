@@ -6232,6 +6232,15 @@ Rows appear where their first member appears. The row's note markers are the mer
 **Verified** with a synthetic project (three breakers, loads "Installed Loads" 100 / 200 / 300 under them, a unique load, a second "Installed Loads" on one, one with a reference designator, removed loads under two): one shared row with three values, the second same-named load on its own row, the ref-des load on its own row, "Removed Loads" shared between two siblings.
 With a common note on two of the three, those two share a row (marker 1) and the third has its own (marker 2). Screen table and Word builder both render; the sample project's table counts are unchanged; both regression loops pass.
 
+## 100. Version 0.9.22 — "Dated" Before a Reference Date
+
+**Request.** If a reference has a date entered, preface the date in the reference list with "Dated ".
+
+**Implementation.** The two places that print a reference's date (the on-screen / print References list in `buildPrintR10`, and the Word references paragraphs in `buildRefsParas`) now print `Dated <date>` instead of the bare date. The date text itself is shown as entered; a reference with no date is unchanged.
+Also confirmed with the owner (0.9.21 follow-up): merging common installed / removed rows stays limited to loads; multi-phase breakers already share a row as phase-mates.
+
+**Verified** in the browser pane: the Word paragraphs read "Rev. B.  Dated 1998-09-08." and the printed list reads "Revision B. Dated 1998-09-08."; a reference without a date prints as before.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

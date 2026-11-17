@@ -3813,7 +3813,7 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.21';
+const APP_VERSION='0.9.22';
 const APP_RELEASE_DATE='2026-11-16';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
@@ -9316,7 +9316,7 @@ function buildPrintR10(){
   // References section
   const refs=m.references||[];
   const refSec=refs.length?`<div class="rpt-annot-section"><h3>References</h3><ol>${refs.map(r=>{
-    const parts=[r.organization?esc(r.organization):null,r.docNumber?esc(r.docNumber):null,r.title?`<em>${esc(r.title)}</em>`:null,r.revision?`Revision ${esc(r.revision)}`:null,r.date?esc(r.date):null];
+    const parts=[r.organization?esc(r.organization):null,r.docNumber?esc(r.docNumber):null,r.title?`<em>${esc(r.title)}</em>`:null,r.revision?`Revision ${esc(r.revision)}`:null,r.date?'Dated '+esc(r.date):null];
     const li=`${parts.filter(Boolean).join('. ')}.`;
     return `<li>${chgOn()&&chgRefBankChanged(r)?`<span class="rpt-chg">${li}</span>`:li}</li>`;
   }).join('')}</ol></div>`:'';
@@ -9689,7 +9689,7 @@ function buildRefsParas(){
     return `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:ind w:left="720" w:hanging="360"/></w:pPr>`+
     `<w:r>${u?`<w:rPr>${u}</w:rPr>`:''}<w:t xml:space="preserve">${i+1}. ${r.organization?xe(r.organization)+'.  ':''}${r.docNumber?xe(r.docNumber)+'.  ':''}</w:t></w:r>`+
     (r.title?`<w:r><w:rPr><w:i/>${u}</w:rPr><w:t xml:space="preserve">${xe(r.title)}.  </w:t></w:r>`:'')+
-    ((r.revision||r.date)?`<w:r>${u?`<w:rPr>${u}</w:rPr>`:''}<w:t xml:space="preserve">${r.revision?'Rev. '+xe(r.revision)+'.  ':''}${r.date?xe(r.date)+'.':''}</w:t></w:r>`:'')+
+    ((r.revision||r.date)?`<w:r>${u?`<w:rPr>${u}</w:rPr>`:''}<w:t xml:space="preserve">${r.revision?'Rev. '+xe(r.revision)+'.  ':''}${r.date?'Dated '+xe(r.date)+'.':''}</w:t></w:r>`:'')+
     `</w:p>`;
   }).join('');
 }

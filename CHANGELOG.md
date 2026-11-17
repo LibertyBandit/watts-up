@@ -9,6 +9,10 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.22 — 2026-11-16 (testing build)
+
+- A reference that has a date now shows it as "Dated <date>" in the References list, on screen, in print and in Word (for example "Rev. B.  Dated 1998-09-08."). A reference without a date is unchanged.
+
 ## 0.9.21 — 2026-11-16 (testing build)
 
 Vertical Load Analysis Detail: common loads on one line.
