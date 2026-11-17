@@ -76,7 +76,7 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
   loads): Capacity, Net Change, New Load and Remaining. It carries no row notes.
 - **Load Analysis Detail** — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A **Vertical / Horizontal** toggle chooses the
-  layout (Vertical places sibling items side by side, and also gives an Existing item with no children a table of its own, so its capacity, existing load and reserve are reported even when nothing about it changed; see §5 for the options that control it). In the Horizontal
+  layout (Vertical places sibling items side by side, and also gives an Existing item with no children a table of its own, so its capacity, existing load and reserve are reported even when nothing about it changed. Installed or removed loads that several siblings have in common (same status, description, reference designator, notes and references) share one row, with each sibling's own value under that sibling; a sibling that has several loads defined alike fills them in order; see §5 for the options that control it). In the Horizontal
   layout a load's value is shown under **Net Change** (a removed load in parentheses); there is no separate
   "Installed (Removed)" column group there.
 

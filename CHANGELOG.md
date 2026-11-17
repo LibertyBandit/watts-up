@@ -9,6 +9,14 @@ Changes that matter to people using the program, newest first. Version numbers a
 The "Revision NN" numbers are the internal development history (see `watts-up-unified-requirements.md`);
 each release below lists the revisions it contains. How to publish a release is in `RELEASING.md`.
 
+## 0.9.21 — 2026-11-16 (testing build)
+
+Vertical Load Analysis Detail: common loads on one line.
+
+- Installed or removed loads that several sibling items have in common (same status, description, reference designator, notes and references) now share **one row**, with each
+  sibling's own value under that sibling, instead of one row per sibling. A sibling that has several loads defined alike fills them in order. Loads that differ in any of those five
+  ways keep their own rows. On screen, in print and in Word.
+
 ## 0.9.20 — 2026-11-08 (testing build)
 
 A voltage change now keeps amps and power in step, or tells you when they are not.

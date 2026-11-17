@@ -1153,7 +1153,7 @@ is orange, a negative one green. Rows with a warning are highlighted yellow, ove
   loads): Capacity, Net Change, New Load and Remaining. It carries no row notes.</li>
 <li><strong>Load Analysis Detail</strong> — one small table for each item that has children, showing the item and its
   immediate children, with the distribution path above the table. A <strong>Vertical / Horizontal</strong> toggle chooses the
-  layout (Vertical places sibling items side by side, and also gives an Existing item with no children a table of its own, so its capacity, existing load and reserve are reported even when nothing about it changed; see §5 for the options that control it). In the Horizontal
+  layout (Vertical places sibling items side by side, and also gives an Existing item with no children a table of its own, so its capacity, existing load and reserve are reported even when nothing about it changed. Installed or removed loads that several siblings have in common (same status, description, reference designator, notes and references) share one row, with each sibling's own value under that sibling; a sibling that has several loads defined alike fills them in order; see §5 for the options that control it). In the Horizontal
   layout a load's value is shown under <strong>Net Change</strong> (a removed load in parentheses); there is no separate
   "Installed (Removed)" column group there.</li>
 </ul>
@@ -3813,8 +3813,8 @@ const LS='wattsup_v1';
 // still open older files. PATCH: fixes only. This constant is the one place the version lives —
 // bump it (and CHANGELOG.md) for every release; see RELEASING.md. Revision NN numbers remain the
 // internal development history; CHANGELOG.md maps each release to them.
-const APP_VERSION='0.9.20';
-const APP_RELEASE_DATE='2026-11-08';
+const APP_VERSION='0.9.21';
+const APP_RELEASE_DATE='2026-11-16';
 const VERSION_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,20})?$/;
 // -1/0/1 comparing the numeric MAJOR.MINOR.PATCH parts (a pre-release suffix is ignored); null if
 // either is not a well-formed version.
@@ -4833,13 +4833,32 @@ function ladSiblingPlan(section,maxSib,annotator) {
     const allNew=mnodes.every(m=>m.status==='new');
     [['existing',null],['removed','removed'],['new','new']].forEach(([st,banner])=>{
       const stRows=[], byGroup=new Map();
+      // Version 0.9.21: an installed / removed load that several siblings have in common (same status, description, reference
+      // designator, notes and references) is ONE row, with each sibling's own value under that sibling. A sibling that has
+      // several such loads fills them in order (its first with the first row, its second with the second row, ...).
+      const sameLoads=new Map(), placed=new Map();
+      const loadKey=k=>{
+        const nk=a=>(a||[]).map(o=>(o.key||'')+'|'+(o.group||'')).sort().join(',');
+        const rk=a=>(a||[]).map(r=>(r.key||'')+'|'+(r.comment||'')+'|'+(r.group||'')).sort().join(',');
+        return [st,(k.description||'').trim(),(k.refDes||'').trim(),nk(k.rowNotes),rk(k.rowRefs)].join('~');
+      };
       mnodes.forEach((m,mi)=>{
         children(m.id,nodes).filter(k=>k.status===st).forEach(k=>{
           // (a multi-phase TRU's input phases are phase-mates of each other too, so they share a row)
           const key=(k.phase&&k.phaseGroupId&&members[mi].unit!==undefined&&units[members[mi].unit].length>1)?'pg:'+k.phaseGroupId:null;
           if (key&&byGroup.has(key)) { byGroup.get(key).kids.push({node:k,memberIdx:mi}); return; }
+          let slot=null;
+          if (!key&&st!=='existing'&&isLoad(k.type)) {
+            const lk=loadKey(k), ck=mi+'|'+lk, n=placed.get(ck)||0;
+            placed.set(ck,n+1);
+            if (!sameLoads.has(lk)) sameLoads.set(lk,[]);
+            const rows=sameLoads.get(lk);
+            if (rows[n]) { rows[n].kids.push({node:k,memberIdx:mi}); return; }
+            slot={rows,n};
+          }
           const row={type:'child',kids:[{node:k,memberIdx:mi}]};
           if (key) byGroup.set(key,row);
+          if (slot) slot.rows[slot.n]=row;
           stRows.push(row);
         });
       });

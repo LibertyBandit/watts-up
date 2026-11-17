@@ -6217,6 +6217,21 @@ The user chose a prompt plus a warning ("items 1 and 2" of the proposal), withou
 3. **Verified** with the sample project: changing the root 115 to 200 V with Keep Power leaves every VA and recalculates the amps (TRU 1 (A) capacity 15.08 A to 8.67 A at 1733.7 VA); Keep Amps leaves the amps (VA 3015.2); Leave As Entered gives W7 on all 19 AC items; Cancel changes nothing.
    Edit dialog on the root with Keep Power: root capacity 160000 VA / 800 A at 200 V, no W7. TRU output 28 to 24 V: Keep Power gives 4200 W / 175 A, Keep Amps 3600 W / 150 A, Leave gives W7 on the output and its two children. Unit checks of `rebasePow` for AC/DC flips.
 
+## 99. Version 0.9.21 — Common Installed / Removed Loads Share a Row (Vertical Detail)
+
+**Request.** In the vertical Load Analysis Detail, installed and removed loads with the same status, description, reference designator, notes and references under several sibling items should be one line, with each sibling's load under that sibling
+(example: a load line "Installed Loads", no ref des, no or the same notes and references, entered under several siblings).
+
+**Implementation.** In `ladSiblingPlan`'s child-row builder (shared by screen, print and Word), a child that is a Load with status installed or removed (and not already placed in a phase-group row) gets a merge key
+`status ~ description (trimmed) ~ ref des (trimmed) ~ notes (bank key + group, sorted) ~ references (key + comment + group, sorted)`. The first sibling to have such a load creates the row; later siblings' matching loads are added to it as further `kids`
+(`memberIdx` already told the renderers which column group a kid belongs to, as it does for phase-mates, so neither the screen nor the Word builder changed). A sibling with several loads of one key fills the rows in order: its first with the first row of that key, its second with the second.
+Rows appear where their first member appears. The row's note markers are the merged markers of its kids; a merged row names the load by its description (`plainName`), as phase-mate rows do.
+- Matching is exact apart from surrounding spaces (case counts). Notes are compared by their note-bank entry, so two separately typed notes with identical text count as different, as they are numbered separately.
+- Only loads are merged; other installed or removed items (a new breaker, say) keep a row per sibling.
+
+**Verified** with a synthetic project (three breakers, loads "Installed Loads" 100 / 200 / 300 under them, a unique load, a second "Installed Loads" on one, one with a reference designator, removed loads under two): one shared row with three values, the second same-named load on its own row, the ref-des load on its own row, "Removed Loads" shared between two siblings.
+With a common note on two of the three, those two share a row (marker 1) and the third has its own (marker 2). Screen table and Word builder both render; the sample project's table counts are unchanged; both regression loops pass.
+
 ## Appendix A: Future Enhancements
 
 - Three-phase AC circuit support — see §74–§78 (TRU phase-mates, whole-group sharing, vertical report

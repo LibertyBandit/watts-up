@@ -160,8 +160,8 @@ is treated as unstamped; the guide page contains no script element and no unrepl
 
 ## 9. How IT can verify the copy
 
-- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.20, 785515 bytes):**
-  `33a248d4cc2f28f04943505308bea064ffea26d993ada76b42f8bdf55cf639fa`
+- **SHA-256 of the reviewed file (`watts-up.html`, version 0.9.21, 786974 bytes):**
+  `96a6baabd64cdbab745fb2ab03891730f67a3ff2b2c64744437eb1b1287b9f48`
   (PowerShell: `Get-FileHash watts-up.html -Algorithm SHA256`). A different value means the file has changed since
   this assessment — a newer release, a modified copy, or a copy whose line endings were converted (for example by
   a source-control checkout on Windows). Ask the owner for the hash of the exact release being deployed.
